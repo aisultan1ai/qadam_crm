@@ -1,50 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Route, Routes, Navigate } from "react-router-dom";
+import { Route, Routes, Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { api } from "@/api/client";
-import type { Role, PermissionGroup, Department } from "@/types";
+import type { Role, PermissionGroup } from "@/types";
 import { Loader, Modal } from "@/components/ui";
-import { Plus, Copy, Trash2, Save, Shield, Layers } from "lucide-react";
+import { Plus, Copy, Trash2, Save } from "lucide-react";
 import { useAuth } from "@/store/auth";
-
-const NAV = [
-  { to: "roles", label: "Роли и права", icon: Shield },
-  { to: "departments", label: "Отделы", icon: Layers },
-];
 
 export default function Settings() {
   const { can } = useAuth();
 
   return (
-    <div className="grid gap-6 md:grid-cols-[220px_1fr]">
-      <aside className="space-y-1">
-        <h1 className="mb-3 px-2 text-lg font-semibold">Настройки</h1>
-        {NAV.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            className={({ isActive }) =>
-              clsx(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
-                isActive
-                  ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-white"
-                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
-              )
-            }
-          >
-            <n.icon size={15} /> {n.label}
-          </NavLink>
-        ))}
-      </aside>
-
+    <div className="space-y-5">
       <div>
-        <Routes>
-          <Route index element={<Navigate to="roles" replace />} />
-          <Route path="roles" element={can("roles.manage") ? <RolesSettings /> : <Forbid />} />
-          <Route path="departments" element={<DepartmentsSettings />} />
-        </Routes>
+        <h1 className="text-2xl font-semibold tracking-tight">Настройки</h1>
+        <p className="text-sm text-neutral-500">Роли и права доступа</p>
       </div>
+
+      <Routes>
+        <Route index element={<Navigate to="roles" replace />} />
+        <Route path="roles" element={can("roles.manage") ? <RolesSettings /> : <Forbid />} />
+      </Routes>
     </div>
   );
 }
@@ -253,44 +230,3 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   );
 }
 
-function DepartmentsSettings() {
-  const { can } = useAuth();
-  const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["departments"], queryFn: async () => (await api.get<Department[]>("/api/departments")).data });
-  const [name, setName] = useState("");
-
-  const add = useMutation({
-    mutationFn: () => api.post("/api/departments", { name }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["departments"] }); setName(""); },
-    onError: (e: any) => alert(e?.response?.data?.detail || "Ошибка"),
-  });
-  const del = useMutation({
-    mutationFn: (id: number) => api.delete(`/api/departments/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["departments"] }),
-  });
-
-  return (
-    <div className="card p-5">
-      <h2 className="mb-4 text-lg font-semibold">Отделы</h2>
-      {can("settings.dictionaries") && (
-        <div className="mb-4 flex gap-2">
-          <input className="input" placeholder="Название отдела…" value={name} onChange={(e) => setName(e.target.value)} />
-          <button className="btn-primary" disabled={!name || add.isPending} onClick={() => add.mutate()}>Добавить</button>
-        </div>
-      )}
-      <div className="space-y-1">
-        {data?.map((d) => (
-          <div key={d.id} className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2 dark:border-neutral-800">
-            <span className="text-sm">{d.name}</span>
-            {can("settings.dictionaries") && (
-              <button className="btn-ghost !p-1.5 text-rose-500" onClick={() => del.mutate(d.id)}>
-                <Trash2 size={14} />
-              </button>
-            )}
-          </div>
-        ))}
-        {(!data || data.length === 0) && <div className="py-6 text-center text-sm text-neutral-500">Отделов нет</div>}
-      </div>
-    </div>
-  );
-}

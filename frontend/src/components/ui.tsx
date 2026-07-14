@@ -1,10 +1,42 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import clsx from "clsx";
 import { X } from "lucide-react";
 import type { TaskPriority, TaskStatus } from "@/types";
 import { PRIORITY_LABEL, STATUS_LABEL } from "@/types";
+import { API_URL } from "@/api/client";
 
-export function Avatar({ name, size = 28 }: { name?: string; size?: number }) {
+export function resolveMediaUrl(url?: string | null): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:") || url.startsWith("blob:")) return url;
+  return `${API_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+export function Avatar({
+  name,
+  size = 28,
+  url,
+}: {
+  name?: string;
+  size?: number;
+  url?: string | null;
+}) {
+  const src = resolveMediaUrl(url);
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [src]);
+  if (src && !broken) {
+    return (
+      <img
+        src={src}
+        alt={name || ""}
+        title={name}
+        onError={() => setBroken(true)}
+        style={{ width: size, height: size }}
+        className="inline-block shrink-0 rounded-full object-cover"
+      />
+    );
+  }
   const initials =
     (name || "?")
       .split(" ")

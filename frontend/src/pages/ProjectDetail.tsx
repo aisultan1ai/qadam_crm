@@ -46,7 +46,7 @@ export default function ProjectDetail() {
           <div className="flex -space-x-2">
             {project.members.map((m) => (
               <div key={m.id} className="ring-2 ring-white rounded-full dark:ring-neutral-900">
-                <Avatar name={m.name} size={26} />
+                <Avatar name={m.name} size={26} url={m.avatar_url} />
               </div>
             ))}
           </div>
@@ -81,7 +81,7 @@ export default function ProjectDetail() {
                   <td className="px-5 py-3"><StatusChip status={t.status} /></td>
                   <td className="px-5 py-3"><PriorityChip priority={t.priority} /></td>
                   <td className="px-5 py-3">
-                    {t.assignee ? <div className="flex items-center gap-2"><Avatar name={t.assignee.name} size={22} />{t.assignee.name}</div> : "—"}
+                    {t.assignee ? <div className="flex items-center gap-2"><Avatar name={t.assignee.name} size={22} url={t.assignee.avatar_url} />{t.assignee.name}</div> : "—"}
                   </td>
                   <td className="px-5 py-3 text-neutral-500">
                     {t.deadline ? new Date(t.deadline).toLocaleDateString("ru-RU") : "—"}

@@ -163,7 +163,7 @@ export default function TaskDetail() {
           <div className="space-y-4">
             {task.comments.map((c) => (
               <div key={c.id} className="group flex gap-3">
-                <Avatar name={c.author?.name} />
+                <Avatar name={c.author?.name} url={c.author?.avatar_url} />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 text-xs text-neutral-500">
                     <span className="font-medium text-neutral-900 dark:text-neutral-100">{c.author?.name || "—"}</span>

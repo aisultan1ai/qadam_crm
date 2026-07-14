@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .api import auth, roles, users, projects, tasks, comments, attachments, notifications, analytics, search
@@ -22,6 +25,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    avatars_dir = Path(settings.UPLOAD_DIR) / "avatars"
+    avatars_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/media/avatars", StaticFiles(directory=str(avatars_dir)), name="media-avatars")
 
     for r in (
         auth.router,

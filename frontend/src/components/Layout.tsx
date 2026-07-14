@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, CheckSquare, BarChart3, Users, Settings,
   Sun, Moon, LogOut, Search, Bell,
@@ -25,9 +25,14 @@ export default function Layout() {
   const { me, can, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, [pathname]);
 
   const loadNotifs = async () => {
     try {
@@ -91,11 +96,24 @@ export default function Layout() {
 
         <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
           <div className="flex items-center gap-2">
-            <Avatar name={me?.name} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{me?.name}</div>
-              <div className="truncate text-xs text-neutral-500">{me?.email}</div>
-            </div>
+            <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                clsx(
+                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors",
+                  isActive
+                    ? "bg-neutral-100 dark:bg-neutral-800"
+                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                )
+              }
+              title="Открыть профиль"
+            >
+              <Avatar name={me?.name} url={me?.avatar_url} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{me?.name}</div>
+                <div className="truncate text-xs text-neutral-500">{me?.email}</div>
+              </div>
+            </NavLink>
             <button className="btn-ghost !p-1.5" onClick={logout} title="Выйти">
               <LogOut size={16} />
             </button>

@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+import os
+import uuid
+from pathlib import Path
 from typing import List, Optional
 
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+from ..config import settings
 from ..database import get_db
 from ..models import User, Role, Department
 from ..core.security import hash_password
@@ -11,6 +16,21 @@ from ..schemas.common import Message
 from .deps import require, get_current_user, log_action
 
 router = APIRouter(prefix="/api", tags=["users"])
+
+AVATAR_URL_PREFIX = "/media/avatars/"
+AVATAR_MAX_BYTES = 5 * 1024 * 1024
+AVATAR_EXT_BY_MIME = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+
+def _avatar_file_path(avatar_url: Optional[str]) -> Optional[Path]:
+    if not avatar_url or not avatar_url.startswith(AVATAR_URL_PREFIX):
+        return None
+    return Path(settings.UPLOAD_DIR) / "avatars" / avatar_url[len(AVATAR_URL_PREFIX):]
 
 
 @router.get("/users", response_model=List[UserOut])
@@ -51,6 +71,56 @@ def create_user(payload: UserCreate, actor: User = Depends(require("users.create
     db.add(user)
     db.flush()
     log_action(db, user_id=actor.id, action="create", entity="user", entity_id=user.id, detail=user.email)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/users/me/avatar", response_model=UserOut)
+def upload_my_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Требуется файл-изображение")
+
+    content = file.file.read()
+    if len(content) > AVATAR_MAX_BYTES:
+        raise HTTPException(400, "Файл слишком большой (макс 5 МБ)")
+
+    ext = AVATAR_EXT_BY_MIME.get(file.content_type) or Path(file.filename or "").suffix or ".bin"
+
+    avatars_dir = Path(settings.UPLOAD_DIR) / "avatars"
+    avatars_dir.mkdir(parents=True, exist_ok=True)
+
+    old = _avatar_file_path(user.avatar_url)
+    if old and old.exists():
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+
+    stored = f"{uuid.uuid4().hex}{ext}"
+    (avatars_dir / stored).write_bytes(content)
+
+    user.avatar_url = f"{AVATAR_URL_PREFIX}{stored}"
+    log_action(db, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar")
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.delete("/users/me/avatar", response_model=UserOut)
+def delete_my_avatar(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    old = _avatar_file_path(user.avatar_url)
+    if old and old.exists():
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    user.avatar_url = None
+    log_action(db, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar_removed")
     db.commit()
     db.refresh(user)
     return user

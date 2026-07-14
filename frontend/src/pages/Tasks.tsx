@@ -211,7 +211,7 @@ const KanbanCard = memo(function KanbanCard({ task }: { task: TaskListItem }) {
       <div className="mb-1.5 text-sm font-medium leading-snug">{task.title}</div>
       <div className="flex items-center justify-between">
         <PriorityChip priority={task.priority} />
-        {task.assignee && <Avatar name={task.assignee.name} size={22} />}
+        {task.assignee && <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} />}
       </div>
       {task.deadline && (
         <div className="mt-2 text-[11px] text-neutral-500">
@@ -244,7 +244,7 @@ function TableView({ tasks }: { tasks: TaskListItem[] }) {
               <td className="px-5 py-3"><StatusChip status={t.status} /></td>
               <td className="px-5 py-3"><PriorityChip priority={t.priority} /></td>
               <td className="px-5 py-3">
-                {t.assignee ? <div className="flex items-center gap-2"><Avatar name={t.assignee.name} size={22} />{t.assignee.name}</div> : "—"}
+                {t.assignee ? <div className="flex items-center gap-2"><Avatar name={t.assignee.name} size={22} url={t.assignee.avatar_url} />{t.assignee.name}</div> : "—"}
               </td>
               <td className="px-5 py-3 text-neutral-500">
                 {t.deadline ? new Date(t.deadline).toLocaleDateString("ru-RU") : "—"}
@@ -271,7 +271,7 @@ function ListView({ tasks }: { tasks: TaskListItem[] }) {
               {t.deadline && <span>до {new Date(t.deadline).toLocaleDateString("ru-RU")}</span>}
             </div>
           </div>
-          {t.assignee && <Avatar name={t.assignee.name} size={26} />}
+          {t.assignee && <Avatar name={t.assignee.name} size={26} url={t.assignee.avatar_url} />}
         </Link>
       ))}
     </div>

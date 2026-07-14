@@ -106,7 +106,7 @@ function MembersRow({ members }: { members: UserBrief[] }) {
     <div className="flex -space-x-2">
       {members.slice(0, 4).map((m) => (
         <div key={m.id} className="rounded-full ring-2 ring-white dark:ring-neutral-900">
-          <Avatar name={m.name} size={24} />
+          <Avatar name={m.name} size={24} url={m.avatar_url} />
         </div>
       ))}
       {members.length > 4 && (
@@ -179,7 +179,7 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
                     setMemberIds((v) => (e.target.checked ? [...v, u.id] : v.filter((x) => x !== u.id)))
                   }
                 />
-                <Avatar name={u.name} size={22} />
+                <Avatar name={u.name} size={22} url={u.avatar_url} />
                 <span className="text-sm">{u.name}</span>
                 <span className="text-xs text-neutral-500">{u.email}</span>
               </label>
