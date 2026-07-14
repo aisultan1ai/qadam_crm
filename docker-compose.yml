@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: qadam_crm_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qadam_crm
+      POSTGRES_PASSWORD: qadam_crm
+      POSTGRES_DB: qadam_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - qadam_crm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qadam_crm -d qadam_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: qadam_crm_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://qadam_crm:qadam_crm@db:5432/qadam_crm
+      JWT_SECRET: change-me-in-production-please
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 1440
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - ./backend:/app
+      - qadam_crm_uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: qadam_crm_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  qadam_crm_pgdata:
+  qadam_crm_uploads:

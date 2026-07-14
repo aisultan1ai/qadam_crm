@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+  --page-bg: #fafaf9;
+  --page-bg-dark: #0b0b10;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-zinc-50 text-zinc-900 dark:bg-[#0b0b10] dark:text-zinc-100;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  letter-spacing: -0.005em;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+           transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40
+           disabled:opacity-50 disabled:cursor-not-allowed select-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_1px_2px_0_rgba(0,0,0,0.08)]
+           hover:bg-brand-700 active:scale-[0.98];
+  }
+  .btn-secondary {
+    @apply btn bg-zinc-100 text-zinc-900 hover:bg-zinc-200
+           dark:bg-zinc-800/80 dark:text-zinc-100 dark:hover:bg-zinc-700;
+  }
+  .btn-ghost {
+    @apply btn text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900
+           dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white;
+  }
+  .btn-danger {
+    @apply btn bg-rose-600 text-white hover:bg-rose-700;
+  }
+  .input {
+    @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm
+           placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/15
+           dark:border-zinc-800 dark:bg-zinc-900/60 dark:placeholder:text-zinc-500;
+  }
+  .card {
+    @apply rounded-2xl border border-zinc-200/80 bg-white shadow-soft
+           dark:border-zinc-800/80 dark:bg-zinc-900/60;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+  .table-row {
+    @apply border-b border-zinc-100 hover:bg-zinc-50/70
+           dark:border-zinc-800/80 dark:hover:bg-zinc-800/40;
+  }
+  .link {
+    @apply text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300;
+  }
+}
+
+/* subtle scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(113,113,122,.3); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(113,113,122,.55); }
