@@ -23,12 +23,12 @@ body {
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
-           transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40
+           transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40
            disabled:opacity-50 disabled:cursor-not-allowed select-none;
   }
   .btn-primary {
     @apply btn bg-brand-600 text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_1px_2px_0_rgba(0,0,0,0.08)]
-           hover:bg-brand-700 active:scale-[0.98];
+           hover:bg-brand-700 active:scale-[0.98] transition-transform;
   }
   .btn-secondary {
     @apply btn bg-zinc-100 text-zinc-900 hover:bg-zinc-200
@@ -39,7 +39,7 @@ body {
            dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white;
   }
   .btn-danger {
-    @apply btn bg-rose-600 text-white hover:bg-rose-700;
+    @apply btn bg-rose-600 text-white hover:bg-rose-700 active:scale-[0.98] transition-transform;
   }
   .input {
     @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm
@@ -50,6 +50,10 @@ body {
     @apply rounded-2xl border border-zinc-200/80 bg-white shadow-soft
            dark:border-zinc-800/80 dark:bg-zinc-900/60;
   }
+  .card-interactive {
+    @apply card transition-all hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md
+           dark:hover:border-zinc-700;
+  }
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
   }
@@ -59,6 +63,15 @@ body {
   }
   .link {
     @apply text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300;
+  }
+  .kbd {
+    @apply inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded border border-zinc-200
+           bg-zinc-50 px-1 font-mono text-[10px] font-medium text-zinc-500 shadow-[0_1px_0_0_rgba(0,0,0,0.03)]
+           dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400;
+  }
+  .surface-blur {
+    @apply bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70
+           dark:bg-neutral-950/75 dark:supports-[backdrop-filter]:bg-neutral-950/60;
   }
 }
 

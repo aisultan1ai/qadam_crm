@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { Loader } from "@/components/ui";
 import { CheckCircle2, Clock, ListTodo, AlertTriangle } from "lucide-react";
 import { STATUS_LABEL, TaskStatus } from "@/types";
 import { Link } from "react-router-dom";
+import { Skeleton } from "@/components/Skeleton";
+import { fromNow, formatDateTime } from "@/lib/date";
 
 type Dashboard = {
   total: number;
@@ -32,12 +33,12 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["dashboard"],
     queryFn: async () => (await api.get<Dashboard>("/api/analytics/dashboard")).data,
   });
 
-  if (isLoading || !data) return <Loader />;
+  if (isPending || !data) return <DashboardSkeleton />;
 
   const totalByStatus = Math.max(1, Object.values(data.by_status).reduce((a, b) => a + b, 0));
 
@@ -97,7 +98,9 @@ export default function DashboardPage() {
                   <span className="text-neutral-500">— {r.action}</span>{" "}
                   {r.detail && <span className="text-neutral-500">· {r.detail}</span>}
                 </div>
-                <div className="text-[11px] text-neutral-400">{new Date(r.created_at).toLocaleString("ru-RU")}</div>
+                <div className="text-[11px] text-neutral-400" title={formatDateTime(r.created_at)}>
+                  {fromNow(r.created_at)}
+                </div>
               </Link>
             ))}
           </div>
@@ -115,6 +118,45 @@ function Metric({ icon, label, value, accent }: { icon: React.ReactNode; label: 
         <span className="text-xs">{label}</span>
       </div>
       <div className="text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="mt-2 h-3 w-56" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card p-4">
+            <Skeleton className="mb-3 h-3 w-24" />
+            <Skeleton className="h-7 w-16" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="card p-5 lg:col-span-2 space-y-4">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-3 w-full rounded-full" />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-11" />
+            ))}
+          </div>
+        </div>
+        <div className="card p-5 space-y-3">
+          <Skeleton className="h-4 w-40" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="space-y-1">
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-2 w-20" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

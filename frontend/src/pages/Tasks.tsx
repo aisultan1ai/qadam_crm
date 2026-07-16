@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -15,40 +15,64 @@ import { CSS } from "@dnd-kit/utilities";
 
 import type { TaskListItem, TaskStatus, Project, User, Page } from "@/types";
 import { STATUS_LABEL, STATUS_ORDER, PRIORITY_LABEL } from "@/types";
-import { Avatar, EmptyState, FieldError, FormError, Loader, Modal, PriorityChip, StatusChip } from "@/components/ui";
+import { Avatar, EmptyState, FieldError, FormError, Modal, PriorityChip, StatusChip } from "@/components/ui";
+import { SkeletonKanban, SkeletonTable, SkeletonCard } from "@/components/Skeleton";
 import { taskSchema, type TaskForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
+import { useToast } from "@/components/Toast";
 
 type View = "kanban" | "table" | "list" | "calendar";
+const VIEWS: View[] = ["kanban", "table", "list", "calendar"];
+
+function readParam(sp: URLSearchParams, key: string) {
+  const v = sp.get(key);
+  return v ?? "";
+}
 
 export default function Tasks() {
   const { can } = useAuth();
   const qc = useQueryClient();
-  const [view, setView] = useState<View>("kanban");
-  const [q, setQ] = useState("");
-  const [qDebounced, setQDebounced] = useState("");
-  useEffect(() => {
-    const t = setTimeout(() => setQDebounced(q), 250);
-    return () => clearTimeout(t);
-  }, [q]);
-  const [projectId, setProjectId] = useState<number | "">("");
-  const [assigneeId, setAssigneeId] = useState<number | "">("");
-  const [priority, setPriority] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
+  const toast = useToast();
+  const [sp, setSp] = useSearchParams();
+
+  const view = (VIEWS.includes(sp.get("view") as View) ? (sp.get("view") as View) : "kanban");
+  const q = readParam(sp, "q");
+  const projectId = readParam(sp, "project");
+  const assigneeId = readParam(sp, "assignee");
+  const priority = readParam(sp, "priority");
+  const status = readParam(sp, "status");
+
   const [openNew, setOpenNew] = useState(false);
+  const [qLocal, setQLocal] = useState(q);
+  useEffect(() => setQLocal(q), [q]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (qLocal !== q) updateParam("q", qLocal);
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qLocal]);
+
+  const updateParam = (key: string, value: string) => {
+    const next = new URLSearchParams(sp);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setSp(next, { replace: true });
+  };
 
   const filters = useMemo(
     () => ({
-      q: qDebounced || undefined,
-      project_id: projectId || undefined,
-      assignee_id: assigneeId || undefined,
+      q: q || undefined,
+      project_id: projectId ? Number(projectId) : undefined,
+      assignee_id: assigneeId ? Number(assigneeId) : undefined,
       priority: priority || undefined,
       status: status || undefined,
     }),
-    [qDebounced, projectId, assigneeId, priority, status],
+    [q, projectId, assigneeId, priority, status],
   );
 
-  const { data: tasks, isLoading } = useQuery({
+  const { data: tasks, isPending } = useQuery({
     queryKey: ["tasks", filters],
     queryFn: async () => (await api.get<Page<TaskListItem>>("/api/tasks", { params: filters })).data.items,
   });
@@ -73,8 +97,9 @@ export default function Tasks() {
       });
       return { snapshots };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
+      toast.error("Не удалось изменить статус", extractApiError(err).message);
     },
     onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -96,6 +121,9 @@ export default function Tasks() {
     updateStatus.mutate({ id, status: newStatus as TaskStatus });
   };
 
+  const filtersActive = Boolean(q || projectId || assigneeId || priority || status);
+  const canCreate = can("tasks.create");
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -115,7 +143,7 @@ export default function Tasks() {
             ).map(([v, icon]) => (
               <button
                 key={v}
-                onClick={() => setView(v as View)}
+                onClick={() => updateParam("view", v === "kanban" ? "" : v)}
                 className={clsx(
                   "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium capitalize",
                   view === v
@@ -128,7 +156,7 @@ export default function Tasks() {
               </button>
             ))}
           </div>
-          {can("tasks.create") && (
+          {canCreate && (
             <button className="btn-primary" onClick={() => setOpenNew(true)}>
               <Plus size={16} /> Новая задача
             </button>
@@ -139,32 +167,76 @@ export default function Tasks() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input className="input pl-8" placeholder="Поиск задач…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input
+            className="input pl-8"
+            placeholder="Поиск задач…"
+            value={qLocal}
+            onChange={(e) => setQLocal(e.target.value)}
+          />
         </div>
-        <select className="input max-w-[180px]" value={projectId} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}>
+        <select
+          className="input max-w-[180px]"
+          value={projectId}
+          onChange={(e) => updateParam("project", e.target.value)}
+        >
           <option value="">Все проекты</option>
           {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <select className="input max-w-[180px]" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : "")}>
+        <select
+          className="input max-w-[180px]"
+          value={assigneeId}
+          onChange={(e) => updateParam("assignee", e.target.value)}
+        >
           <option value="">Все исполнители</option>
           {users?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
-        <select className="input max-w-[160px]" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select
+          className="input max-w-[160px]"
+          value={status}
+          onChange={(e) => updateParam("status", e.target.value)}
+        >
           <option value="">Любой статус</option>
           {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
-        <select className="input max-w-[160px]" value={priority} onChange={(e) => setPriority(e.target.value)}>
+        <select
+          className="input max-w-[160px]"
+          value={priority}
+          onChange={(e) => updateParam("priority", e.target.value)}
+        >
           <option value="">Любой приоритет</option>
           {(["low", "medium", "high", "critical"] as const).map((p) => (
             <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
           ))}
         </select>
+        {filtersActive && (
+          <button
+            className="btn-ghost !px-2 !py-1 text-xs"
+            onClick={() => {
+              const next = new URLSearchParams(sp);
+              ["q", "project", "assignee", "status", "priority"].forEach((k) => next.delete(k));
+              setSp(next, { replace: true });
+            }}
+          >
+            Сбросить фильтры
+          </button>
+        )}
       </div>
 
-      {isLoading ? (
-        <Loader />
+      {isPending ? (
+        view === "kanban" ? <SkeletonKanban /> :
+        view === "table" ? <SkeletonTable rows={8} cols={5} /> :
+        view === "list" ? <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}</div> :
+        <SkeletonTable rows={4} cols={7} />
       ) : !tasks || tasks.length === 0 ? (
-        <EmptyState title="Задач не найдено" description="Измените фильтры или создайте новую задачу" />
+        <EmptyState
+          title="Задач не найдено"
+          description={filtersActive ? "Измените фильтры или создайте новую задачу" : "Создайте первую задачу"}
+          action={canCreate && (
+            <button className="btn-primary" onClick={() => setOpenNew(true)}>
+              <Plus size={16} /> Новая задача
+            </button>
+          )}
+        />
       ) : view === "kanban" ? (
         <DndContext sensors={sensors} onDragEnd={onDragEnd}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
@@ -198,7 +270,7 @@ function KanbanColumn({ status, tasks }: { status: TaskStatus; tasks: TaskListIt
     <div
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[220px] flex-col rounded-2xl border p-2.5",
+        "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border p-2.5",
         isOver
           ? "border-brand-400 bg-brand-50/50 dark:border-brand-700 dark:bg-brand-900/10"
           : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/40",
@@ -210,7 +282,7 @@ function KanbanColumn({ status, tasks }: { status: TaskStatus; tasks: TaskListIt
         </div>
         <span className="text-xs text-neutral-500">{tasks.length}</span>
       </div>
-      <div className="space-y-2">
+      <div className="flex-1 space-y-2 overflow-y-auto pr-0.5">
         {tasks.map((t) => <KanbanCard key={t.id} task={t} />)}
       </div>
     </div>
@@ -283,7 +355,7 @@ function ListView({ tasks }: { tasks: TaskListItem[] }) {
     <div className="space-y-2">
       {tasks.map((t) => (
         <Link key={t.id} to={`/tasks/${t.id}`}
-          className="card flex items-center justify-between gap-3 px-4 py-3 hover:border-neutral-300 dark:hover:border-neutral-700">
+          className="card-interactive flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{t.title}</div>
             <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
@@ -370,6 +442,7 @@ function TaskFormModal({
   users: User[];
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
@@ -394,6 +467,7 @@ function TaskFormModal({
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("Задача создана");
       onClose();
     },
     onError: (e) => setFormError(extractApiError(e).message),

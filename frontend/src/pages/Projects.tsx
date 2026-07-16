@@ -4,20 +4,23 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api, extractApiError } from "@/api/client";
 import { Link } from "react-router-dom";
-import { Plus, Archive, ArchiveRestore, Trash2, Search } from "lucide-react";
+import { Plus, Archive, ArchiveRestore, Trash2, Search, FolderKanban } from "lucide-react";
 import type { Project, UserBrief, Page, User } from "@/types";
 import { useAuth } from "@/store/auth";
-import { Modal, Avatar, Loader, EmptyState, FieldError, FormError } from "@/components/ui";
+import { Modal, Avatar, EmptyState, FieldError, FormError } from "@/components/ui";
+import { SkeletonCard } from "@/components/Skeleton";
+import { useToast } from "@/components/Toast";
 import { projectSchema, type ProjectForm } from "@/lib/validation";
 
 export default function Projects() {
   const { can } = useAuth();
   const qc = useQueryClient();
+  const toast = useToast();
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [openNew, setOpenNew] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["projects", q, showArchived],
     queryFn: async () =>
       (await api.get<Page<Project>>("/api/projects", { params: { q: q || undefined, archived: showArchived } })).data.items,
@@ -26,11 +29,18 @@ export default function Projects() {
   const archive = useMutation({
     mutationFn: (id: number) => api.post(`/api/projects/${id}/archive`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+    onError: (e) => toast.error("Не удалось изменить архив", extractApiError(e).message),
   });
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/api/projects/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Проект удалён");
+    },
+    onError: (e) => toast.error("Не удалось удалить проект", extractApiError(e).message),
   });
+
+  const canCreate = can("projects.create");
 
   return (
     <div className="space-y-5">
@@ -39,7 +49,7 @@ export default function Projects() {
           <h1 className="text-2xl font-semibold tracking-tight">Проекты</h1>
           <p className="text-sm text-neutral-500">{data?.length ?? 0} проектов</p>
         </div>
-        {can("projects.create") && (
+        {canCreate && (
           <button className="btn-primary" onClick={() => setOpenNew(true)}>
             <Plus size={16} /> Новый проект
           </button>
@@ -57,14 +67,25 @@ export default function Projects() {
         </label>
       </div>
 
-      {isLoading ? (
-        <Loader />
+      {isPending ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
       ) : !data || data.length === 0 ? (
-        <EmptyState title="Проектов пока нет" description="Создайте первый проект, чтобы начать" />
+        <EmptyState
+          icon={<FolderKanban size={32} />}
+          title={q ? "Проектов не найдено" : "Проектов пока нет"}
+          description={q ? "Измените запрос или сбросьте фильтр" : "Создайте первый проект, чтобы начать"}
+          action={canCreate && !q && (
+            <button className="btn-primary" onClick={() => setOpenNew(true)}>
+              <Plus size={16} /> Новый проект
+            </button>
+          )}
+        />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.map((p) => (
-            <div key={p.id} className="card group flex flex-col p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
+            <div key={p.id} className="card-interactive group flex flex-col p-5">
               <div className="mb-2 flex items-start justify-between">
                 <Link to={`/projects/${p.id}`} className="text-base font-semibold hover:text-brand-600">
                   <span
