@@ -1,12 +1,15 @@
 import { FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import clsx from "clsx";
 import { api, API_URL } from "@/api/client";
-import type { Task, Project, User } from "@/types";
+import type { Task, Project, User, Page, Comment as CommentT } from "@/types";
 import { PRIORITY_LABEL, STATUS_LABEL, STATUS_ORDER } from "@/types";
 import { Avatar, Loader, PriorityChip, StatusChip } from "@/components/ui";
-import { ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X } from "lucide-react";
+import { ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile } from "lucide-react";
 import { useAuth } from "@/store/auth";
+
+const AVAILABLE_EMOJIS = ["👍", "❤️", "🎉", "🚀", "😂", "🔥", "👀", "🙏", "✅", "❌"];
 
 export default function TaskDetail() {
   const { id } = useParams();
@@ -20,16 +23,19 @@ export default function TaskDetail() {
   });
   const { data: projects } = useQuery({
     queryKey: ["projects"],
-    queryFn: async () => (await api.get<Project[]>("/api/projects")).data,
+    queryFn: async () => (await api.get<Page<Project>>("/api/projects")).data.items,
   });
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
-    queryFn: async () => (await api.get<User[]>("/api/users")).data,
+    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
   });
 
   const patch = useMutation({
     mutationFn: (body: any) => api.patch(`/api/tasks/${taskId}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["task", taskId] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   const addComment = useMutation({
@@ -38,6 +44,11 @@ export default function TaskDetail() {
   });
   const deleteComment = useMutation({
     mutationFn: (cid: number) => api.delete(`/api/tasks/${taskId}/comments/${cid}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+  });
+  const toggleReaction = useMutation({
+    mutationFn: ({ commentId, emoji }: { commentId: number; emoji: string }) =>
+      api.post(`/api/tasks/${taskId}/comments/${commentId}/reactions`, { emoji }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
   });
 
@@ -162,24 +173,15 @@ export default function TaskDetail() {
           </div>
           <div className="space-y-4">
             {task.comments.map((c) => (
-              <div key={c.id} className="group flex gap-3">
-                <Avatar name={c.author?.name} url={c.author?.avatar_url} />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 text-xs text-neutral-500">
-                    <span className="font-medium text-neutral-900 dark:text-neutral-100">{c.author?.name || "—"}</span>
-                    <span>{new Date(c.created_at).toLocaleString("ru-RU")}</span>
-                    {can("comments.delete") && (
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500"
-                        onClick={() => deleteComment.mutate(c.id)}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="mt-0.5 whitespace-pre-wrap text-sm">{c.body}</div>
-                </div>
-              </div>
+              <CommentRow
+                key={c.id}
+                comment={c}
+                meId={me?.id}
+                canDelete={can("comments.delete")}
+                canReact={can("comments.create")}
+                onDelete={() => deleteComment.mutate(c.id)}
+                onToggle={(emoji) => toggleReaction.mutate({ commentId: c.id, emoji })}
+              />
             ))}
           </div>
           {can("comments.create") && (
@@ -357,6 +359,96 @@ function TextareaAuto({
       />
       <div className="mt-1 text-[11px] text-neutral-400">{saved ? "Сохранено" : "Изменено — авто-сохранение при потере фокуса"}</div>
     </>
+  );
+}
+
+function CommentRow({
+  comment,
+  meId,
+  canDelete,
+  canReact,
+  onDelete,
+  onToggle,
+}: {
+  comment: CommentT;
+  meId?: number;
+  canDelete: boolean;
+  canReact: boolean;
+  onDelete: () => void;
+  onToggle: (emoji: string) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  return (
+    <div className="group flex gap-3">
+      <Avatar name={comment.author?.name} url={comment.author?.avatar_url} />
+      <div className="flex-1">
+        <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <span className="font-medium text-neutral-900 dark:text-neutral-100">{comment.author?.name || "—"}</span>
+          <span>{new Date(comment.created_at).toLocaleString("ru-RU")}</span>
+          {canDelete && (
+            <button
+              className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500"
+              onClick={onDelete}
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+        <div className="mt-0.5 whitespace-pre-wrap text-sm">{comment.body}</div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {comment.reactions?.map((r) => {
+            const reacted = !!(meId && r.users.some((u) => u.id === meId));
+            return (
+              <button
+                key={r.emoji}
+                disabled={!canReact}
+                onClick={() => onToggle(r.emoji)}
+                title={r.users.map((u) => u.name).join(", ")}
+                className={clsx(
+                  "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors",
+                  reacted
+                    ? "border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-200"
+                    : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300",
+                )}
+              >
+                <span>{r.emoji}</span>
+                <span>{r.count}</span>
+              </button>
+            );
+          })}
+          {canReact && (
+            <div className="relative">
+              <button
+                onClick={() => setPickerOpen((v) => !v)}
+                className="btn-ghost !p-1 opacity-0 group-hover:opacity-100"
+                title="Реакция"
+              >
+                <Smile size={14} />
+              </button>
+              {pickerOpen && (
+                <div
+                  className="absolute left-0 top-full z-10 mt-1 flex flex-wrap gap-1 rounded-lg border border-neutral-200 bg-white p-2 shadow-md dark:border-neutral-800 dark:bg-neutral-900"
+                  onMouseLeave={() => setPickerOpen(false)}
+                >
+                  {AVAILABLE_EMOJIS.map((e) => (
+                    <button
+                      key={e}
+                      className="grid h-7 w-7 place-items-center rounded hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      onClick={() => {
+                        onToggle(e);
+                        setPickerOpen(false);
+                      }}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

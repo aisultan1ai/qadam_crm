@@ -17,6 +17,21 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: qadam_crm_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - qadam_crm_redis:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -25,13 +40,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://qadam_crm:qadam_crm@db:5432/qadam_crm
-      JWT_SECRET: change-me-in-production-please
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 1440
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       UPLOAD_DIR: /app/uploads
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - ./backend:/app
       - qadam_crm_uploads:/app/uploads
@@ -59,3 +78,4 @@ services:
 volumes:
   qadam_crm_pgdata:
   qadam_crm_uploads:
+  qadam_crm_redis:

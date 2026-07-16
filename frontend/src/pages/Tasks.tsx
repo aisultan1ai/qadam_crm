@@ -1,7 +1,9 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/api/client";
+import { api, extractApiError } from "@/api/client";
 import { Link, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Plus, LayoutGrid, List as ListIcon, Table as TableIcon, CalendarDays, Search,
 } from "lucide-react";
@@ -11,9 +13,10 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
-import type { TaskListItem, TaskStatus, Project, User } from "@/types";
+import type { TaskListItem, TaskStatus, Project, User, Page } from "@/types";
 import { STATUS_LABEL, STATUS_ORDER, PRIORITY_LABEL } from "@/types";
-import { Avatar, EmptyState, Loader, Modal, PriorityChip, StatusChip } from "@/components/ui";
+import { Avatar, EmptyState, FieldError, FormError, Loader, Modal, PriorityChip, StatusChip } from "@/components/ui";
+import { taskSchema, type TaskForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
 
 type View = "kanban" | "table" | "list" | "calendar";
@@ -47,21 +50,36 @@ export default function Tasks() {
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["tasks", filters],
-    queryFn: async () => (await api.get<TaskListItem[]>("/api/tasks", { params: filters })).data,
+    queryFn: async () => (await api.get<Page<TaskListItem>>("/api/tasks", { params: filters })).data.items,
   });
 
   const { data: projects } = useQuery({
     queryKey: ["projects"],
-    queryFn: async () => (await api.get<Project[]>("/api/projects")).data,
+    queryFn: async () => (await api.get<Page<Project>>("/api/projects")).data.items,
   });
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
-    queryFn: async () => (await api.get<User[]>("/api/users")).data,
+    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
   });
 
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: TaskStatus }) => api.patch(`/api/tasks/${id}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: ["tasks"] });
+      const snapshots = qc.getQueriesData<TaskListItem[]>({ queryKey: ["tasks"] });
+      snapshots.forEach(([key, data]) => {
+        if (!data) return;
+        qc.setQueryData<TaskListItem[]>(key, data.map((t) => (t.id === id ? { ...t, status } : t)));
+      });
+      return { snapshots };
+    },
+    onError: (_err, _vars, ctx) => {
+      ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["task", vars.id] });
+    },
   });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -72,7 +90,10 @@ export default function Tasks() {
     if (!overId || typeof activeId !== "string" || typeof overId !== "string") return;
     const [, taskIdStr] = activeId.split(":");
     const [, newStatus] = overId.split(":");
-    updateStatus.mutate({ id: Number(taskIdStr), status: newStatus as TaskStatus });
+    const id = Number(taskIdStr);
+    const current = tasks?.find((t) => t.id === id);
+    if (!current || current.status === newStatus) return;
+    updateStatus.mutate({ id, status: newStatus as TaskStatus });
   };
 
   return (
@@ -349,58 +370,66 @@ function TaskFormModal({
   users: User[];
 }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical">("medium");
-  const [projectId, setProjectId] = useState<number | "">("");
-  const [assigneeId, setAssigneeId] = useState<number | "">("");
-  const [deadline, setDeadline] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<TaskForm>({
+    resolver: zodResolver(taskSchema),
+    mode: "onChange",
+    defaultValues: { title: "", description: "", priority: "medium", project_id: "", assignee_id: "", deadline: "" },
+  });
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (data: TaskForm) =>
       api.post("/api/tasks", {
-        title,
-        description: description || null,
-        priority,
-        project_id: projectId || null,
-        assignee_id: assigneeId || null,
-        deadline: deadline ? new Date(deadline).toISOString() : null,
+        title: data.title,
+        description: data.description || null,
+        priority: data.priority,
+        project_id: data.project_id || null,
+        assignee_id: data.assignee_id || null,
+        deadline: data.deadline ? new Date(data.deadline).toISOString() : null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       onClose();
     },
+    onError: (e) => setFormError(extractApiError(e).message),
   });
 
   return (
     <Modal open onClose={onClose} title="Новая задача" size="md">
-      <div className="space-y-3">
+      <form onSubmit={handleSubmit((d) => create.mutate(d))} className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          <input className="input" autoFocus {...register("title")} />
+          <FieldError msg={errors.title?.message} />
         </label>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Описание</span>
-          <textarea className="input min-h-[80px]" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <textarea className="input min-h-[80px]" {...register("description")} />
+          <FieldError msg={errors.description?.message} />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Проект</span>
-            <select className="input" value={projectId} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}>
+            <select className="input" {...register("project_id", { setValueAs: (v) => (v ? Number(v) : "") })}>
               <option value="">—</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Исполнитель</span>
-            <select className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : "")}>
+            <select className="input" {...register("assignee_id", { setValueAs: (v) => (v ? Number(v) : "") })}>
               <option value="">—</option>
               {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Приоритет</span>
-            <select className="input" value={priority} onChange={(e) => setPriority(e.target.value as any)}>
+            <select className="input" {...register("priority")}>
               <option value="low">{PRIORITY_LABEL.low}</option>
               <option value="medium">{PRIORITY_LABEL.medium}</option>
               <option value="high">{PRIORITY_LABEL.high}</option>
@@ -409,14 +438,15 @@ function TaskFormModal({
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дедлайн</span>
-            <input className="input" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            <input className="input" type="datetime-local" {...register("deadline")} />
           </label>
         </div>
+        <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={!title || create.isPending} onClick={() => create.mutate()}>Создать</button>
+          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button type="submit" className="btn-primary" disabled={!isValid || create.isPending}>Создать</button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

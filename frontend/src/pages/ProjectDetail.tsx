@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import type { Project, TaskListItem } from "@/types";
+import type { Project, TaskListItem, Page } from "@/types";
 import { Loader, Avatar, StatusChip, PriorityChip } from "@/components/ui";
 import { ArrowLeft, Calendar } from "lucide-react";
 
@@ -15,7 +15,7 @@ export default function ProjectDetail() {
   });
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["project-tasks", projectId],
-    queryFn: async () => (await api.get<TaskListItem[]>(`/api/tasks`, { params: { project_id: projectId } })).data,
+    queryFn: async () => (await api.get<Page<TaskListItem>>(`/api/tasks`, { params: { project_id: projectId } })).data.items,
   });
 
   if (!project) return <Loader />;

@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/api/client";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { api, extractApiError } from "@/api/client";
 import { Link } from "react-router-dom";
 import { Plus, Archive, ArchiveRestore, Trash2, Search } from "lucide-react";
-import type { Project, UserBrief } from "@/types";
+import type { Project, UserBrief, Page, User } from "@/types";
 import { useAuth } from "@/store/auth";
-import { Modal, Avatar, Loader, EmptyState } from "@/components/ui";
+import { Modal, Avatar, Loader, EmptyState, FieldError, FormError } from "@/components/ui";
+import { projectSchema, type ProjectForm } from "@/lib/validation";
 
 export default function Projects() {
   const { can } = useAuth();
@@ -17,7 +20,7 @@ export default function Projects() {
   const { data, isLoading } = useQuery({
     queryKey: ["projects", q, showArchived],
     queryFn: async () =>
-      (await api.get<Project[]>("/api/projects", { params: { q: q || undefined, archived: showArchived } })).data,
+      (await api.get<Page<Project>>("/api/projects", { params: { q: q || undefined, archived: showArchived } })).data.items,
   });
 
   const archive = useMutation({
@@ -120,51 +123,75 @@ function MembersRow({ members }: { members: UserBrief[] }) {
 
 function ProjectFormModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [color, setColor] = useState("#6366f1");
-  const [deadline, setDeadline] = useState("");
-  const [memberIds, setMemberIds] = useState<number[]>([]);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const {
+    register,
+    control,
+    handleSubmit,
+    formState: { errors, isValid },
+    watch,
+    setValue,
+  } = useForm<ProjectForm>({
+    resolver: zodResolver(projectSchema),
+    mode: "onChange",
+    defaultValues: { name: "", description: "", color: "#6366f1", deadline: "", member_ids: [] },
+  });
+  const memberIds = watch("member_ids");
 
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
-    queryFn: async () => (await api.get<any[]>("/api/users")).data,
+    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
   });
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (data: ProjectForm) =>
       api.post("/api/projects", {
-        name,
-        description: description || null,
-        color,
-        deadline: deadline || null,
-        member_ids: memberIds,
+        name: data.name,
+        description: data.description || null,
+        color: data.color,
+        deadline: data.deadline || null,
+        member_ids: data.member_ids,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       onClose();
     },
+    onError: (e) => setFormError(extractApiError(e).message),
   });
 
   return (
     <Modal open onClose={onClose} title="Новый проект" size="md">
-      <div className="space-y-3">
+      <form onSubmit={handleSubmit((d) => create.mutate(d))} className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="input" autoFocus {...register("name")} />
+          <FieldError msg={errors.name?.message} />
         </label>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Описание</span>
-          <textarea className="input min-h-[90px]" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <textarea className="input min-h-[90px]" {...register("description")} />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Цвет</span>
-            <input type="color" className="h-10 w-full rounded-lg border border-neutral-200 dark:border-neutral-800" value={color} onChange={(e) => setColor(e.target.value)} />
+            <Controller
+              control={control}
+              name="color"
+              render={({ field }) => (
+                <input
+                  type="color"
+                  className="h-10 w-full rounded-lg border border-neutral-200 dark:border-neutral-800"
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            <FieldError msg={errors.color?.message} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дедлайн</span>
-            <input type="date" className="input" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            <input type="date" className="input" {...register("deadline")} />
           </label>
         </div>
         <div>
@@ -175,9 +202,12 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
                 <input
                   type="checkbox"
                   checked={memberIds.includes(u.id)}
-                  onChange={(e) =>
-                    setMemberIds((v) => (e.target.checked ? [...v, u.id] : v.filter((x) => x !== u.id)))
-                  }
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...memberIds, u.id]
+                      : memberIds.filter((x) => x !== u.id);
+                    setValue("member_ids", next, { shouldValidate: true });
+                  }}
                 />
                 <Avatar name={u.name} size={22} url={u.avatar_url} />
                 <span className="text-sm">{u.name}</span>
@@ -186,13 +216,14 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         </div>
+        <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={!name || create.isPending} onClick={() => create.mutate()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button type="submit" className="btn-primary" disabled={!isValid || create.isPending}>
             Создать
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

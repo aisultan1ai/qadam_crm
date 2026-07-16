@@ -8,9 +8,11 @@ import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 import { Avatar } from "./ui";
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import type { Notification } from "@/types";
+import type { Notification, Page } from "@/types";
 import GlobalSearch from "./GlobalSearch";
+import { useRealtimeUpdates } from "@/lib/ws";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -26,24 +28,24 @@ export default function Layout() {
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [notifs, setNotifs] = useState<Notification[]>([]);
+  const qc = useQueryClient();
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  useRealtimeUpdates();
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
   }, [pathname]);
 
-  const loadNotifs = async () => {
-    try {
-      const { data } = await api.get<Notification[]>("/api/notifications");
-      setNotifs(data);
-    } catch {}
-  };
+  const { data: notifs = [] } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: async () => (await api.get<Page<Notification>>("/api/notifications")).data.items,
+    refetchInterval: 60000,
+    staleTime: 15000,
+  });
 
   useEffect(() => {
-    loadNotifs();
-    const t = setInterval(loadNotifs, 30000);
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -51,13 +53,12 @@ export default function Layout() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const unread = notifs.filter((n) => !n.is_read).length;
+
+  const invalidateNotifs = () => qc.invalidateQueries({ queryKey: ["notifications"] });
 
   return (
     <div className="flex min-h-screen">
@@ -153,7 +154,7 @@ export default function Layout() {
                     className="text-xs link"
                     onClick={async () => {
                       await api.post("/api/notifications/read-all");
-                      loadNotifs();
+                      invalidateNotifs();
                     }}
                   >
                     Отметить все
@@ -170,7 +171,7 @@ export default function Layout() {
                         await api.post(`/api/notifications/${n.id}/read`);
                         if (n.task_id) navigate(`/tasks/${n.task_id}`);
                         setNotifOpen(false);
-                        loadNotifs();
+                        invalidateNotifs();
                       }}
                       className={clsx(
                         "cursor-pointer border-b border-neutral-100 px-4 py-3 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/60",

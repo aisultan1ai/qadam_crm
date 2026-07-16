@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Boolean, func
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Boolean, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
 
@@ -8,6 +8,9 @@ from ..database import Base
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_read_created", "user_id", "is_read", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)

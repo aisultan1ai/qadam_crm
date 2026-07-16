@@ -6,7 +6,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Project, User, Task
 from ..schemas.project import ProjectOut, ProjectCreate, ProjectUpdate
-from ..schemas.common import Message
+from ..schemas.common import Message, Page, PageParams, page_params
 from .deps import require, log_action
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -30,10 +30,11 @@ def _out(db: Session, project: Project, count: int | None = None) -> ProjectOut:
     return ProjectOut.model_validate(project).model_copy(update={"tasks_count": count})
 
 
-@router.get("", response_model=List[ProjectOut])
+@router.get("", response_model=Page[ProjectOut])
 def list_projects(
     q: Optional[str] = None,
     archived: Optional[bool] = None,
+    pagination: PageParams = Depends(page_params),
     _: User = Depends(require("projects.view")),
     db: Session = Depends(get_db),
 ):
@@ -43,9 +44,27 @@ def list_projects(
         query = query.filter(or_(Project.name.ilike(like), Project.description.ilike(like)))
     if archived is not None:
         query = query.filter(Project.is_archived == archived)
-    projects = query.order_by(Project.created_at.desc()).all()
+    query = query.order_by(Project.created_at.desc())
+
+    if pagination.page is None:
+        MAX_UNPAGED = 500
+        projects = query.limit(MAX_UNPAGED).all()
+        total = len(projects)
+        page = 1
+        per_page = total or pagination.per_page
+        pages = 1
+    else:
+        total = query.order_by(None).count()
+        offset = (pagination.page - 1) * pagination.per_page
+        projects = query.offset(offset).limit(pagination.per_page).all()
+        page = pagination.page
+        per_page = pagination.per_page
+        pages = (total + per_page - 1) // per_page if per_page else 1
+        pages = pages or 1
+
     counts = _counts_map(db, [p.id for p in projects])
-    return [_out(db, p, counts.get(p.id, 0)) for p in projects]
+    items = [_out(db, p, counts.get(p.id, 0)) for p in projects]
+    return Page[ProjectOut](items=items, total=total, page=page, per_page=per_page, pages=pages)
 
 
 @router.get("/{project_id}", response_model=ProjectOut)

@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { api } from "@/api/client";
-import type { Me } from "@/types";
+import { api, setTokens, clearTokens, getAccessToken, getRefreshToken, extractApiError } from "@/api/client";
+import type { Me, TokenPair } from "@/types";
 
 interface AuthState {
   me: Me | null;
@@ -8,7 +8,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
   can: (code: string | string[]) => boolean;
 }
@@ -22,31 +22,28 @@ export const useAuth = create<AuthState>((set, get) => ({
   async login(email, password) {
     set({ loading: true, error: null });
     try {
-      const { data } = await api.post("/api/auth/login", { email, password });
-      localStorage.setItem("token", data.access_token);
+      const { data } = await api.post<TokenPair>("/api/auth/login", { email, password });
+      setTokens(data.access_token, data.refresh_token);
       await get().fetchMe();
     } catch (e: any) {
-      const d = e?.response?.data?.detail;
-      const msg =
-        typeof d === "string"
-          ? d
-          : Array.isArray(d)
-            ? d.map((x: any) => x?.msg || JSON.stringify(x)).join("; ")
-            : "Ошибка входа";
-      set({ error: msg, loading: false });
+      set({ error: extractApiError(e).message || "Ошибка входа", loading: false });
       throw e;
     } finally {
       set({ loading: false });
     }
   },
 
-  logout() {
-    localStorage.removeItem("token");
+  async logout() {
+    const refresh = getRefreshToken();
+    try {
+      await api.post("/api/auth/logout", refresh ? { refresh_token: refresh } : undefined);
+    } catch {}
+    clearTokens();
     set({ me: null, ready: true });
   },
 
   async fetchMe() {
-    if (!localStorage.getItem("token")) {
+    if (!getAccessToken()) {
       set({ me: null, ready: true });
       return;
     }
@@ -54,7 +51,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       const { data } = await api.get<Me>("/api/auth/me");
       set({ me: data, ready: true });
     } catch {
-      localStorage.removeItem("token");
+      clearTokens();
       set({ me: null, ready: true });
     }
   },

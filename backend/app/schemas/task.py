@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Any, List, Optional
 from datetime import datetime
 
 from ..models.task import TaskStatus, TaskPriority
@@ -20,6 +20,12 @@ class ChecklistItemOut(ChecklistItemBase):
     id: int
 
 
+class ReactionSummary(BaseModel):
+    emoji: str
+    count: int
+    users: List[UserBrief] = []
+
+
 class CommentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -27,6 +33,27 @@ class CommentOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     author: Optional[UserBrief] = None
+    reactions: List[ReactionSummary] = []
+
+    @field_validator("reactions", mode="before")
+    @classmethod
+    def _group_reactions(cls, v: Any) -> Any:
+        if not v:
+            return []
+        # Уже сгруппированы в ReactionSummary
+        if isinstance(v, list) and v and isinstance(v[0], dict) and "emoji" in v[0] and "count" in v[0]:
+            return v
+        buckets: dict[str, dict[str, Any]] = {}
+        for r in v:
+            emoji = getattr(r, "emoji", None) if not isinstance(r, dict) else r.get("emoji")
+            if not emoji:
+                continue
+            user = getattr(r, "user", None) if not isinstance(r, dict) else r.get("user")
+            b = buckets.setdefault(emoji, {"emoji": emoji, "count": 0, "users": []})
+            b["count"] += 1
+            if user is not None:
+                b["users"].append(user)
+        return list(buckets.values())
 
 
 class CommentCreate(BaseModel):

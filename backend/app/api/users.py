@@ -12,19 +12,19 @@ from ..database import get_db
 from ..models import User, Role, Department
 from ..core.security import hash_password
 from ..schemas.user import UserOut, UserCreate, UserUpdate, DepartmentOut, DepartmentCreate
-from ..schemas.common import Message
+from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import require, get_current_user, log_action
 
 router = APIRouter(prefix="/api", tags=["users"])
 
 AVATAR_URL_PREFIX = "/media/avatars/"
-AVATAR_MAX_BYTES = 5 * 1024 * 1024
 AVATAR_EXT_BY_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
 }
+AVATAR_CHUNK = 256 * 1024
 
 
 def _avatar_file_path(avatar_url: Optional[str]) -> Optional[Path]:
@@ -33,11 +33,12 @@ def _avatar_file_path(avatar_url: Optional[str]) -> Optional[Path]:
     return Path(settings.UPLOAD_DIR) / "avatars" / avatar_url[len(AVATAR_URL_PREFIX):]
 
 
-@router.get("/users", response_model=List[UserOut])
+@router.get("/users", response_model=Page[UserOut])
 def list_users(
     q: Optional[str] = None,
     role_id: Optional[int] = None,
     is_active: Optional[bool] = None,
+    pagination: PageParams = Depends(page_params),
     _: User = Depends(require("users.view")),
     db: Session = Depends(get_db),
 ):
@@ -47,10 +48,10 @@ def list_users(
         query = query.filter(or_(User.name.ilike(like), User.email.ilike(like)))
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
-    users = query.order_by(User.id).all()
     if role_id:
-        users = [u for u in users if any(r.id == role_id for r in u.roles)]
-    return users
+        query = query.join(User.roles).filter(Role.id == role_id)
+    query = query.order_by(User.id)
+    return paginate(query, pagination)
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
@@ -82,17 +83,39 @@ def upload_my_avatar(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(400, "Требуется файл-изображение")
+    if not file.content_type or file.content_type not in AVATAR_EXT_BY_MIME:
+        raise HTTPException(400, "Разрешены только JPEG, PNG, WebP или GIF")
 
-    content = file.file.read()
-    if len(content) > AVATAR_MAX_BYTES:
-        raise HTTPException(400, "Файл слишком большой (макс 5 МБ)")
-
-    ext = AVATAR_EXT_BY_MIME.get(file.content_type) or Path(file.filename or "").suffix or ".bin"
+    ext = AVATAR_EXT_BY_MIME[file.content_type]
 
     avatars_dir = Path(settings.UPLOAD_DIR) / "avatars"
     avatars_dir.mkdir(parents=True, exist_ok=True)
+
+    stored = f"{uuid.uuid4().hex}{ext}"
+    dest = avatars_dir / stored
+
+    written = 0
+    try:
+        with dest.open("wb") as out:
+            while True:
+                chunk = file.file.read(AVATAR_CHUNK)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > settings.MAX_AVATAR_BYTES:
+                    out.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(413, f"Файл слишком большой (макс {settings.MAX_AVATAR_BYTES // (1024 * 1024)} МБ)")
+                out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(500, "Не удалось сохранить файл")
+
+    if written == 0:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, "Пустой файл")
 
     old = _avatar_file_path(user.avatar_url)
     if old and old.exists():
@@ -100,9 +123,6 @@ def upload_my_avatar(
             os.remove(old)
         except OSError:
             pass
-
-    stored = f"{uuid.uuid4().hex}{ext}"
-    (avatars_dir / stored).write_bytes(content)
 
     user.avatar_url = f"{AVATAR_URL_PREFIX}{stored}"
     log_action(db, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar")

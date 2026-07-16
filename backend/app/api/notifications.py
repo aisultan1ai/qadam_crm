@@ -1,19 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from ..database import get_db
 from ..models import Notification, User
 from ..schemas.notification import NotificationOut
-from ..schemas.common import Message
+from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import get_current_user
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
-@router.get("", response_model=List[NotificationOut])
-def list_own(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(Notification).filter(Notification.user_id == user.id).order_by(Notification.created_at.desc()).limit(50).all()
+@router.get("", response_model=Page[NotificationOut])
+def list_own(
+    pagination: PageParams = Depends(page_params),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Notification).filter(Notification.user_id == user.id).order_by(Notification.created_at.desc())
+    return paginate(query, pagination)
 
 
 @router.post("/{notification_id}/read", response_model=NotificationOut)

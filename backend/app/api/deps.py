@@ -5,7 +5,7 @@ from jose import JWTError
 from typing import Callable, Iterable
 
 from ..database import get_db
-from ..core.security import decode_token
+from ..core.security import decode_token, is_blacklisted, TOKEN_TYPE_ACCESS
 from ..core.permissions import user_has
 from ..models import User, ActivityLog
 
@@ -23,6 +23,12 @@ def get_current_user(
         user_id = int(payload.get("sub"))
     except (JWTError, TypeError, ValueError):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+
+    if payload.get("typ") not in (None, TOKEN_TYPE_ACCESS):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong token type")
+
+    if is_blacklisted(payload.get("jti")):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token revoked")
 
     user = db.get(User, user_id)
     if not user or not user.is_active:

@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import clsx from "clsx";
-import { api } from "@/api/client";
+import { api, extractApiError } from "@/api/client";
 import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers } from "lucide-react";
-import type { User, Role, Department } from "@/types";
-import { Avatar, Loader, Modal } from "@/components/ui";
+import type { User, Role, Department, Page } from "@/types";
+import { Avatar, Loader, Modal, FieldError, FormError } from "@/components/ui";
+import { departmentSchema, type DepartmentForm, userCreateSchema, userUpdateSchema, type UserCreateForm, type UserUpdateForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
 
 const TABS = [
@@ -59,7 +62,7 @@ function UsersList() {
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["users", q],
-    queryFn: async () => (await api.get<User[]>("/api/users", { params: { q: q || undefined } })).data,
+    queryFn: async () => (await api.get<Page<User>>("/api/users", { params: { q: q || undefined } })).data.items,
   });
   const { data: roles } = useQuery({
     queryKey: ["roles"],
@@ -178,7 +181,7 @@ function DepartmentsView() {
   });
   const { data: users } = useQuery({
     queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/api/users")).data,
+    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
   });
 
   const del = useMutation({
@@ -342,50 +345,44 @@ function NewDepartmentModal({
   onCreated: (id: number) => void;
 }) {
   const qc = useQueryClient();
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<DepartmentForm>({
+    resolver: zodResolver(departmentSchema),
+    mode: "onChange",
+    defaultValues: { name: "" },
+  });
 
   const create = useMutation({
-    mutationFn: async () => (await api.post<Department>("/api/departments", { name })).data,
+    mutationFn: async (data: DepartmentForm) => (await api.post<Department>("/api/departments", { name: data.name })).data,
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["departments"] });
       onCreated(d.id);
       onClose();
     },
-    onError: (e: any) => setError(e?.response?.data?.detail || "Не удалось создать"),
+    onError: (e) => setFormError(extractApiError(e).message || "Не удалось создать"),
   });
 
   return (
     <Modal open onClose={onClose} title="Новый отдел" size="sm">
-      <div className="space-y-3">
+      <form onSubmit={handleSubmit((d) => create.mutate(d))} className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
-          <input
-            className="input"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && name) create.mutate();
-            }}
-            autoFocus
-            placeholder="Например, Маркетинг"
-          />
+          <input className="input" autoFocus placeholder="Например, Маркетинг" {...register("name")} />
+          <FieldError msg={errors.name?.message} />
         </label>
-        {error && <div className="text-xs text-rose-500">{error}</div>}
+        <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button
-            className="btn-primary"
-            disabled={!name || create.isPending}
-            onClick={() => create.mutate()}
-          >
+          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button type="submit" className="btn-primary" disabled={!isValid || create.isPending}>
             Создать
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }
@@ -402,50 +399,76 @@ function UserFormModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [name, setName] = useState(initial?.name || "");
-  const [email, setEmail] = useState(initial?.email || "");
-  const [password, setPassword] = useState("");
-  const [isActive, setIsActive] = useState(initial?.is_active ?? true);
-  const [departmentId, setDepartmentId] = useState<number | "">(initial?.department?.id ?? "");
-  const [roleIds, setRoleIds] = useState<number[]>(initial?.roles.map((r) => r.id) ?? []);
+  const isEdit = !!initial;
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isValid },
+  } = useForm<UserCreateForm | UserUpdateForm>({
+    resolver: zodResolver(isEdit ? userUpdateSchema : userCreateSchema) as any,
+    mode: "onChange",
+    defaultValues: {
+      name: initial?.name || "",
+      email: initial?.email || "",
+      password: "",
+      is_active: initial?.is_active ?? true,
+      department_id: initial?.department?.id ?? "",
+      role_ids: initial?.roles.map((r) => r.id) ?? [],
+    } as any,
+  });
+  const roleIds = (watch("role_ids") as number[]) || [];
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: (data: any) => {
       const body: any = {
-        email, name,
-        is_active: isActive,
-        role_ids: roleIds,
-        department_id: departmentId || null,
+        email: data.email,
+        name: data.name,
+        is_active: data.is_active,
+        role_ids: data.role_ids,
+        department_id: data.department_id || null,
       };
-      if (password) body.password = password;
-      if (initial) return api.patch(`/api/users/${initial.id}`, body);
-      return api.post("/api/users", { ...body, password });
+      if (data.password) body.password = data.password;
+      if (isEdit) return api.patch(`/api/users/${initial!.id}`, body);
+      return api.post("/api/users", body);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
       onClose();
     },
+    onError: (e) => setFormError(extractApiError(e).message),
   });
 
   return (
-    <Modal open onClose={onClose} title={initial ? "Изменить пользователя" : "Новый пользователь"} size="md">
-      <div className="space-y-3">
+    <Modal open onClose={onClose} title={isEdit ? "Изменить пользователя" : "Новый пользователь"} size="md">
+      <form onSubmit={handleSubmit((d) => save.mutate(d))} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Имя</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className="input" {...register("name")} />
+            <FieldError msg={errors.name?.message as string} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Email</span>
-            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input className="input" type="email" {...register("email")} />
+            <FieldError msg={errors.email?.message as string} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Пароль</span>
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={initial ? "Оставьте пустым, чтобы не менять" : ""} />
+            <input
+              className="input"
+              type="password"
+              placeholder={isEdit ? "Оставьте пустым, чтобы не менять" : ""}
+              {...register("password")}
+            />
+            <FieldError msg={errors.password?.message as string} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Отдел</span>
-            <select className="input" value={departmentId} onChange={(e) => setDepartmentId(e.target.value ? Number(e.target.value) : "")}>
+            <select className="input" {...register("department_id", { setValueAs: (v) => (v ? Number(v) : "") })}>
               <option value="">—</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
@@ -460,9 +483,10 @@ function UserFormModal({
                 <input
                   type="checkbox"
                   checked={roleIds.includes(r.id)}
-                  onChange={(e) =>
-                    setRoleIds((v) => (e.target.checked ? [...v, r.id] : v.filter((x) => x !== r.id)))
-                  }
+                  onChange={(e) => {
+                    const next = e.target.checked ? [...roleIds, r.id] : roleIds.filter((x) => x !== r.id);
+                    setValue("role_ids", next, { shouldValidate: true });
+                  }}
                 />
                 <span className="text-sm">{r.name}</span>
                 <span className="text-xs text-neutral-500">— {r.permissions.length} прав</span>
@@ -472,17 +496,19 @@ function UserFormModal({
         </div>
 
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+          <input type="checkbox" {...register("is_active")} />
           Активен
         </label>
 
+        <FormError msg={formError} />
+
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={!name || !email || (!initial && !password) || save.isPending} onClick={() => save.mutate()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button type="submit" className="btn-primary" disabled={!isValid || save.isPending}>
             Сохранить
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

@@ -132,6 +132,20 @@ export function EmptyState({ title, description, icon }: { title: string; descri
   );
 }
 
+export function FieldError({ msg }: { msg?: string | null }) {
+  if (!msg) return null;
+  return <div className="mt-1 text-xs text-rose-600 dark:text-rose-400">{msg}</div>;
+}
+
+export function FormError({ msg }: { msg?: string | null }) {
+  if (!msg) return null;
+  return (
+    <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+      {msg}
+    </div>
+  );
+}
+
 export function Loader() {
   return (
     <div className="flex items-center justify-center py-16">

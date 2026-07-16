@@ -1,13 +1,16 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Text, func
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Text, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import Optional
+from typing import List, Optional
 
 from ..database import Base
 
 
 class Comment(Base):
     __tablename__ = "comments"
+    __table_args__ = (
+        Index("ix_comments_task_created", "task_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
@@ -18,3 +21,6 @@ class Comment(Base):
 
     task: Mapped["Task"] = relationship("Task", back_populates="comments")  # type: ignore  # noqa: F821
     author: Mapped[Optional["User"]] = relationship("User", lazy="joined")  # type: ignore  # noqa: F821
+    reactions: Mapped[List["CommentReaction"]] = relationship(  # type: ignore  # noqa: F821
+        "CommentReaction", cascade="all, delete-orphan", lazy="selectin"
+    )

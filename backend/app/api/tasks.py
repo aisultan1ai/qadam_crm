@@ -8,11 +8,12 @@ from ..database import get_db
 from ..models import Task, User, ChecklistItem, Notification
 from ..models.task import TaskStatus, TaskPriority
 from ..core.permissions import user_has
+from ..core.ws_hub import publish_to_user
 from ..schemas.task import (
     TaskOut, TaskListItem, TaskCreate, TaskUpdate, TaskBulkUpdate,
     ChecklistItemCreate, ChecklistItemOut,
 )
-from ..schemas.common import Message
+from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import require, get_current_user, log_action
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -32,7 +33,7 @@ def _notify(db: Session, user_id: int, kind: str, title: str, body: str | None =
     db.add(Notification(user_id=user_id, kind=kind, title=title, body=body, task_id=task_id))
 
 
-@router.get("", response_model=List[TaskListItem])
+@router.get("", response_model=Page[TaskListItem])
 def list_tasks(
     q: Optional[str] = None,
     project_id: Optional[int] = None,
@@ -40,6 +41,7 @@ def list_tasks(
     status: Optional[TaskStatus] = None,
     priority: Optional[TaskPriority] = None,
     overdue: Optional[bool] = None,
+    pagination: PageParams = Depends(page_params),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -60,7 +62,8 @@ def list_tasks(
         query = query.filter(Task.priority == priority)
     if overdue:
         query = query.filter(and_(Task.deadline.is_not(None), Task.deadline < datetime.utcnow(), Task.status.notin_([TaskStatus.done, TaskStatus.cancelled])))
-    return query.order_by(Task.order_index.asc(), Task.created_at.desc()).all()
+    query = query.order_by(Task.order_index.asc(), Task.created_at.desc())
+    return paginate(query, pagination)
 
 
 @router.get("/{task_id}", response_model=TaskOut)
@@ -96,6 +99,9 @@ def create_task(payload: TaskCreate, user: User = Depends(require("tasks.create"
         _notify(db, task.assignee_id, "assigned", "Новая задача", task.title, task.id)
     db.commit()
     db.refresh(task)
+    if task.assignee_id and task.assignee_id != user.id:
+        publish_to_user(task.assignee_id, "notification.new", {"task_id": task.id})
+        publish_to_user(task.assignee_id, "task.assigned", {"task_id": task.id})
     return task
 
 
@@ -146,6 +152,14 @@ def update_task(task_id: int, payload: TaskUpdate, user: User = Depends(get_curr
         log_action(db, user_id=user.id, action="update", entity="task", entity_id=task.id, task_id=task.id, detail=", ".join(changes))
     db.commit()
     db.refresh(task)
+
+    if changes:
+        subscribers = {uid for uid in (task.assignee_id, task.author_id) if uid and uid != user.id}
+        for uid in subscribers:
+            publish_to_user(uid, "task.updated", {"task_id": task.id, "changes": changes})
+            if any(c.startswith("статус") for c in changes) or any(c == "исполнитель" for c in changes):
+                publish_to_user(uid, "notification.new", {"task_id": task.id})
+
     return task
 
 

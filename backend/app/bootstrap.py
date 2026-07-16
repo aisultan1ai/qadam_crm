@@ -1,20 +1,30 @@
-"""Create tables (if missing) and seed baseline data.
+"""Create tables (if missing), run migrations, seed baseline data.
 
 Runs once on backend start via docker-compose command.
 Idempotent.
 """
 from __future__ import annotations
 
+import secrets
 import time
+from pathlib import Path
+
 from sqlalchemy import inspect
 from sqlalchemy.exc import OperationalError
 
+from alembic import command
+from alembic.config import Config
+
+from .config import settings
 from .database import Base, engine, SessionLocal
 from . import models  # noqa: F401 -- register models
-from .models import Role, Permission, User, Project, Task
-from .models.task import TaskStatus, TaskPriority
+from .models import Role, Permission, User
 from .core.security import hash_password
 from .core.permissions import PERMISSIONS
+
+
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+ALEMBIC_INI = BACKEND_ROOT / "alembic.ini"
 
 
 def wait_for_db(retries: int = 30, delay: float = 1.0) -> None:
@@ -27,6 +37,29 @@ def wait_for_db(retries: int = 30, delay: float = 1.0) -> None:
             print(f"[bootstrap] DB not ready, retry {i+1}/{retries}")
             time.sleep(delay)
     raise RuntimeError("Database is not reachable")
+
+
+def run_migrations() -> None:
+    """Гарантирует схему БД: create_all для fresh, alembic upgrade для существующей."""
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+    inspector = inspect(engine)
+    has_alembic_table = inspector.has_table("alembic_version")
+    has_any_domain_table = inspector.has_table("users")
+
+    if not has_any_domain_table:
+        print("[bootstrap] Пустая БД — создаю схему через create_all + stamp head")
+        Base.metadata.create_all(bind=engine)
+        command.stamp(cfg, "head")
+        return
+
+    if not has_alembic_table:
+        print("[bootstrap] БД уже существует, но без alembic_version — stamp head")
+        command.stamp(cfg, "head")
+
+    print("[bootstrap] alembic upgrade head")
+    command.upgrade(cfg, "head")
 
 
 def sync_permissions(db) -> None:
@@ -83,96 +116,50 @@ def seed_roles(db) -> None:
     db.commit()
 
 
-def seed_admin(db) -> User:
-    admin = db.query(User).filter(User.email == "admin@qadam.local").first()
-    if admin:
-        return admin
+def seed_admin(db) -> None:
+    email = settings.ADMIN_EMAIL.lower().strip()
+    if db.query(User).filter(User.email == email).first():
+        return
+
+    password = settings.ADMIN_PASSWORD
+    generated = False
+    if not password:
+        password = secrets.token_urlsafe(16)
+        generated = True
+
     role_admin = db.query(Role).filter(Role.name == "Администратор").first()
     admin = User(
-        email="admin@qadam.local",
+        email=email,
         name="Администратор",
-        password_hash=hash_password("admin123"),
+        password_hash=hash_password(password),
         is_active=True,
         is_superuser=True,
         roles=[role_admin] if role_admin else [],
     )
     db.add(admin)
     db.commit()
-    db.refresh(admin)
-    return admin
 
-
-def seed_demo(db, admin: User) -> None:
-    if db.query(User).count() > 1:
-        return
-
-    role_manager = db.query(Role).filter(Role.name == "Менеджер").first()
-    role_employee = db.query(Role).filter(Role.name == "Сотрудник").first()
-
-    manager = User(
-        email="manager@qadam.local",
-        name="Мария Менеджер",
-        password_hash=hash_password("manager123"),
-        is_active=True,
-        roles=[role_manager] if role_manager else [],
-    )
-    employee = User(
-        email="employee@qadam.local",
-        name="Иван Сотрудник",
-        password_hash=hash_password("employee123"),
-        is_active=True,
-        roles=[role_employee] if role_employee else [],
-    )
-    db.add_all([manager, employee])
-    db.flush()
-
-    project = Project(
-        name="Запуск нового сайта",
-        description="Ребрендинг корпоративного сайта: дизайн, разработка, тестирование.",
-        color="#6366f1",
-        owner_id=manager.id,
-        members=[admin, manager, employee],
-    )
-    db.add(project)
-    db.flush()
-
-    demo_tasks = [
-        ("Собрать требования", TaskStatus.done, TaskPriority.high, employee.id),
-        ("Разработать макеты", TaskStatus.review, TaskPriority.high, manager.id),
-        ("Свёрстка главной страницы", TaskStatus.in_progress, TaskPriority.medium, employee.id),
-        ("Настроить CI/CD", TaskStatus.new, TaskPriority.medium, employee.id),
-        ("Провести нагрузочное тестирование", TaskStatus.new, TaskPriority.critical, manager.id),
-    ]
-    for i, (title, status, priority, assignee_id) in enumerate(demo_tasks):
-        db.add(Task(
-            title=title,
-            description=f"Демо-задача: {title}",
-            status=status,
-            priority=priority,
-            project_id=project.id,
-            assignee_id=assignee_id,
-            author_id=admin.id,
-            order_index=i,
-        ))
-    db.commit()
+    if generated:
+        print("=" * 70)
+        print("[bootstrap] Создан администратор. Сохраните эти данные:")
+        print(f"[bootstrap]   email:    {email}")
+        print(f"[bootstrap]   password: {password}")
+        print("[bootstrap] Пароль показан один раз, сменить его можно в профиле.")
+        print("=" * 70)
+    else:
+        print(f"[bootstrap] Создан администратор {email} (пароль из ADMIN_PASSWORD)")
 
 
 def main() -> None:
     wait_for_db()
-
-    # Create tables that do not yet exist. For real deployments consider Alembic.
-    inspector = inspect(engine)
-    if not inspector.has_table("users"):
-        print("[bootstrap] Creating database schema")
-    Base.metadata.create_all(bind=engine)
+    run_migrations()
 
     with SessionLocal() as db:
         sync_permissions(db)
         seed_roles(db)
-        admin = seed_admin(db)
-        seed_demo(db, admin)
+        seed_admin(db)
 
-    print("[bootstrap] Done. Login: admin@qadam.local / admin123")
+    print("[bootstrap] Done.")
 
 
 if __name__ == "__main__":

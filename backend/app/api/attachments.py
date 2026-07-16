@@ -15,6 +15,86 @@ from .deps import require, log_action
 router = APIRouter(prefix="/api/tasks/{task_id}/attachments", tags=["attachments"])
 
 
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".doc", ".docx",
+    ".xls", ".xlsx", ".csv",
+    ".ppt", ".pptx",
+    ".txt", ".md", ".rtf",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+    ".zip", ".rar", ".7z",
+    ".mp4", ".mov", ".webm",
+    ".mp3", ".wav", ".ogg",
+}
+
+ALLOWED_MIME_PREFIXES = ("image/", "video/", "audio/", "text/")
+ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/x-rar-compressed",
+    "application/vnd.rar",
+    "application/x-7z-compressed",
+    "application/octet-stream",  # частый fallback у браузеров
+}
+
+BLOCKED_EXTENSIONS = {
+    ".exe", ".bat", ".cmd", ".sh", ".ps1", ".msi", ".scr", ".vbs", ".js",
+    ".jar", ".php", ".phtml", ".py", ".pyc", ".pl", ".rb", ".dll", ".so",
+    ".com", ".cpl", ".app", ".apk", ".ipa",
+}
+
+CHUNK_SIZE = 1024 * 1024  # 1 MB
+
+
+def _validate_and_save(file: UploadFile, dest: Path, max_bytes: int) -> int:
+    ext = Path(file.filename or "").suffix.lower()
+    if not ext:
+        raise HTTPException(400, "Файл без расширения не поддерживается")
+    if ext in BLOCKED_EXTENSIONS:
+        raise HTTPException(400, f"Такой тип файла запрещён ({ext})")
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Расширение {ext} не разрешено")
+
+    mime = (file.content_type or "").lower()
+    if mime and not (
+        mime in ALLOWED_MIME_TYPES
+        or any(mime.startswith(p) for p in ALLOWED_MIME_PREFIXES)
+    ):
+        raise HTTPException(400, f"MIME-тип {mime} не разрешён")
+
+    written = 0
+    try:
+        with dest.open("wb") as out:
+            while True:
+                chunk = file.file.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    out.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(413, f"Файл слишком большой (макс {max_bytes // (1024 * 1024)} МБ)")
+                out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(500, "Не удалось сохранить файл")
+
+    if written == 0:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, "Пустой файл")
+
+    return written
+
+
 @router.post("", response_model=AttachmentOut, status_code=201)
 def upload(task_id: int, file: UploadFile = File(...), user: User = Depends(require("files.upload")), db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
@@ -24,19 +104,18 @@ def upload(task_id: int, file: UploadFile = File(...), user: User = Depends(requ
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    ext = Path(file.filename or "").suffix
+    ext = Path(file.filename or "").suffix.lower()
     stored = f"{uuid.uuid4().hex}{ext}"
     dest = upload_dir / stored
 
-    content = file.file.read()
-    dest.write_bytes(content)
+    size = _validate_and_save(file, dest, settings.MAX_UPLOAD_BYTES)
 
     att = Attachment(
         task_id=task.id,
         filename=file.filename or stored,
         stored_name=stored,
         content_type=file.content_type,
-        size=len(content),
+        size=size,
         uploaded_by=user.id,
     )
     db.add(att)

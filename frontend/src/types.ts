@@ -47,12 +47,14 @@ export type TaskStatus = "new" | "in_progress" | "review" | "done" | "cancelled"
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 
 export type ChecklistItem = { id: number; text: string; done: boolean };
+export type ReactionSummary = { emoji: string; count: number; users: UserBrief[] };
 export type Comment = {
   id: number;
   body: string;
   created_at: string;
   updated_at: string;
   author?: UserBrief | null;
+  reactions: ReactionSummary[];
 };
 export type Attachment = {
   id: number;
@@ -117,3 +119,18 @@ export const PRIORITY_LABEL: Record<TaskPriority, string> = {
 };
 
 export const STATUS_ORDER: TaskStatus[] = ["new", "in_progress", "review", "done", "cancelled"];
+
+export type Page<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+};
+
+export type TokenPair = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+};

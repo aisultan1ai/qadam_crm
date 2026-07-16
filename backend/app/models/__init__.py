@@ -6,6 +6,7 @@ from .comment import Comment
 from .attachment import Attachment
 from .notification import Notification
 from .activity import ActivityLog
+from .reaction import CommentReaction
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "Attachment",
     "Notification",
     "ActivityLog",
+    "CommentReaction",
 ]
