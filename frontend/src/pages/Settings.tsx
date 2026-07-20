@@ -32,14 +32,22 @@ function Forbid() {
 
 function RolesSettings() {
   const qc = useQueryClient();
-  const { data: roles } = useQuery({ queryKey: ["roles"], queryFn: async () => (await api.get<Role[]>("/api/roles")).data });
-  const { data: groups } = useQuery({ queryKey: ["permissions"], queryFn: async () => (await api.get<PermissionGroup[]>("/api/permissions")).data });
+  const { data: roles } = useQuery({
+    queryKey: ["roles"],
+    queryFn: async () => (await api.get<Role[]>("/api/roles")).data,
+    refetchOnMount: "always",
+    staleTime: 0,
+  });
+  const { data: groups } = useQuery({
+    queryKey: ["permissions"],
+    queryFn: async () => (await api.get<PermissionGroup[]>("/api/permissions")).data,
+  });
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selected = useMemo(() => roles?.find((r) => r.id === selectedId) ?? roles?.[0] ?? null, [roles, selectedId]);
-  useEffect(() => {
-    if (!selectedId && roles && roles.length) setSelectedId(roles[0].id);
-  }, [roles, selectedId]);
+  const selected = useMemo(
+    () => roles?.find((r) => r.id === selectedId) ?? roles?.[0] ?? null,
+    [roles, selectedId],
+  );
 
   const [nameDraft, setNameDraft] = useState("");
   const [descDraft, setDescDraft] = useState("");
@@ -112,7 +120,7 @@ function RolesSettings() {
       {!selected || !groups ? (
         <Loader />
       ) : (
-        <div className="card p-5">
+        <div className="card flex max-h-[calc(100vh-12rem)] flex-col p-5">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex-1 grid grid-cols-2 gap-3">
               <label className="block">
@@ -138,7 +146,7 @@ function RolesSettings() {
             </div>
           </div>
 
-          <div className="space-y-5">
+          <div className="flex-1 space-y-5 overflow-y-auto pr-1">
             {groups.map((g) => {
               const allChecked = g.items.every((p) => permSet.has(p.code));
               const someChecked = g.items.some((p) => permSet.has(p.code));
@@ -184,7 +192,7 @@ function RolesSettings() {
             })}
           </div>
 
-          <div className="mt-6 flex items-center justify-between border-t border-neutral-100 pt-4 dark:border-neutral-800">
+          <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-4 dark:border-neutral-800">
             <span className="text-xs text-neutral-500">{permSet.size} прав выбрано</span>
             <button className="btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
               <Save size={14} /> Сохранить

@@ -1,0 +1,92 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: qadam_crm_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qadam_crm
+      POSTGRES_PASSWORD: qadam_crm
+      POSTGRES_DB: qadam_crm
+    volumes:
+      - qadam_crm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qadam_crm -d qadam_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: qadam_crm_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - qadam_crm_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: qadam_crm_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://qadam_crm:qadam_crm@db:5432/qadam_crm
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 1440
+      CORS_ORIGINS: ""
+      UPLOAD_DIR: /app/uploads
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - qadam_crm_uploads:/app/uploads
+    expose:
+      - "8000"
+    command: >
+      sh -c "python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: /
+    container_name: qadam_crm_frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: qadam_crm_nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - qadam_crm_uploads:/var/www/uploads:ro
+
+volumes:
+  qadam_crm_pgdata:
+  qadam_crm_uploads:
+  qadam_crm_redis:

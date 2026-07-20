@@ -5,7 +5,7 @@
 :root {
   color-scheme: light dark;
   --page-bg: #fafaf9;
-  --page-bg-dark: #0b0b10;
+  --page-bg-dark: #17171c;
 }
 
 html,
@@ -15,9 +15,11 @@ body,
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 dark:bg-[#0b0b10] dark:text-zinc-100;
+  @apply bg-zinc-50 text-zinc-900 dark:bg-[#17171c] dark:text-zinc-100;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
   letter-spacing: -0.005em;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.4) transparent;
 }
 
 @layer components {
@@ -71,7 +73,7 @@ body {
   }
   .surface-blur {
     @apply bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70
-           dark:bg-neutral-950/75 dark:supports-[backdrop-filter]:bg-neutral-950/60;
+           dark:bg-neutral-900/70 dark:supports-[backdrop-filter]:bg-neutral-900/55;
   }
 }
 

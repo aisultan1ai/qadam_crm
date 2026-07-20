@@ -2,12 +2,57 @@ import { FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { api, API_URL } from "@/api/client";
-import type { Task, Project, User, Page, Comment as CommentT } from "@/types";
+import { api, API_URL, extractApiError } from "@/api/client";
+import type { Task, TaskStatus, TaskPriority, Project, User, Page, Comment as CommentT } from "@/types";
 import { PRIORITY_LABEL, STATUS_LABEL, STATUS_ORDER } from "@/types";
+
+const ACTION_LABEL: Record<string, string> = {
+  create: "создал(а)",
+  update: "обновил(а)",
+  delete: "удалил(а)",
+  bulk_update: "массовое обновление",
+};
+
+const isTaskStatus = (v: string): v is TaskStatus =>
+  v === "new" || v === "in_progress" || v === "review" || v === "done" || v === "cancelled";
+const isTaskPriority = (v: string): v is TaskPriority =>
+  v === "low" || v === "medium" || v === "high" || v === "critical";
+
+function localizeChange(chunk: string): string {
+  const trimmed = chunk.trim();
+  const statusMatch = trimmed.match(/^статус\s+(\S+)\s*→\s*(\S+)$/);
+  if (statusMatch) {
+    const [, from, to] = statusMatch;
+    const l = (s: string) => (isTaskStatus(s) ? STATUS_LABEL[s] : s);
+    return `статус ${l(from)} → ${l(to)}`;
+  }
+  const prioMatch = trimmed.match(/^приоритет\s+(\S+)\s*→\s*(\S+)$/);
+  if (prioMatch) {
+    const [, from, to] = prioMatch;
+    const l = (p: string) => (isTaskPriority(p) ? PRIORITY_LABEL[p] : p);
+    return `приоритет ${l(from)} → ${l(to)}`;
+  }
+  return trimmed;
+}
+
+function formatActivityDetail(detail: string | null | undefined): string {
+  if (!detail) return "";
+  return detail.split(",").map(localizeChange).join(", ");
+}
 import { Avatar, Loader, PriorityChip, StatusChip } from "@/components/ui";
 import { ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile } from "lucide-react";
 import { useAuth } from "@/store/auth";
+import { useToast } from "@/components/Toast";
+
+type TaskPatch = {
+  title?: string;
+  description?: string | null;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  project_id?: number | null;
+  assignee_id?: number | null;
+  deadline?: string | null;
+};
 
 const AVAILABLE_EMOJIS = ["👍", "❤️", "🎉", "🚀", "😂", "🔥", "👀", "🙏", "✅", "❌"];
 
@@ -16,6 +61,7 @@ export default function TaskDetail() {
   const taskId = Number(id);
   const { me, can } = useAuth();
   const qc = useQueryClient();
+  const toast = useToast();
 
   const { data: task } = useQuery({
     queryKey: ["task", taskId],
@@ -31,11 +77,12 @@ export default function TaskDetail() {
   });
 
   const patch = useMutation({
-    mutationFn: (body: any) => api.patch(`/api/tasks/${taskId}`, body),
+    mutationFn: (body: TaskPatch) => api.patch(`/api/tasks/${taskId}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["task", taskId] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
+    onError: (e) => toast.error("Не удалось сохранить", extractApiError(e).message),
   });
 
   const addComment = useMutation({
@@ -83,8 +130,13 @@ export default function TaskDetail() {
   const uploadFile = async (f: File) => {
     const fd = new FormData();
     fd.append("file", f);
-    await api.post(`/api/tasks/${taskId}/attachments`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-    qc.invalidateQueries({ queryKey: ["task", taskId] });
+    try {
+      await api.post(`/api/tasks/${taskId}/attachments`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      qc.invalidateQueries({ queryKey: ["task", taskId] });
+      toast.success("Файл загружен");
+    } catch (e) {
+      toast.error("Не удалось загрузить файл", extractApiError(e).message);
+    }
   };
 
   return (
@@ -208,8 +260,8 @@ export default function TaskDetail() {
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-neutral-400" />
                 <div>
                   <span className="text-neutral-900 dark:text-neutral-200 font-medium">{a.user?.name || "Система"}</span>
-                  {" "}<span>{a.action}</span>
-                  {a.detail && <span className="text-neutral-500"> · {a.detail}</span>}
+                  {" "}<span>{ACTION_LABEL[a.action] ?? a.action}</span>
+                  {a.detail && <span className="text-neutral-500"> · {formatActivityDetail(a.detail)}</span>}
                   <div className="text-[11px] text-neutral-500">{new Date(a.created_at).toLocaleString("ru-RU")}</div>
                 </div>
               </div>
@@ -226,7 +278,7 @@ export default function TaskDetail() {
                 className="input"
                 disabled={!can("tasks.change_status")}
                 value={task.status}
-                onChange={(e) => patch.mutate({ status: e.target.value })}
+                onChange={(e) => patch.mutate({ status: e.target.value as TaskStatus })}
               >
                 {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
@@ -237,7 +289,7 @@ export default function TaskDetail() {
                 className="input"
                 disabled={!can("tasks.change_priority")}
                 value={task.priority}
-                onChange={(e) => patch.mutate({ priority: e.target.value })}
+                onChange={(e) => patch.mutate({ priority: e.target.value as TaskPriority })}
               >
                 {(["low", "medium", "high", "critical"] as const).map((p) => (
                   <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>

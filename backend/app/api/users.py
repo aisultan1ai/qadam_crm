@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
 from ..models import User, Role, Department
-from ..core.security import hash_password
-from ..schemas.user import UserOut, UserCreate, UserUpdate, DepartmentOut, DepartmentCreate
+from ..core.security import hash_password, verify_password
+from ..schemas.user import UserOut, UserCreate, UserUpdate, MeUpdate, DepartmentOut, DepartmentCreate
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import require, get_current_user, log_action
 
@@ -72,6 +72,38 @@ def create_user(payload: UserCreate, actor: User = Depends(require("users.create
     db.add(user)
     db.flush()
     log_action(db, user_id=actor.id, action="create", entity="user", entity_id=user.id, detail=user.email)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/users/me", response_model=UserOut)
+def update_me(payload: MeUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    changes: list[str] = []
+    email_changing = payload.email is not None and payload.email.lower() != user.email
+    password_changing = payload.new_password is not None
+
+    if email_changing or password_changing:
+        if not payload.current_password or not verify_password(payload.current_password, user.password_hash):
+            raise HTTPException(400, "Неверный текущий пароль")
+
+    if email_changing:
+        new_email = payload.email.lower()
+        if db.query(User).filter(User.email == new_email, User.id != user.id).first():
+            raise HTTPException(400, "Email уже используется")
+        user.email = new_email
+        changes.append("email")
+
+    if payload.name is not None and payload.name != user.name:
+        user.name = payload.name
+        changes.append("имя")
+
+    if password_changing:
+        user.password_hash = hash_password(payload.new_password)
+        changes.append("пароль")
+
+    if changes:
+        log_action(db, user_id=user.id, action="update", entity="user", entity_id=user.id, detail=", ".join(changes))
     db.commit()
     db.refresh(user)
     return user

@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  Plus, LayoutGrid, List as ListIcon, Table as TableIcon, CalendarDays, Search,
+  Plus, LayoutGrid, List as ListIcon, Table as TableIcon, CalendarDays, Search, Trash2,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -46,20 +46,18 @@ export default function Tasks() {
   const [qLocal, setQLocal] = useState(q);
   useEffect(() => setQLocal(q), [q]);
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (qLocal !== q) updateParam("q", qLocal);
-    }, 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qLocal]);
-
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(sp);
     if (value) next.set(key, value);
     else next.delete(key);
     setSp(next, { replace: true });
   };
+
+  useEffect(() => {
+    if (qLocal === q) return;
+    const t = setTimeout(() => updateParam("q", qLocal), 250);
+    return () => clearTimeout(t);
+  }, [qLocal, q, sp, setSp]);
 
   const filters = useMemo(
     () => ({
@@ -106,6 +104,20 @@ export default function Tasks() {
       qc.invalidateQueries({ queryKey: ["task", vars.id] });
     },
   });
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const deleteTask = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/tasks/${id}`),
+    onSuccess: () => {
+      toast.success("Задача удалена");
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["project-tasks"] });
+      setConfirmDeleteId(null);
+    },
+    onError: (e) => toast.error("Не удалось удалить задачу", extractApiError(e).message),
+  });
+  const canDelete = can("tasks.delete");
+  const requestDelete = canDelete ? (id: number) => setConfirmDeleteId(id) : undefined;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -241,14 +253,14 @@ export default function Tasks() {
         <DndContext sensors={sensors} onDragEnd={onDragEnd}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
             {STATUS_ORDER.map((s) => (
-              <KanbanColumn key={s} status={s} tasks={tasks.filter((t) => t.status === s)} />
+              <KanbanColumn key={s} status={s} tasks={tasks.filter((t) => t.status === s)} onDelete={requestDelete} />
             ))}
           </div>
         </DndContext>
       ) : view === "table" ? (
-        <TableView tasks={tasks} />
+        <TableView tasks={tasks} onDelete={requestDelete} />
       ) : view === "list" ? (
-        <ListView tasks={tasks} />
+        <ListView tasks={tasks} onDelete={requestDelete} />
       ) : (
         <CalendarView tasks={tasks} />
       )}
@@ -260,11 +272,39 @@ export default function Tasks() {
           onClose={() => setOpenNew(false)}
         />
       )}
+
+      {confirmDeleteId !== null && (
+        <Modal open onClose={() => setConfirmDeleteId(null)} title="Удалить задачу?" size="sm">
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Задача «{tasks?.find((t) => t.id === confirmDeleteId)?.title || ""}» будет удалена без возможности восстановления.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn-ghost" onClick={() => setConfirmDeleteId(null)}>Отмена</button>
+              <button
+                className="btn-primary bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-600"
+                disabled={deleteTask.isPending}
+                onClick={() => deleteTask.mutate(confirmDeleteId)}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-function KanbanColumn({ status, tasks }: { status: TaskStatus; tasks: TaskListItem[] }) {
+function KanbanColumn({
+  status,
+  tasks,
+  onDelete,
+}: {
+  status: TaskStatus;
+  tasks: TaskListItem[];
+  onDelete?: (id: number) => void;
+}) {
   const { isOver, setNodeRef } = useDroppable({ id: `col:${status}` });
   return (
     <div
@@ -283,13 +323,19 @@ function KanbanColumn({ status, tasks }: { status: TaskStatus; tasks: TaskListIt
         <span className="text-xs text-neutral-500">{tasks.length}</span>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto pr-0.5">
-        {tasks.map((t) => <KanbanCard key={t.id} task={t} />)}
+        {tasks.map((t) => <KanbanCard key={t.id} task={t} onDelete={onDelete} />)}
       </div>
     </div>
   );
 }
 
-const KanbanCard = memo(function KanbanCard({ task }: { task: TaskListItem }) {
+const KanbanCard = memo(function KanbanCard({
+  task,
+  onDelete,
+}: {
+  task: TaskListItem;
+  onDelete?: (id: number) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `task:${task.id}` });
   const nav = useNavigate();
   return (
@@ -299,9 +345,21 @@ const KanbanCard = memo(function KanbanCard({ task }: { task: TaskListItem }) {
       {...listeners}
       {...attributes}
       onClick={() => nav(`/tasks/${task.id}`)}
-      className="cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900"
+      className="group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900"
     >
-      <div className="mb-1.5 text-sm font-medium leading-snug">{task.title}</div>
+      {onDelete && (
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+          className="absolute right-1.5 top-1.5 hidden rounded p-1 text-neutral-400 hover:bg-rose-50 hover:text-rose-600 group-hover:block dark:hover:bg-rose-950/30"
+          title="Удалить задачу"
+          aria-label="Удалить задачу"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+      <div className="mb-1.5 pr-6 text-sm font-medium leading-snug">{task.title}</div>
       <div className="flex items-center justify-between">
         <PriorityChip priority={task.priority} />
         {task.assignee && <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} />}
@@ -315,7 +373,13 @@ const KanbanCard = memo(function KanbanCard({ task }: { task: TaskListItem }) {
   );
 });
 
-function TableView({ tasks }: { tasks: TaskListItem[] }) {
+function TableView({
+  tasks,
+  onDelete,
+}: {
+  tasks: TaskListItem[];
+  onDelete?: (id: number) => void;
+}) {
   return (
     <div className="card overflow-hidden">
       <table className="w-full text-sm">
@@ -326,11 +390,12 @@ function TableView({ tasks }: { tasks: TaskListItem[] }) {
             <th className="px-5 py-2.5 text-left">Приоритет</th>
             <th className="px-5 py-2.5 text-left">Исполнитель</th>
             <th className="px-5 py-2.5 text-left">Дедлайн</th>
+            {onDelete && <th className="px-5 py-2.5 text-right w-10" aria-label="Действия" />}
           </tr>
         </thead>
         <tbody>
           {tasks.map((t) => (
-            <tr key={t.id} className="table-row">
+            <tr key={t.id} className="table-row group">
               <td className="px-5 py-3">
                 <Link to={`/tasks/${t.id}`} className="font-medium hover:text-brand-600">{t.title}</Link>
               </td>
@@ -342,6 +407,19 @@ function TableView({ tasks }: { tasks: TaskListItem[] }) {
               <td className="px-5 py-3 text-neutral-500">
                 {t.deadline ? new Date(t.deadline).toLocaleDateString("ru-RU") : "—"}
               </td>
+              {onDelete && (
+                <td className="px-3 py-3 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onDelete(t.id)}
+                    className="rounded p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-950/30"
+                    title="Удалить задачу"
+                    aria-label="Удалить задачу"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -350,22 +428,44 @@ function TableView({ tasks }: { tasks: TaskListItem[] }) {
   );
 }
 
-function ListView({ tasks }: { tasks: TaskListItem[] }) {
+function ListView({
+  tasks,
+  onDelete,
+}: {
+  tasks: TaskListItem[];
+  onDelete?: (id: number) => void;
+}) {
   return (
     <div className="space-y-2">
       {tasks.map((t) => (
-        <Link key={t.id} to={`/tasks/${t.id}`}
-          className="card-interactive flex items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-medium">{t.title}</div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
-              <StatusChip status={t.status} />
-              <PriorityChip priority={t.priority} />
-              {t.deadline && <span>до {new Date(t.deadline).toLocaleDateString("ru-RU")}</span>}
+        <div key={t.id} className="group relative">
+          <Link to={`/tasks/${t.id}`}
+            className="card-interactive flex items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium">{t.title}</div>
+              <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
+                <StatusChip status={t.status} />
+                <PriorityChip priority={t.priority} />
+                {t.deadline && <span>до {new Date(t.deadline).toLocaleDateString("ru-RU")}</span>}
+              </div>
             </div>
-          </div>
-          {t.assignee && <Avatar name={t.assignee.name} size={26} url={t.assignee.avatar_url} />}
-        </Link>
+            <div className="flex items-center gap-2">
+              {t.assignee && <Avatar name={t.assignee.name} size={26} url={t.assignee.avatar_url} />}
+              {onDelete && <span className="w-6" aria-hidden />}
+            </div>
+          </Link>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); onDelete(t.id); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-950/30"
+              title="Удалить задачу"
+              aria-label="Удалить задачу"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       ))}
     </div>
   );
@@ -432,14 +532,16 @@ function CalendarView({ tasks }: { tasks: TaskListItem[] }) {
   );
 }
 
-function TaskFormModal({
+export function TaskFormModal({
   onClose,
   projects,
   users,
+  defaultProjectId,
 }: {
   onClose: () => void;
   projects: Project[];
   users: User[];
+  defaultProjectId?: number;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -452,7 +554,14 @@ function TaskFormModal({
   } = useForm<TaskForm>({
     resolver: zodResolver(taskSchema),
     mode: "onChange",
-    defaultValues: { title: "", description: "", priority: "medium", project_id: "", assignee_id: "", deadline: "" },
+    defaultValues: {
+      title: "",
+      description: "",
+      priority: "medium",
+      project_id: defaultProjectId ?? "",
+      assignee_id: "",
+      deadline: "",
+    },
   });
 
   const create = useMutation({
@@ -467,6 +576,7 @@ function TaskFormModal({
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["project-tasks"] });
       toast.success("Задача создана");
       onClose();
     },

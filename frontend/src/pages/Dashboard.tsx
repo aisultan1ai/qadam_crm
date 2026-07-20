@@ -2,9 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { CheckCircle2, Clock, ListTodo, AlertTriangle } from "lucide-react";
 import { STATUS_LABEL, TaskStatus } from "@/types";
-import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/Skeleton";
-import { fromNow, formatDateTime } from "@/lib/date";
 
 type Dashboard = {
   total: number;
@@ -12,16 +10,6 @@ type Dashboard = {
   done: number;
   overdue: number;
   by_status: Record<string, number>;
-  recent: {
-    id: number;
-    action: string;
-    entity: string;
-    entity_id: number;
-    detail?: string | null;
-    task_id?: number | null;
-    created_at: string;
-    user?: { id: number; name: string; email: string } | null;
-  }[];
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -36,6 +24,8 @@ export default function DashboardPage() {
   const { data, isPending } = useQuery({
     queryKey: ["dashboard"],
     queryFn: async () => (await api.get<Dashboard>("/api/analytics/dashboard")).data,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   if (isPending || !data) return <DashboardSkeleton />;
@@ -56,54 +46,29 @@ export default function DashboardPage() {
         <Metric icon={<AlertTriangle size={18} />} label="Просрочены" value={data.overdue} accent="text-rose-600" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="card p-5 lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Задачи по статусам</h2>
-            <span className="text-xs text-neutral-500">Всего {totalByStatus}</span>
-          </div>
-          <div className="mb-4 flex h-3 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-            {(Object.keys(STATUS_LABEL) as TaskStatus[]).map((s) => {
-              const v = data.by_status[s] || 0;
-              const w = (v / totalByStatus) * 100;
-              if (!w) return null;
-              return <div key={s} className={STATUS_COLOR[s]} style={{ width: `${w}%` }} />;
-            })}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            {(Object.keys(STATUS_LABEL) as TaskStatus[]).map((s) => (
-              <div key={s} className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 dark:bg-neutral-800/50">
-                <span className={`h-2.5 w-2.5 rounded-full ${STATUS_COLOR[s]}`} />
-                <div>
-                  <div className="text-xs text-neutral-500">{STATUS_LABEL[s]}</div>
-                  <div className="text-sm font-semibold">{data.by_status[s] || 0}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="card p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Задачи по статусам</h2>
+          <span className="text-xs text-neutral-500">Всего {totalByStatus}</span>
         </div>
-
-        <div className="card p-5">
-          <h2 className="mb-3 text-sm font-semibold">Последние изменения</h2>
-          <div className="space-y-3">
-            {data.recent.length === 0 && <div className="text-sm text-neutral-500">Пока пусто</div>}
-            {data.recent.map((r) => (
-              <Link
-                key={r.id}
-                to={r.task_id ? `/tasks/${r.task_id}` : "#"}
-                className="block rounded-lg px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/60"
-              >
-                <div className="text-sm">
-                  <span className="font-medium">{r.user?.name || "Система"}</span>{" "}
-                  <span className="text-neutral-500">— {r.action}</span>{" "}
-                  {r.detail && <span className="text-neutral-500">· {r.detail}</span>}
-                </div>
-                <div className="text-[11px] text-neutral-400" title={formatDateTime(r.created_at)}>
-                  {fromNow(r.created_at)}
-                </div>
-              </Link>
-            ))}
-          </div>
+        <div className="mb-4 flex h-3 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+          {(Object.keys(STATUS_LABEL) as TaskStatus[]).map((s) => {
+            const v = data.by_status[s] || 0;
+            const w = (v / totalByStatus) * 100;
+            if (!w) return null;
+            return <div key={s} className={STATUS_COLOR[s]} style={{ width: `${w}%` }} />;
+          })}
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {(Object.keys(STATUS_LABEL) as TaskStatus[]).map((s) => (
+            <div key={s} className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 dark:bg-neutral-800/50">
+              <span className={`h-2.5 w-2.5 rounded-full ${STATUS_COLOR[s]}`} />
+              <div>
+                <div className="text-xs text-neutral-500">{STATUS_LABEL[s]}</div>
+                <div className="text-sm font-semibold">{data.by_status[s] || 0}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -137,23 +102,12 @@ function DashboardSkeleton() {
           </div>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="card p-5 lg:col-span-2 space-y-4">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-3 w-full rounded-full" />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-11" />
-            ))}
-          </div>
-        </div>
-        <div className="card p-5 space-y-3">
-          <Skeleton className="h-4 w-40" />
+      <div className="card p-5 space-y-4">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-3 w-full rounded-full" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="space-y-1">
-              <Skeleton className="h-3 w-3/4" />
-              <Skeleton className="h-2 w-20" />
-            </div>
+            <Skeleton key={i} className="h-11" />
           ))}
         </div>
       </div>

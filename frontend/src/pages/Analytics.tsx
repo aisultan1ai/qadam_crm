@@ -19,6 +19,8 @@ export default function Analytics() {
   const { data, isLoading } = useQuery({
     queryKey: ["analytics-employees"],
     queryFn: async () => (await api.get<Employees>("/api/analytics/employees")).data,
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   if (isLoading || !data) return <Loader />;

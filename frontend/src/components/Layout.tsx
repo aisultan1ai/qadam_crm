@@ -1,17 +1,19 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, CheckSquare, BarChart3, Users, Settings,
-  Sun, Moon, LogOut, Search, Bell, Menu, X,
+  Sun, Moon, LogOut, Search, Bell, Menu, X, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
+import { useSidebar } from "@/store/sidebar";
 import { Avatar } from "./ui";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
 import type { Notification, Page } from "@/types";
 import GlobalSearch from "./GlobalSearch";
+import { LogoMark } from "./Logo";
 import { useRealtimeUpdates } from "@/lib/ws";
 import { useToast } from "./Toast";
 import { modKey } from "@/lib/platform";
@@ -29,6 +31,7 @@ const NAV = [
 export default function Layout() {
   const { me, can, logout } = useAuth();
   const { theme, toggle } = useTheme();
+  const { collapsed, toggle: toggleCollapsed } = useSidebar();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const qc = useQueryClient();
@@ -110,6 +113,7 @@ export default function Layout() {
         can={can}
         logout={logout}
         variant="desktop"
+        collapsed={collapsed}
       />
 
       {mobileNavOpen && (
@@ -125,6 +129,7 @@ export default function Layout() {
               can={can}
               logout={logout}
               variant="mobile"
+              collapsed={false}
               onClose={() => setMobileNavOpen(false)}
             />
           </div>
@@ -139,6 +144,16 @@ export default function Layout() {
             aria-label="Открыть меню"
           >
             <Menu size={18} />
+          </button>
+
+          <button
+            className="btn-ghost hidden !p-2 md:inline-flex"
+            onClick={toggleCollapsed}
+            title={collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}
+            aria-label={collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}
+            aria-pressed={collapsed}
+          >
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </button>
 
           <button
@@ -205,14 +220,26 @@ export default function Layout() {
                         }
                       }}
                       className={clsx(
-                        "cursor-pointer border-b border-neutral-100 px-4 py-3 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/60",
-                        !n.is_read && "bg-brand-50/40 dark:bg-brand-900/10",
+                        "relative cursor-pointer border-b border-neutral-100 px-4 py-3 pl-5 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/60",
+                        !n.is_read
+                          ? "bg-brand-50/60 before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-r before:bg-brand-600 dark:bg-brand-900/20 dark:before:bg-brand-400"
+                          : undefined,
                       )}
                     >
-                      <div className="text-sm font-medium">{n.title}</div>
-                      {n.body && <div className="mt-0.5 text-xs text-neutral-500 line-clamp-2">{n.body}</div>}
-                      <div className="mt-1 text-[11px] text-neutral-400" title={new Date(n.created_at).toLocaleString("ru-RU")}>
-                        {fromNow(n.created_at)}
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className={clsx("text-sm", !n.is_read ? "font-semibold" : "font-medium")}>{n.title}</div>
+                          {n.body && <div className="mt-0.5 text-xs text-neutral-500 line-clamp-2">{n.body}</div>}
+                          <div className="mt-1 text-[11px] text-neutral-400" title={new Date(n.created_at).toLocaleString("ru-RU")}>
+                            {fromNow(n.created_at)}
+                          </div>
+                        </div>
+                        {!n.is_read && (
+                          <span
+                            aria-label="Непрочитано"
+                            className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-brand-600 dark:bg-brand-400"
+                          />
+                        )}
                       </div>
                     </div>
                   ))}
@@ -220,6 +247,7 @@ export default function Layout() {
               </div>
             )}
           </div>
+
         </header>
 
         <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">
@@ -239,27 +267,35 @@ function Sidebar({
   onLinkClick,
   variant,
   onClose,
+  collapsed,
 }: {
-  me: ReturnType<typeof useAuth>["me"];
-  can: ReturnType<typeof useAuth>["can"];
-  logout: ReturnType<typeof useAuth>["logout"];
+  me: ReturnType<typeof useAuth.getState>["me"];
+  can: ReturnType<typeof useAuth.getState>["can"];
+  logout: ReturnType<typeof useAuth.getState>["logout"];
   onLinkClick: () => void;
   variant: "desktop" | "mobile";
   onClose?: () => void;
+  collapsed: boolean;
 }) {
   const desktop = variant === "desktop";
+  const showLabels = !(desktop && collapsed);
   return (
     <aside
       className={clsx(
-        "flex w-60 shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/80",
-        desktop ? "hidden md:flex" : "h-full w-64",
+        "flex shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur transition-[width] duration-200 dark:border-neutral-800 dark:bg-neutral-900/70",
+        desktop
+          ? clsx("hidden md:flex", collapsed ? "md:w-16" : "md:w-60")
+          : "h-full w-64",
       )}
     >
-      <div className="flex h-14 items-center gap-2 px-5">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-white shadow-soft">
-          <LayoutDashboard size={16} />
-        </div>
-        <span className="text-base font-semibold tracking-tight">Qadam CRM</span>
+      <div
+        className={clsx(
+          "flex h-14 items-center gap-2",
+          showLabels ? "px-5" : "justify-center px-2",
+        )}
+      >
+        <LogoMark size={32} className="shadow-soft rounded-lg" />
+        {showLabels && <span className="text-base font-semibold tracking-tight">Qadam CRM</span>}
         {!desktop && onClose && (
           <button className="btn-ghost ml-auto !p-1.5" onClick={onClose} aria-label="Закрыть меню">
             <X size={16} />
@@ -267,7 +303,7 @@ function Sidebar({
         )}
       </div>
 
-      <nav className="flex-1 space-y-0.5 px-2">
+      <nav className={clsx("flex-1 space-y-0.5", showLabels ? "px-2" : "px-1.5")}>
         {NAV.map((n) => {
           if (n.code && !can(n.code as any)) return null;
           const Icon = n.icon;
@@ -277,9 +313,11 @@ function Sidebar({
               to={n.to}
               end={n.exact}
               onClick={onLinkClick}
+              title={showLabels ? undefined : n.label}
               className={({ isActive }) =>
                 clsx(
-                  "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+                  "relative flex items-center rounded-lg text-sm transition-colors",
+                  showLabels ? "gap-2.5 px-3 py-2" : "justify-center px-2 py-2",
                   isActive
                     ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/25 dark:text-brand-300"
                     : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
@@ -295,7 +333,7 @@ function Sidebar({
                     />
                   )}
                   <Icon size={16} />
-                  {n.label}
+                  {showLabels && n.label}
                 </>
               )}
             </NavLink>
@@ -303,31 +341,59 @@ function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="flex items-center gap-2">
-          <NavLink
-            to="/profile"
-            onClick={onLinkClick}
-            className={({ isActive }) =>
-              clsx(
-                "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors",
-                isActive
-                  ? "bg-neutral-100 dark:bg-neutral-800"
-                  : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
-              )
-            }
-            title="Открыть профиль"
-          >
-            <Avatar name={me?.name} url={me?.avatar_url} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{me?.name}</div>
-              <div className="truncate text-xs text-neutral-500">{me?.email}</div>
-            </div>
-          </NavLink>
-          <button className="btn-ghost !p-1.5" onClick={logout} title="Выйти">
-            <LogOut size={16} />
-          </button>
-        </div>
+      <div
+        className={clsx(
+          "border-t border-neutral-200 dark:border-neutral-800",
+          showLabels ? "p-3" : "p-2",
+        )}
+      >
+        {showLabels ? (
+          <div className="flex items-center gap-2">
+            <NavLink
+              to="/profile"
+              onClick={onLinkClick}
+              className={({ isActive }) =>
+                clsx(
+                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors",
+                  isActive
+                    ? "bg-neutral-100 dark:bg-neutral-800"
+                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                )
+              }
+              title="Открыть профиль"
+            >
+              <Avatar name={me?.name} url={me?.avatar_url} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{me?.name}</div>
+                <div className="truncate text-xs text-neutral-500">{me?.email}</div>
+              </div>
+            </NavLink>
+            <button className="btn-ghost !p-1.5" onClick={logout} title="Выйти">
+              <LogOut size={16} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1">
+            <NavLink
+              to="/profile"
+              onClick={onLinkClick}
+              className={({ isActive }) =>
+                clsx(
+                  "flex items-center justify-center rounded-lg p-1 transition-colors",
+                  isActive
+                    ? "bg-neutral-100 dark:bg-neutral-800"
+                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                )
+              }
+              title={me?.name ? `${me.name} — открыть профиль` : "Открыть профиль"}
+            >
+              <Avatar name={me?.name} url={me?.avatar_url} />
+            </NavLink>
+            <button className="btn-ghost !p-1.5" onClick={logout} title="Выйти" aria-label="Выйти">
+              <LogOut size={16} />
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

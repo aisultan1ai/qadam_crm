@@ -1,11 +1,11 @@
 import { Navigate, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LayoutDashboard } from "lucide-react";
 
 import { useAuth } from "@/store/auth";
 import { loginSchema, type LoginForm } from "@/lib/validation";
 import { FieldError, FormError } from "@/components/ui";
+import { Wordmark } from "@/components/Logo";
 
 export default function Login() {
   const { login, me, loading, error } = useAuth();
@@ -33,14 +33,9 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-neutral-50 to-brand-50/60 p-4 dark:from-neutral-950 dark:to-brand-950/20">
       <form onSubmit={handleSubmit(submit)} className="card w-full max-w-sm p-8">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-600 text-white">
-            <LayoutDashboard size={18} />
-          </div>
-          <div>
-            <div className="text-lg font-semibold">Qadam CRM</div>
-            <div className="text-xs text-neutral-500">Вход в систему</div>
-          </div>
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <Wordmark />
+          <div className="text-xs text-neutral-500">Вход в систему</div>
         </div>
 
         <label className="mb-3 block">

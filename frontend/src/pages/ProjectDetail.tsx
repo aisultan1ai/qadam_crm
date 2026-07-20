@@ -1,21 +1,36 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import type { Project, TaskListItem, Page } from "@/types";
+import type { Project, TaskListItem, Page, User } from "@/types";
 import { Loader, Avatar, StatusChip, PriorityChip } from "@/components/ui";
-import { ArrowLeft, Calendar } from "lucide-react";
+import { ArrowLeft, Calendar, Plus } from "lucide-react";
+import { useAuth } from "@/store/auth";
+import { TaskFormModal } from "./Tasks";
 
 export default function ProjectDetail() {
   const { id } = useParams();
   const projectId = Number(id);
+  const { can } = useAuth();
+  const [openNew, setOpenNew] = useState(false);
+  const canCreate = can("tasks.create");
 
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => (await api.get<Project>(`/api/projects/${projectId}`)).data,
+    refetchOnMount: "always",
+    staleTime: 0,
   });
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["project-tasks", projectId],
     queryFn: async () => (await api.get<Page<TaskListItem>>(`/api/tasks`, { params: { project_id: projectId } })).data.items,
+    refetchOnMount: "always",
+    staleTime: 0,
+  });
+  const { data: users } = useQuery({
+    queryKey: ["users-brief"],
+    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
+    enabled: openNew,
   });
 
   if (!project) return <Loader />;
@@ -54,8 +69,13 @@ export default function ProjectDetail() {
       </div>
 
       <div className="card overflow-hidden">
-        <div className="border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
+        <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
           <h2 className="text-sm font-semibold">Задачи проекта</h2>
+          {canCreate && (
+            <button className="btn-primary !py-1.5 !px-3 text-xs" onClick={() => setOpenNew(true)}>
+              <Plus size={14} /> Новая задача
+            </button>
+          )}
         </div>
         {isLoading ? (
           <Loader />
@@ -92,6 +112,15 @@ export default function ProjectDetail() {
           </table>
         )}
       </div>
+
+      {openNew && (
+        <TaskFormModal
+          projects={[project]}
+          users={users ?? []}
+          defaultProjectId={projectId}
+          onClose={() => setOpenNew(false)}
+        />
+      )}
     </div>
   );
 }

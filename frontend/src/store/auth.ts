@@ -13,7 +13,7 @@ interface AuthState {
   can: (code: string | string[]) => boolean;
 }
 
-export const useAuth = create<AuthState>((set, get) => ({
+export const useAuth = create<AuthState>()((set, get) => ({
   me: null,
   ready: false,
   loading: false,

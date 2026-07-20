@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -57,8 +57,15 @@ export default function Users() {
 function UsersList() {
   const { can } = useAuth();
   const qc = useQueryClient();
+  const [qLocal, setQLocal] = useState("");
   const [q, setQ] = useState("");
   const [openForm, setOpenForm] = useState<{ mode: "create" } | { mode: "edit"; user: User } | null>(null);
+
+  useEffect(() => {
+    if (qLocal === q) return;
+    const t = setTimeout(() => setQ(qLocal), 250);
+    return () => clearTimeout(t);
+  }, [qLocal, q]);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["users", q],
@@ -84,7 +91,7 @@ function UsersList() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative max-w-md flex-1">
           <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input className="input pl-8" placeholder="Поиск по имени или email…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input pl-8" placeholder="Поиск по имени или email…" value={qLocal} onChange={(e) => setQLocal(e.target.value)} />
         </div>
         {can("users.create") && (
           <button className="btn-primary" onClick={() => setOpenForm({ mode: "create" })}>

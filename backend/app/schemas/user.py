@@ -70,6 +70,20 @@ class UserUpdate(BaseModel):
         return _validate_password(v)
 
 
+class MeUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    name: Optional[str] = None
+    new_password: Optional[str] = Field(default=None, min_length=PASSWORD_MIN_LEN, max_length=PASSWORD_MAX_LEN)
+    current_password: Optional[str] = None
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_strength(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _validate_password(v)
+
+
 class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
