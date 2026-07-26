@@ -27,6 +27,20 @@ SECURITY_HEADERS = {
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
 }
 
+# CSP для API + Swagger UI (/docs) + ReDoc (/redoc) + отдачи аватаров.
+# Swagger/ReDoc грузятся с cdn.jsdelivr.net и используют inline-стили/скрипты.
+API_CSP = (
+    "default-src 'self'; "
+    "img-src 'self' data: blob: https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "font-src 'self' data: https://cdn.jsdelivr.net; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -68,6 +82,7 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)
+        response.headers.setdefault("Content-Security-Policy", API_CSP)
         return response
 
     avatars_dir = Path(settings.UPLOAD_DIR) / "avatars"

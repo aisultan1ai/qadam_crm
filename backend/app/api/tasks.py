@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, noload
 from sqlalchemy import or_, and_
-from typing import List, Optional
-from datetime import datetime
+from typing import Optional
+from datetime import datetime, timezone
 
 from ..database import get_db
 from ..models import Task, User, ChecklistItem, Notification
@@ -17,6 +17,18 @@ from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import require, get_current_user, log_action
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _user_can_view_task(user: User, task: Task) -> bool:
+    if user_has(user, ["tasks.view_all"]):
+        return True
+    if user_has(user, ["tasks.view_own"]):
+        return task.assignee_id == user.id or task.author_id == user.id
+    return False
 
 
 def _apply_view_scope(query, user: User):
@@ -47,7 +59,12 @@ def list_tasks(
 ):
     if not user_has(user, ["tasks.view_all", "tasks.view_own"]):
         raise HTTPException(403, "Нет доступа к задачам")
-    query = db.query(Task)
+    query = db.query(Task).options(
+        noload(Task.checklist),
+        noload(Task.comments),
+        noload(Task.attachments),
+        noload(Task.activities),
+    )
     query = _apply_view_scope(query, user)
     if q:
         like = f"%{q.strip()}%"
@@ -61,7 +78,11 @@ def list_tasks(
     if priority is not None:
         query = query.filter(Task.priority == priority)
     if overdue:
-        query = query.filter(and_(Task.deadline.is_not(None), Task.deadline < datetime.utcnow(), Task.status.notin_([TaskStatus.done, TaskStatus.cancelled])))
+        query = query.filter(and_(
+            Task.deadline.is_not(None),
+            Task.deadline < _now_utc(),
+            Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]),
+        ))
     query = query.order_by(Task.order_index.asc(), Task.created_at.desc())
     return paginate(query, pagination)
 
@@ -71,7 +92,7 @@ def get_task(task_id: int, user: User = Depends(get_current_user), db: Session =
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "Задача не найдена")
-    if not user_has(user, ["tasks.view_all"]) and not (user_has(user, ["tasks.view_own"]) and (task.assignee_id == user.id or task.author_id == user.id)):
+    if not _user_can_view_task(user, task):
         raise HTTPException(403, "Нет доступа")
     return task
 
@@ -118,8 +139,9 @@ def update_task(task_id: int, payload: TaskUpdate, user: User = Depends(get_curr
     if payload.title is not None and payload.title != task.title:
         task.title = payload.title
         changes.append("название")
-    if payload.description is not None:
+    if payload.description is not None and (payload.description or "") != (task.description or ""):
         task.description = payload.description
+        changes.append("описание")
     if payload.status is not None and payload.status != task.status:
         if not user_has(user, ["tasks.change_status"]):
             raise HTTPException(403, "Нет права менять статус")
@@ -166,20 +188,47 @@ def update_task(task_id: int, payload: TaskUpdate, user: User = Depends(get_curr
 @router.post("/bulk", response_model=Message)
 def bulk_update(payload: TaskBulkUpdate, user: User = Depends(require("tasks.bulk_update")), db: Session = Depends(get_db)):
     tasks = db.query(Task).filter(Task.id.in_(payload.ids)).all()
+    p = payload.patch
+    ws_events: list[tuple[int, str, dict]] = []
+
     for t in tasks:
-        p = payload.patch
-        if p.status is not None:
+        changes: list[str] = []
+
+        if p.status is not None and p.status != t.status:
+            old = t.status.value
             t.status = p.status
-        if p.priority is not None:
+            changes.append(f"статус {old} → {p.status.value}")
+            if t.assignee_id and t.assignee_id != user.id:
+                _notify(db, t.assignee_id, "status", f"Статус изменён: {t.title}", f"{old} → {p.status.value}", t.id)
+        if p.priority is not None and p.priority != t.priority:
+            old = t.priority.value
             t.priority = p.priority
-        if p.assignee_id is not None:
+            changes.append(f"приоритет {old} → {p.priority.value}")
+        if p.assignee_id is not None and p.assignee_id != t.assignee_id:
             t.assignee_id = p.assignee_id
-        if p.project_id is not None:
+            changes.append("исполнитель")
+            if t.assignee_id and t.assignee_id != user.id:
+                _notify(db, t.assignee_id, "assigned", "Вам назначена задача", t.title, t.id)
+        if p.project_id is not None and p.project_id != t.project_id:
             t.project_id = p.project_id
-        if p.deadline is not None:
+            changes.append("проект")
+        if p.deadline is not None and p.deadline != t.deadline:
             t.deadline = p.deadline
+            changes.append("дедлайн")
+
+        if changes:
+            log_action(db, user_id=user.id, action="update", entity="task", entity_id=t.id, task_id=t.id, detail=", ".join(changes))
+            for uid in {u for u in (t.assignee_id, t.author_id) if u and u != user.id}:
+                ws_events.append((uid, "task.updated", {"task_id": t.id, "changes": changes}))
+                if any(c.startswith("статус") for c in changes) or "исполнитель" in changes:
+                    ws_events.append((uid, "notification.new", {"task_id": t.id}))
+
     log_action(db, user_id=user.id, action="bulk_update", entity="task", detail=f"{len(tasks)} задач")
     db.commit()
+
+    for uid, ev, payload_ in ws_events:
+        publish_to_user(uid, ev, payload_)
+
     return Message(message=f"Обновлено задач: {len(tasks)}")
 
 
