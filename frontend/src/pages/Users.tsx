@@ -100,7 +100,7 @@ function UsersList() {
         )}
       </div>
 
-      <div className="card overflow-hidden">
+      <div className="card overflow-x-auto">
         {isLoading ? (
           <Loader />
         ) : (

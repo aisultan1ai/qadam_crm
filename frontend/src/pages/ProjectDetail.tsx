@@ -68,7 +68,7 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
+      <div className="card overflow-x-auto">
         <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
           <h2 className="text-sm font-semibold">Задачи проекта</h2>
           {canCreate && (

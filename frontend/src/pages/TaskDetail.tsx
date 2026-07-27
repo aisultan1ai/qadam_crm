@@ -141,7 +141,7 @@ export default function TaskDetail() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <div className="space-y-5 lg:col-span-2">
+      <div className="min-w-0 space-y-5 lg:col-span-2">
         <Link to="/tasks" className="inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white">
           <ArrowLeft size={14} /> Задачи
         </Link>
@@ -155,7 +155,7 @@ export default function TaskDetail() {
             </div>
           ) : (
             <h1
-              className="cursor-text text-2xl font-semibold tracking-tight"
+              className="cursor-text break-words text-2xl font-semibold tracking-tight"
               onClick={() => can("tasks.update") && (setTitleDraft(task.title), setEditingTitle(true))}
             >
               {task.title}
@@ -252,13 +252,18 @@ export default function TaskDetail() {
         </div>
 
         <div className="card p-5">
-          <h3 className="mb-3 text-sm font-semibold">История изменений</h3>
-          <div className="space-y-2 text-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">История изменений</h3>
+            {task.activities.length > 0 && (
+              <span className="text-xs text-neutral-500 tabular-nums">{task.activities.length}</span>
+            )}
+          </div>
+          <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1 text-sm">
             {task.activities.length === 0 && <div className="text-neutral-500">Пока пусто</div>}
             {task.activities.map((a) => (
               <div key={a.id} className="flex items-start gap-2 text-neutral-600 dark:text-neutral-400">
-                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-neutral-400" />
-                <div>
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400" />
+                <div className="min-w-0 flex-1 break-words">
                   <span className="text-neutral-900 dark:text-neutral-200 font-medium">{a.user?.name || "Система"}</span>
                   {" "}<span>{ACTION_LABEL[a.action] ?? a.action}</span>
                   {a.detail && <span className="text-neutral-500"> · {formatActivityDetail(a.detail)}</span>}
@@ -270,7 +275,7 @@ export default function TaskDetail() {
         </div>
       </div>
 
-      <aside className="space-y-4">
+      <aside className="min-w-0 space-y-4">
         <div className="card p-5">
           <div className="space-y-3 text-sm">
             <Field label="Статус">
@@ -350,16 +355,17 @@ export default function TaskDetail() {
           <div className="space-y-1.5">
             {task.attachments.length === 0 && <div className="text-sm text-neutral-500">Нет вложений</div>}
             {task.attachments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-lg px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800/60">
+              <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800/60">
                 <a
                   href={`${API_URL}/api/tasks/${taskId}/attachments/${a.id}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="truncate text-sm link"
+                  className="min-w-0 flex-1 truncate text-sm link"
+                  title={a.filename}
                 >
                   {a.filename}
                 </a>
-                <span className="text-xs text-neutral-500">{formatSize(a.size)}</span>
+                <span className="shrink-0 text-xs text-neutral-500 tabular-nums">{formatSize(a.size)}</span>
               </div>
             ))}
           </div>
@@ -433,7 +439,7 @@ function CommentRow({
   return (
     <div className="group flex gap-3">
       <Avatar name={comment.author?.name} url={comment.author?.avatar_url} />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-xs text-neutral-500">
           <span className="font-medium text-neutral-900 dark:text-neutral-100">{comment.author?.name || "—"}</span>
           <span>{new Date(comment.created_at).toLocaleString("ru-RU")}</span>
@@ -446,7 +452,7 @@ function CommentRow({
             </button>
           )}
         </div>
-        <div className="mt-0.5 whitespace-pre-wrap text-sm">{comment.body}</div>
+        <div className="mt-0.5 whitespace-pre-wrap break-words text-sm">{comment.body}</div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {comment.reactions?.map((r) => {
             const reacted = !!(meId && r.users.some((u) => u.id === meId));

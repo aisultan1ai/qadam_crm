@@ -79,7 +79,7 @@ export default function Analytics() {
             <button className="btn-secondary" onClick={exportCSV}>Экспорт CSV</button>
           </div>
 
-          <div className="card overflow-hidden">
+          <div className="card overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40">
                 <tr>

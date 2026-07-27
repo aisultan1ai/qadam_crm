@@ -14,6 +14,10 @@ body,
   height: 100%;
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 body {
   @apply bg-zinc-50 text-zinc-900 dark:bg-[#1e1e26] dark:text-zinc-100;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";

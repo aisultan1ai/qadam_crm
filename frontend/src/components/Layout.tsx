@@ -275,7 +275,7 @@ export default function Layout() {
 
         </header>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">
+        <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 p-4 sm:p-6">
           <Suspense fallback={<div className="min-h-[200px]" />}>
             <Outlet />
           </Suspense>
@@ -311,7 +311,10 @@ function Sidebar({
       className={clsx(
         "flex shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-700/50 dark:bg-[#22222a]",
         desktop
-          ? clsx("hidden md:flex", collapsed ? "md:w-16" : "md:w-60")
+          ? clsx(
+              "sticky top-0 hidden h-screen self-start overflow-hidden md:flex",
+              collapsed ? "md:w-16" : "md:w-60",
+            )
           : "h-full w-64",
       )}
     >
@@ -330,7 +333,7 @@ function Sidebar({
         )}
       </div>
 
-      <nav className={clsx("flex-1 space-y-0.5", showLabels ? "px-2" : "px-1.5")}>
+      <nav className={clsx("flex-1 space-y-0.5 overflow-y-auto", showLabels ? "px-2" : "px-1.5")}>
         {NAV.map((n) => {
           if (n.code && !can(n.code as any)) return null;
           const Icon = n.icon;
