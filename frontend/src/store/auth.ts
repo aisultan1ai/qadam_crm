@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { api, setTokens, clearTokens, getAccessToken, getRefreshToken, extractApiError } from "@/api/client";
-import type { Me, TokenPair } from "@/types";
+import { api, extractApiError } from "@/api/client";
+import type { Me } from "@/types";
 
 interface AuthState {
   me: Me | null;
@@ -22,10 +22,10 @@ export const useAuth = create<AuthState>()((set, get) => ({
   async login(email, password) {
     set({ loading: true, error: null });
     try {
-      const { data } = await api.post<TokenPair>("/api/auth/login", { email, password });
-      setTokens(data.access_token, data.refresh_token);
+      // Backend поставит httpOnly cookies (access + refresh).
+      await api.post("/api/auth/login", { email, password });
       await get().fetchMe();
-    } catch (e: any) {
+    } catch (e: unknown) {
       set({ error: extractApiError(e).message || "Ошибка входа", loading: false });
       throw e;
     } finally {
@@ -34,24 +34,19 @@ export const useAuth = create<AuthState>()((set, get) => ({
   },
 
   async logout() {
-    const refresh = getRefreshToken();
     try {
-      await api.post("/api/auth/logout", refresh ? { refresh_token: refresh } : undefined);
-    } catch {}
-    clearTokens();
+      await api.post("/api/auth/logout");
+    } catch {
+      // не блокируем выход при сетевой ошибке
+    }
     set({ me: null, ready: true });
   },
 
   async fetchMe() {
-    if (!getAccessToken()) {
-      set({ me: null, ready: true });
-      return;
-    }
     try {
       const { data } = await api.get<Me>("/api/auth/me");
       set({ me: data, ready: true });
     } catch {
-      clearTokens();
       set({ me: null, ready: true });
     }
   },

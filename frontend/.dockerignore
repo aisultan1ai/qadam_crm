@@ -1,0 +1,28 @@
+# VCS
+.git
+.gitignore
+
+# Deps / build
+node_modules
+dist
+build
+.vite
+
+# Env
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+
+# Docs / meta
+README.md
+.dockerignore
+Dockerfile*

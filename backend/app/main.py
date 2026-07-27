@@ -4,13 +4,17 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import text
 
 from .config import settings
 from .core.limiter import limiter
 from .core.errors import install_error_handlers
+from .core.redis_client import get_redis
 from .core.scheduler import start_scheduler, stop_scheduler
+from .database import engine
 from .api import auth, roles, users, projects, tasks, comments, attachments, notifications, analytics, search, ws
 
 
@@ -25,11 +29,25 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-site",
 }
 
-# CSP для API + Swagger UI (/docs) + ReDoc (/redoc) + отдачи аватаров.
-# Swagger/ReDoc грузятся с cdn.jsdelivr.net и используют inline-стили/скрипты.
-API_CSP = (
+DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
+
+# Строгий CSP для API (JSON) и медиа. Без 'unsafe-inline'.
+API_CSP_STRICT = (
+    "default-src 'none'; "
+    "img-src 'self' data: blob:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'none'; "
+    "form-action 'none'"
+)
+
+# Отдельный, более разрешительный CSP для Swagger/ReDoc — они грузят JS/CSS с CDN
+# и используют inline. Применяется ТОЛЬКО к /docs, /redoc, /openapi.json.
+DOCS_CSP = (
     "default-src 'self'; "
     "img-src 'self' data: blob: https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
     "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
@@ -82,7 +100,9 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)
-        response.headers.setdefault("Content-Security-Policy", API_CSP)
+        path = request.url.path
+        csp = DOCS_CSP if path.startswith(DOCS_PATHS) else API_CSP_STRICT
+        response.headers.setdefault("Content-Security-Policy", csp)
         return response
 
     avatars_dir = Path(settings.UPLOAD_DIR) / "avatars"
@@ -106,7 +126,35 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["system"])
     def health():
+        """Быстрая liveness-проба. Не трогает БД/Redis."""
         return {"status": "ok"}
+
+    @app.get("/health/ready", tags=["system"])
+    def health_ready():
+        """Readiness-проба: проверяет БД и Redis. Возвращает 503 если что-то мертво."""
+        checks: dict[str, str] = {}
+        healthy = True
+
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            checks["db"] = "ok"
+        except Exception as e:
+            checks["db"] = f"fail: {type(e).__name__}"
+            healthy = False
+
+        try:
+            r = get_redis()
+            pong = r.ping()
+            checks["redis"] = "ok" if pong else "fail: no PONG"
+            if not pong:
+                healthy = False
+        except Exception as e:
+            checks["redis"] = f"fail: {type(e).__name__}"
+            healthy = False
+
+        payload = {"status": "ok" if healthy else "degraded", "checks": checks}
+        return JSONResponse(status_code=200 if healthy else 503, content=payload)
 
     return app
 

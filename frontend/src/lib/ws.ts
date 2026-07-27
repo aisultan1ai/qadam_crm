@@ -1,13 +1,17 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { API_URL, getAccessToken } from "@/api/client";
+import { API_URL } from "@/api/client";
+import { useAuth } from "@/store/auth";
 
-type WSMessage = { type: string; payload?: any };
+type WSMessage = { type: string; payload?: { task_id?: number } };
 
 export function useRealtimeUpdates() {
   const qc = useQueryClient();
+  const meId = useAuth((s) => s.me?.id ?? null);
 
   useEffect(() => {
+    if (!meId) return;
+
     let ws: WebSocket | null = null;
     let pingTimer: number | null = null;
     let reconnectTimer: number | null = null;
@@ -15,14 +19,19 @@ export function useRealtimeUpdates() {
     let stopped = false;
 
     const connect = () => {
-      const token = getAccessToken();
-      if (!token) return;
-      const url = API_URL.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(token)}`;
+      if (stopped) return;
+      // Токен читается backend'ом из httpOnly cookie (auto-sent на same-origin handshake).
+      // Cookie должна быть на том же origin, что и WS — nginx проксирует /ws на backend,
+      // so это работает out-of-the-box.
+      const url = API_URL.replace(/^http/, "ws") + "/ws";
       ws = new WebSocket(url);
 
       ws.onopen = () => {
         attempts = 0;
-        pingTimer = window.setInterval(() => ws?.readyState === WebSocket.OPEN && ws.send("ping"), 25000);
+        pingTimer = window.setInterval(
+          () => ws?.readyState === WebSocket.OPEN && ws.send("ping"),
+          25000,
+        );
       };
 
       ws.onmessage = (ev) => {
@@ -75,5 +84,5 @@ export function useRealtimeUpdates() {
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       ws?.close();
     };
-  }, [qc]);
+  }, [qc, meId]);
 }

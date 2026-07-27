@@ -1,0 +1,40 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.venv
+venv
+env
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+*.log
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Uploads (mounted as volume in prod)
+uploads/
+
+# Docs / dev-only files
+README.md
+tests/
+.dockerignore
+Dockerfile*

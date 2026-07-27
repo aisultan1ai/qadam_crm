@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     JWT_ACCESS_MINUTES: int = 30
     JWT_REFRESH_DAYS: int = 30
 
+    # === Cookie-based auth ===
+    AUTH_COOKIE_NAME: str = "qadam_access"
+    REFRESH_COOKIE_NAME: str = "qadam_refresh"
+    # В prod (HTTPS) должно быть True. В dev через http://localhost — False.
+    COOKIE_SECURE: bool = False
+    # "lax" безопасно для SPA на том же origin. "strict" сломает переходы по ссылкам с внешних сайтов.
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_DOMAIN: Optional[str] = None
+    # Путь refresh-cookie ограничивается /api/auth — уменьшает поверхность CSRF.
+    REFRESH_COOKIE_PATH: str = "/api/auth"
+
     @field_validator("JWT_SECRET")
     @classmethod
     def _reject_placeholder(cls, v: str) -> str:

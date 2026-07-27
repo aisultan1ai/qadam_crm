@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..config import settings
+from ..core.cookies import set_auth_cookies, clear_auth_cookies
 from ..core.limiter import limiter
 from ..core.security import (
     verify_password,
@@ -13,7 +14,6 @@ from ..core.security import (
     decode_token,
     blacklist_token,
     is_blacklisted,
-    TOKEN_TYPE_ACCESS,
     TOKEN_TYPE_REFRESH,
 )
 from ..core.permissions import all_permission_codes
@@ -21,21 +21,34 @@ from ..models import User
 from ..schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from ..schemas.user import MeOut
 from ..schemas.common import Message
-from .deps import get_current_user, log_action, oauth2_scheme
+from .deps import get_current_user, get_current_token, log_action
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _issue_pair(user_id: int) -> TokenResponse:
+def _issue_pair(user_id: int) -> tuple[str, str, int]:
     access, _access_jti, access_exp = create_access_token(user_id)
     refresh, _refresh_jti, _ = create_refresh_token(user_id)
     ttl = int((access_exp - datetime.now(timezone.utc)).total_seconds())
-    return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
+    return access, refresh, ttl
+
+
+def _read_refresh(request: Request, body: RefreshRequest | None) -> str | None:
+    """Refresh-токен приходит в httpOnly cookie; body — фолбэк для совместимости."""
+    cookie_tok = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if cookie_tok:
+        return cookie_tok
+    return body.refresh_token if body else None
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(settings.LOGIN_RATE_LIMIT)
-def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    response: Response,
+    payload: LoginRequest,
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.email == payload.email.lower()).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
@@ -44,14 +57,27 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     user.last_login_at = datetime.now(timezone.utc)
     log_action(db, user_id=user.id, action="login", entity="user", entity_id=user.id)
     db.commit()
-    return _issue_pair(user.id)
+
+    access, refresh, ttl = _issue_pair(user.id)
+    set_auth_cookies(response, access, refresh)
+    # Возвращаем и в body — для API-клиентов / тестов, которые не используют cookies.
+    return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
 
 
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("30/minute")
-def refresh(request: Request, payload: RefreshRequest, db: Session = Depends(get_db)):
+def refresh(
+    request: Request,
+    response: Response,
+    payload: RefreshRequest | None = None,
+    db: Session = Depends(get_db),
+):
+    refresh_tok = _read_refresh(request, payload)
+    if not refresh_tok:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing refresh token")
+
     try:
-        data = decode_token(payload.refresh_token)
+        data = decode_token(refresh_tok)
     except JWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid refresh token")
 
@@ -73,13 +99,17 @@ def refresh(request: Request, payload: RefreshRequest, db: Session = Depends(get
     old_exp = datetime.fromtimestamp(data["exp"], tz=timezone.utc)
     blacklist_token(data.get("jti"), old_exp)
 
-    return _issue_pair(user.id)
+    access, new_refresh, ttl = _issue_pair(user.id)
+    set_auth_cookies(response, access, new_refresh)
+    return TokenResponse(access_token=access, refresh_token=new_refresh, expires_in=ttl)
 
 
 @router.post("/logout", response_model=Message)
 def logout(
+    request: Request,
+    response: Response,
     payload: RefreshRequest | None = None,
-    token: str | None = Depends(oauth2_scheme),
+    token: str | None = Depends(get_current_token),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -90,13 +120,16 @@ def logout(
             blacklist_token(data.get("jti"), datetime.fromtimestamp(data["exp"], tz=timezone.utc))
         except JWTError:
             pass
-    # blacklist refresh если пришёл
-    if payload and payload.refresh_token:
+    # blacklist refresh — из cookie или body
+    refresh_tok = _read_refresh(request, payload)
+    if refresh_tok:
         try:
-            data = decode_token(payload.refresh_token)
+            data = decode_token(refresh_tok)
             blacklist_token(data.get("jti"), datetime.fromtimestamp(data["exp"], tz=timezone.utc))
         except JWTError:
             pass
+
+    clear_auth_cookies(response)
     log_action(db, user_id=user.id, action="logout", entity="user", entity_id=user.id)
     db.commit()
     return Message(message="Вы вышли из системы")

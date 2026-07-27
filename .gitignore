@@ -1,23 +1,58 @@
-# Python
+# === Secrets & env ===
+.env
+.env.*
+!.env.example
+*.env.local
+*.pem
+*.key
+*.crt
+secrets/
+
+# === Python ===
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .venv/
-.env
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.log
 
-# Node
+# === Node ===
 node_modules/
 dist/
 build/
 .vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# IDE
+# === IDE / editors ===
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
-# OS
+# === OS ===
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Uploads / data
+# === Docker ===
+docker-compose.override.yml
+
+# === Uploads / user data / dumps ===
 backend/uploads/
+*.sql.gz
+*.dump
+backups/
+
+# === Claude / AI tooling artifacts ===
+.claude/

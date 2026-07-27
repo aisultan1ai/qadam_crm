@@ -5,19 +5,24 @@ export const API_URL = (import.meta.env.VITE_API_URL as string) || "http://local
 export type ApiErrorDetail = { field: string; message: string; type?: string };
 export type ApiError = { code: string; message: string; details?: ApiErrorDetail[] };
 
+type ErrorBody = {
+  error?: ApiError;
+  detail?: string | Array<{ msg?: string }>;
+};
+
 export function extractApiError(err: unknown): ApiError {
-  const anyErr = err as AxiosError<any>;
-  const body = anyErr?.response?.data;
+  const axErr = err as AxiosError<ErrorBody>;
+  const body = axErr?.response?.data;
   if (body && typeof body === "object" && body.error) {
-    return body.error as ApiError;
+    return body.error;
   }
   if (body && typeof body === "object" && body.detail) {
     const d = body.detail;
     if (typeof d === "string") return { code: "http_error", message: d };
-    if (Array.isArray(d)) return { code: "http_error", message: d.map((x: any) => x?.msg || String(x)).join("; ") };
+    if (Array.isArray(d)) return { code: "http_error", message: d.map((x) => x?.msg || String(x)).join("; ") };
   }
-  const status = anyErr?.response?.status;
-  return { code: "network_error", message: anyErr?.message || `Ошибка (${status ?? "?"})` };
+  const status = axErr?.response?.status;
+  return { code: "network_error", message: axErr?.message || `Ошибка (${status ?? "?"})` };
 }
 
 export function fieldErrorsFrom(err: unknown): Record<string, string> {
@@ -29,47 +34,22 @@ export function fieldErrorsFrom(err: unknown): Record<string, string> {
   return out;
 }
 
-const ACCESS_KEY = "token";
-const REFRESH_KEY = "refresh_token";
-
-export const api = axios.create({ baseURL: API_URL });
-
-export function setTokens(access: string, refresh: string) {
-  localStorage.setItem(ACCESS_KEY, access);
-  localStorage.setItem(REFRESH_KEY, refresh);
-}
-
-export function clearTokens() {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
-}
-
-export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
-}
-
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
-}
-
-api.interceptors.request.use((cfg) => {
-  const token = getAccessToken();
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
-  return cfg;
+// httpOnly cookies отправляются автоматически, если withCredentials=true
+// и origin такой же (или CORS позволяет credentials).
+export const api = axios.create({
+  baseURL: API_URL,
+  withCredentials: true,
 });
 
-let refreshInFlight: Promise<string | null> | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
-  const refresh = getRefreshToken();
-  if (!refresh) return null;
+async function refreshAccessToken(): Promise<boolean> {
   try {
-    const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refresh_token: refresh });
-    setTokens(data.access_token, data.refresh_token);
-    return data.access_token as string;
+    // refresh-cookie отправится автоматически (path=/api/auth, httpOnly)
+    await axios.post(`${API_URL}/api/auth/refresh`, {}, { withCredentials: true });
+    return true;
   } catch {
-    clearTokens();
-    return null;
+    return false;
   }
 }
 
@@ -90,20 +70,18 @@ api.interceptors.response.use(
     ) {
       original._retry = true;
       refreshInFlight = refreshInFlight ?? refreshAccessToken();
-      const newToken = await refreshInFlight;
+      const ok = await refreshInFlight;
       refreshInFlight = null;
 
-      if (newToken) {
-        original.headers = { ...(original.headers || {}), Authorization: `Bearer ${newToken}` };
+      if (ok) {
         return api.request(original);
       }
       // не удалось обновить — на логин
       if (!location.pathname.startsWith("/login")) location.replace("/login");
     }
 
-    if (status === 401) {
-      clearTokens();
-      if (!location.pathname.startsWith("/login")) location.replace("/login");
+    if (status === 401 && !location.pathname.startsWith("/login")) {
+      location.replace("/login");
     }
 
     return Promise.reject(err);
