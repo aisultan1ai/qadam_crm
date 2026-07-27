@@ -8,6 +8,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
     <title>Qadam CRM</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("theme");
+          var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var isDark = stored === "dark" || (!stored && prefersDark);
+          if (isDark) document.documentElement.classList.add("dark");
+          document.documentElement.style.backgroundColor = isDark ? "#1e1e26" : "#fafafa";
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      html, body { background-color: #fafafa; }
+      html.dark, html.dark body { background-color: #1e1e26; }
+    </style>
   </head>
   <body class="antialiased">
     <div id="root"></div>

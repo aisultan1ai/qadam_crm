@@ -31,29 +31,34 @@ export default function App() {
   if (!ready) return <Loader />;
 
   return (
-    <Suspense fallback={<Loader />}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <Protected>
-              <Layout />
-            </Protected>
-          }
-        >
-          <Route index element={<Dashboard />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="projects/:id" element={<ProjectDetail />} />
-          <Route path="tasks" element={<Tasks />} />
-          <Route path="tasks/:id" element={<TaskDetail />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="users/*" element={<Users />} />
-          <Route path="settings/*" element={<Settings />} />
-          <Route path="profile" element={<Profile />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={<Loader />}>
+            <Login />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/"
+        element={
+          <Protected>
+            <Layout />
+          </Protected>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="projects" element={<Projects />} />
+        <Route path="projects/:id" element={<ProjectDetail />} />
+        <Route path="tasks" element={<Tasks />} />
+        <Route path="tasks/:id" element={<TaskDetail />} />
+        <Route path="analytics" element={<Analytics />} />
+        <Route path="users/*" element={<Users />} />
+        <Route path="settings/*" element={<Settings />} />
+        <Route path="profile" element={<Profile />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

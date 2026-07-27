@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, CheckSquare, BarChart3, Users, Settings,
@@ -275,7 +276,9 @@ export default function Layout() {
         </header>
 
         <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">
-          <Outlet />
+          <Suspense fallback={<div className="min-h-[200px]" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 
