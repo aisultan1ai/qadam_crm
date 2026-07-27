@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ..database import get_db
 from ..models import Task, User, ActivityLog
@@ -13,12 +13,13 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 @router.get("/dashboard")
 def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
     total = db.query(func.count(Task.id)).scalar() or 0
     in_progress = db.query(func.count(Task.id)).filter(Task.status == TaskStatus.in_progress).scalar() or 0
     done = db.query(func.count(Task.id)).filter(Task.status == TaskStatus.done).scalar() or 0
     overdue = db.query(func.count(Task.id)).filter(
         Task.deadline.is_not(None),
-        Task.deadline < datetime.utcnow(),
+        Task.deadline < now,
         Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]),
     ).scalar() or 0
 
@@ -51,7 +52,8 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
 
 @router.get("/employees")
 def employees(_: User = Depends(require("analytics.employees")), db: Session = Depends(get_db)):
-    since = datetime.utcnow() - timedelta(days=30)
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=30)
     rows = db.query(
         User.id,
         User.name,
@@ -59,7 +61,7 @@ def employees(_: User = Depends(require("analytics.employees")), db: Session = D
         func.count(Task.id).label("total"),
         func.sum(case((Task.status == TaskStatus.done, 1), else_=0)).label("done"),
         func.sum(case((
-            (Task.deadline.is_not(None)) & (Task.deadline < datetime.utcnow()) & (Task.status.notin_([TaskStatus.done, TaskStatus.cancelled])), 1), else_=0)).label("overdue"),
+            (Task.deadline.is_not(None)) & (Task.deadline < now) & (Task.status.notin_([TaskStatus.done, TaskStatus.cancelled])), 1), else_=0)).label("overdue"),
     ).outerjoin(Task, Task.assignee_id == User.id).group_by(User.id).all()
 
     result = []

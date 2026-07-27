@@ -9,11 +9,12 @@ import secrets
 import time
 from pathlib import Path
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from .config import settings
 from .database import Base, engine, SessionLocal
@@ -31,7 +32,7 @@ def wait_for_db(retries: int = 30, delay: float = 1.0) -> None:
     for i in range(retries):
         try:
             with engine.connect() as conn:
-                conn.execute(__import__("sqlalchemy").text("select 1"))
+                conn.execute(text("select 1"))
             return
         except OperationalError:
             print(f"[bootstrap] DB not ready, retry {i+1}/{retries}")
@@ -39,8 +40,20 @@ def wait_for_db(retries: int = 30, delay: float = 1.0) -> None:
     raise RuntimeError("Database is not reachable")
 
 
+def _current_alembic_revision() -> str | None:
+    with engine.connect() as conn:
+        row = conn.execute(text("select version_num from alembic_version")).first()
+        return row[0] if row else None
+
+
 def run_migrations() -> None:
-    """Гарантирует схему БД: create_all для fresh, alembic upgrade для существующей."""
+    """Гарантирует схему БД.
+
+    Три ветки, идемпотентно:
+    - Пустая БД → create_all + stamp head (миграции написаны как onboarding после MVP).
+    - Существующая БД без alembic_version → stamp head (считаем, что схема уже актуальна).
+    - Существующая БД с alembic_version → upgrade head (если ревизия уже head, alembic не сделает ничего).
+    """
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
@@ -49,16 +62,24 @@ def run_migrations() -> None:
     has_any_domain_table = inspector.has_table("users")
 
     if not has_any_domain_table:
-        print("[bootstrap] Пустая БД — создаю схему через create_all + stamp head")
+        print("[bootstrap] Пустая БД — create_all + stamp head")
         Base.metadata.create_all(bind=engine)
         command.stamp(cfg, "head")
         return
 
     if not has_alembic_table:
-        print("[bootstrap] БД уже существует, но без alembic_version — stamp head")
+        print("[bootstrap] Схема есть, alembic_version отсутствует — stamp head")
         command.stamp(cfg, "head")
+        return
 
-    print("[bootstrap] alembic upgrade head")
+    current = _current_alembic_revision()
+    script = ScriptDirectory.from_config(cfg)
+    head = script.get_current_head()
+    if current == head:
+        print(f"[bootstrap] alembic на head ({head}), апгрейд не требуется")
+        return
+
+    print(f"[bootstrap] alembic upgrade: {current} → {head}")
     command.upgrade(cfg, "head")
 
 
