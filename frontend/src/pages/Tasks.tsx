@@ -9,9 +9,9 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import {
-  DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
+  DndContext, DragEndEvent, DragStartEvent, DragOverlay,
+  PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 
 import type { TaskListItem, TaskStatus, Project, User, Page } from "@/types";
 import { STATUS_LABEL, STATUS_ORDER, PRIORITY_LABEL } from "@/types";
@@ -122,8 +122,19 @@ export default function Tasks() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const [landedId, setLandedId] = useState<number | null>(null);
+  const [activeDragId, setActiveDragId] = useState<number | null>(null);
+  const activeDragTask = useMemo(
+    () => (activeDragId != null ? tasks?.find((t) => t.id === activeDragId) ?? null : null),
+    [activeDragId, tasks],
+  );
+
+  const onDragStart = (e: DragStartEvent) => {
+    const id = String(e.active.id).split(":")[1];
+    setActiveDragId(Number(id));
+  };
 
   const onDragEnd = (e: DragEndEvent) => {
+    setActiveDragId(null);
     const overId = e.over?.id;
     const activeId = e.active.id;
     if (!overId || typeof activeId !== "string" || typeof overId !== "string") return;
@@ -136,6 +147,8 @@ export default function Tasks() {
     setLandedId(id);
     window.setTimeout(() => setLandedId((cur) => (cur === id ? null : cur)), 460);
   };
+
+  const onDragCancel = () => setActiveDragId(null);
 
   const filtersActive = Boolean(q || projectId || assigneeId || priority || status);
   const canCreate = can("tasks.create");
@@ -254,7 +267,12 @@ export default function Tasks() {
           )}
         />
       ) : view === "kanban" ? (
-        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <DndContext
+          sensors={sensors}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={onDragCancel}
+        >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
             {STATUS_ORDER.map((s) => (
               <KanbanColumn
@@ -263,9 +281,13 @@ export default function Tasks() {
                 tasks={tasks.filter((t) => t.status === s)}
                 onDelete={requestDelete}
                 landedId={landedId}
+                activeDragId={activeDragId}
               />
             ))}
           </div>
+          <DragOverlay dropAnimation={null}>
+            {activeDragTask ? <KanbanCardGhost task={activeDragTask} /> : null}
+          </DragOverlay>
         </DndContext>
       ) : view === "table" ? (
         <TableView tasks={tasks} onDelete={requestDelete} />
@@ -311,11 +333,13 @@ function KanbanColumn({
   tasks,
   onDelete,
   landedId,
+  activeDragId,
 }: {
   status: TaskStatus;
   tasks: TaskListItem[];
   onDelete?: (id: number) => void;
   landedId?: number | null;
+  activeDragId?: number | null;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `col:${status}` });
   return (
@@ -336,7 +360,13 @@ function KanbanColumn({
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto pr-0.5">
         {tasks.map((t) => (
-          <KanbanCard key={t.id} task={t} onDelete={onDelete} landed={landedId === t.id} />
+          <KanbanCard
+            key={t.id}
+            task={t}
+            onDelete={onDelete}
+            landed={landedId === t.id}
+            isActiveDrag={activeDragId === t.id}
+          />
         ))}
       </div>
     </div>
@@ -347,22 +377,33 @@ const KanbanCard = memo(function KanbanCard({
   task,
   onDelete,
   landed = false,
+  isActiveDrag = false,
 }: {
   task: TaskListItem;
   onDelete?: (id: number) => void;
   landed?: boolean;
+  isActiveDrag?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `task:${task.id}` });
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: `task:${task.id}` });
   const nav = useNavigate();
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.4 : 1 }}
+      style={{
+        // Пока тащим — полностью скрываем оригинал (визуально «след» не остаётся).
+        // Не убираем из DOM (display:none) — это сломает измерения @dnd-kit.
+        visibility: isActiveDrag ? "hidden" : "visible",
+        touchAction: "none",
+      }}
       {...listeners}
       {...attributes}
-      onClick={() => nav(`/tasks/${task.id}`)}
+      onClick={() => {
+        if (isActiveDrag) return;
+        nav(`/tasks/${task.id}`);
+      }}
       className={clsx(
-        "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#2b2b34]",
+        "group relative rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft dark:border-neutral-700/50 dark:bg-[#2b2b34]",
+        !isActiveDrag && "cursor-pointer hover:-translate-y-0.5 hover:shadow-md",
         landed && "animate-settle",
       )}
     >
@@ -391,6 +432,30 @@ const KanbanCard = memo(function KanbanCard({
     </div>
   );
 });
+
+function KanbanCardGhost({ task }: { task: TaskListItem }) {
+  return (
+    <div
+      className="rounded-xl border border-brand-300 bg-white p-3 shadow-[0_18px_40px_-12px_rgba(23,23,31,0.35)] dark:border-brand-500/60 dark:bg-[#2b2b34]"
+      style={{
+        width: 240,
+        transform: "rotate(2.5deg) scale(1.03)",
+        cursor: "grabbing",
+      }}
+    >
+      <div className="mb-1.5 pr-6 text-sm font-medium leading-snug">{task.title}</div>
+      <div className="flex items-center justify-between">
+        <PriorityChip priority={task.priority} />
+        {task.assignee && <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} />}
+      </div>
+      {task.deadline && (
+        <div className="mt-2 text-[11px] text-neutral-500">
+          до {new Date(task.deadline).toLocaleDateString("ru-RU")}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TableView({
   tasks,
