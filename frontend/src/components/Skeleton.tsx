@@ -10,7 +10,7 @@ export function Skeleton({
   return (
     <Tag
       className={clsx(
-        "animate-pulse rounded-md bg-zinc-200/70 dark:bg-zinc-800/60",
+        "animate-breathe rounded-md bg-zinc-200/70 dark:bg-zinc-800/60",
         className,
       )}
     />
@@ -54,14 +54,14 @@ export function SkeletonKanban({ cols = 5, cards = 3 }: { cols?: number; cards?:
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
       {Array.from({ length: cols }).map((_, ci) => (
-        <div key={ci} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <div key={ci} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-2.5 dark:border-zinc-700/50 dark:bg-[#22222a]">
           <div className="mb-2 flex items-center justify-between px-1.5">
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-3 w-4" />
           </div>
           <div className="space-y-2">
             {Array.from({ length: cards }).map((_, i) => (
-              <div key={i} className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+              <div key={i} className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700/50 dark:bg-[#2b2b34]">
                 <Skeleton className="mb-2 h-3 w-4/5" />
                 <div className="flex items-center justify-between">
                   <Skeleton className="h-4 w-14 rounded-full" />

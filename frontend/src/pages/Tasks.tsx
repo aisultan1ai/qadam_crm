@@ -121,6 +121,8 @@ export default function Tasks() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
+  const [landedId, setLandedId] = useState<number | null>(null);
+
   const onDragEnd = (e: DragEndEvent) => {
     const overId = e.over?.id;
     const activeId = e.active.id;
@@ -131,6 +133,8 @@ export default function Tasks() {
     const current = tasks?.find((t) => t.id === id);
     if (!current || current.status === newStatus) return;
     updateStatus.mutate({ id, status: newStatus as TaskStatus });
+    setLandedId(id);
+    window.setTimeout(() => setLandedId((cur) => (cur === id ? null : cur)), 460);
   };
 
   const filtersActive = Boolean(q || projectId || assigneeId || priority || status);
@@ -253,7 +257,13 @@ export default function Tasks() {
         <DndContext sensors={sensors} onDragEnd={onDragEnd}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
             {STATUS_ORDER.map((s) => (
-              <KanbanColumn key={s} status={s} tasks={tasks.filter((t) => t.status === s)} onDelete={requestDelete} />
+              <KanbanColumn
+                key={s}
+                status={s}
+                tasks={tasks.filter((t) => t.status === s)}
+                onDelete={requestDelete}
+                landedId={landedId}
+              />
             ))}
           </div>
         </DndContext>
@@ -300,30 +310,34 @@ function KanbanColumn({
   status,
   tasks,
   onDelete,
+  landedId,
 }: {
   status: TaskStatus;
   tasks: TaskListItem[];
   onDelete?: (id: number) => void;
+  landedId?: number | null;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `col:${status}` });
   return (
     <div
       ref={setNodeRef}
       className={clsx(
-        "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border p-2.5",
+        "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border p-2.5 transition-all duration-[180ms] ease-out-soft",
         isOver
-          ? "border-brand-400 bg-brand-50/50 dark:border-brand-700 dark:bg-brand-900/10"
-          : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/40",
+          ? "border-brand-400 bg-brand-50/70 dark:border-brand-700 dark:bg-brand-900/10"
+          : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-700/50 dark:bg-[#22222a]",
       )}
     >
       <div className="mb-2 flex items-center justify-between px-1.5">
         <div className="flex items-center gap-2">
           <StatusChip status={status} />
         </div>
-        <span className="text-xs text-neutral-500">{tasks.length}</span>
+        <span className="text-xs text-neutral-500 tabular-nums">{tasks.length}</span>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto pr-0.5">
-        {tasks.map((t) => <KanbanCard key={t.id} task={t} onDelete={onDelete} />)}
+        {tasks.map((t) => (
+          <KanbanCard key={t.id} task={t} onDelete={onDelete} landed={landedId === t.id} />
+        ))}
       </div>
     </div>
   );
@@ -332,20 +346,25 @@ function KanbanColumn({
 const KanbanCard = memo(function KanbanCard({
   task,
   onDelete,
+  landed = false,
 }: {
   task: TaskListItem;
   onDelete?: (id: number) => void;
+  landed?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `task:${task.id}` });
   const nav = useNavigate();
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.5 : 1 }}
+      style={{ transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.4 : 1 }}
       {...listeners}
       {...attributes}
       onClick={() => nav(`/tasks/${task.id}`)}
-      className="group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900"
+      className={clsx(
+        "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#2b2b34]",
+        landed && "animate-settle",
+      )}
     >
       {onDelete && (
         <button

@@ -79,7 +79,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
     <div
       role="status"
       className={clsx(
-        "pointer-events-auto relative flex gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 pr-8 shadow-soft transition-all dark:border-zinc-800 dark:bg-zinc-900",
+        "pointer-events-auto relative flex gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 pr-8 shadow-soft transition-all dark:border-zinc-700/50 dark:bg-[#26262e]",
         leaving ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100 animate-slide-up",
       )}
     >

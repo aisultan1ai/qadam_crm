@@ -96,6 +96,12 @@ export default function Layout() {
   }, [notifOpen]);
 
   const unread = notifs.filter((n) => !n.is_read).length;
+  const [pulseKey, setPulseKey] = useState(0);
+  const prevUnread = useRef(unread);
+  useEffect(() => {
+    if (unread > prevUnread.current) setPulseKey((k) => k + 1);
+    prevUnread.current = unread;
+  }, [unread]);
 
   const invalidateNotifs = () => qc.invalidateQueries({ queryKey: ["notifications"] });
 
@@ -137,7 +143,7 @@ export default function Layout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 px-3 sm:gap-3 sm:px-4 dark:border-neutral-800 surface-blur">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 px-3 sm:gap-3 sm:px-4 dark:border-neutral-700/50 surface-blur">
           <button
             className="btn-ghost !p-2 md:hidden"
             onClick={() => setMobileNavOpen(true)}
@@ -157,7 +163,7 @@ export default function Layout() {
           </button>
 
           <button
-            className="group flex flex-1 items-center gap-2 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-white dark:border-neutral-800 dark:bg-neutral-900/60 dark:hover:border-neutral-700 dark:hover:bg-neutral-900 max-w-md"
+            className="group flex flex-1 items-center gap-2 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-white dark:border-neutral-700/60 dark:bg-[#26262e] dark:hover:border-neutral-600 dark:hover:bg-[#2b2b34] max-w-md"
             onClick={() => setSearchOpen(true)}
           >
             <Search size={15} />
@@ -180,11 +186,29 @@ export default function Layout() {
               aria-label="Уведомления"
               aria-expanded={notifOpen}
             >
-              <Bell size={18} />
+              <span
+                key={`bell-${pulseKey}`}
+                className={pulseKey ? "inline-flex animate-shake" : "inline-flex"}
+                style={{ transformOrigin: "50% 15%" }}
+              >
+                <Bell size={18} />
+              </span>
               {unread > 0 && (
-                <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white">
-                  {unread}
-                </span>
+                <>
+                  <span
+                    key={`badge-${pulseKey}`}
+                    className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white tabular-nums animate-pop"
+                  >
+                    {unread}
+                  </span>
+                  {pulseKey > 0 && (
+                    <span
+                      key={`ring-${pulseKey}`}
+                      aria-hidden
+                      className="pointer-events-none absolute right-1 top-1 h-4 w-4 rounded-full bg-brand-600 animate-ping2"
+                    />
+                  )}
+                </>
               )}
             </button>
             {notifOpen && (
@@ -282,7 +306,7 @@ function Sidebar({
   return (
     <aside
       className={clsx(
-        "flex shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur transition-[width] duration-200 dark:border-neutral-800 dark:bg-neutral-900/70",
+        "flex shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-700/50 dark:bg-[#22222a]",
         desktop
           ? clsx("hidden md:flex", collapsed ? "md:w-16" : "md:w-60")
           : "h-full w-64",
@@ -316,24 +340,25 @@ function Sidebar({
               title={showLabels ? undefined : n.label}
               className={({ isActive }) =>
                 clsx(
-                  "relative flex items-center rounded-lg text-sm transition-colors",
+                  "relative flex items-center rounded-lg text-sm transition-all duration-[180ms] ease-out-soft",
                   showLabels ? "gap-2.5 px-3 py-2" : "justify-center px-2 py-2",
                   isActive
                     ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/25 dark:text-brand-300"
-                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
+                    : "text-neutral-600 hover:translate-x-0.5 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
                 )
               }
             >
               {({ isActive }) => (
                 <>
-                  {isActive && (
-                    <span
-                      aria-hidden
-                      className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-600 dark:bg-brand-400"
-                    />
-                  )}
+                  <span
+                    aria-hidden
+                    className={clsx(
+                      "absolute inset-y-1 left-0 w-0.5 origin-center rounded-full bg-brand-600 transition-all duration-300 ease-out-soft dark:bg-brand-400",
+                      isActive ? "scale-y-100 opacity-100" : "scale-y-50 opacity-0",
+                    )}
+                  />
                   <Icon size={16} />
-                  {showLabels && n.label}
+                  {showLabels && <span className="transition-opacity duration-150">{n.label}</span>}
                 </>
               )}
             </NavLink>

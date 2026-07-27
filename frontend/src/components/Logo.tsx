@@ -1,10 +1,13 @@
+import clsx from "clsx";
+
 type LogoMarkProps = {
   size?: number;
   className?: string;
   title?: string;
+  animated?: boolean;
 };
 
-export function LogoMark({ size = 72, className, title = "Qadam CRM" }: LogoMarkProps) {
+export function LogoMark({ size = 72, className, title = "Qadam CRM", animated = false }: LogoMarkProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -13,7 +16,7 @@ export function LogoMark({ size = 72, className, title = "Qadam CRM" }: LogoMark
       viewBox="0 0 72 72"
       role="img"
       aria-label={title}
-      className={className}
+      className={clsx(animated && "animate-pop", className)}
     >
       <rect width="72" height="72" rx="18" fill="#4f46e5" />
       <path

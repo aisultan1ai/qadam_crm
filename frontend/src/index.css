@@ -5,7 +5,7 @@
 :root {
   color-scheme: light dark;
   --page-bg: #fafaf9;
-  --page-bg-dark: #17171c;
+  --page-bg-dark: #1e1e26;
 }
 
 html,
@@ -15,7 +15,7 @@ body,
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 dark:bg-[#17171c] dark:text-zinc-100;
+  @apply bg-zinc-50 text-zinc-900 dark:bg-[#1e1e26] dark:text-zinc-100;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
   letter-spacing: -0.005em;
   scrollbar-width: thin;
@@ -46,15 +46,19 @@ body {
   .input {
     @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm
            placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/15
-           dark:border-zinc-800 dark:bg-zinc-900/60 dark:placeholder:text-zinc-500;
+           dark:border-zinc-700/60 dark:bg-[#26262e] dark:placeholder:text-zinc-500;
   }
   .card {
     @apply rounded-2xl border border-zinc-200/80 bg-white shadow-soft
-           dark:border-zinc-800/80 dark:bg-zinc-900/60;
+           dark:border-zinc-700/50 dark:bg-[#26262e];
   }
   .card-interactive {
-    @apply card transition-all hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md
+    @apply card transition-all duration-[220ms] ease-out-soft hover:-translate-y-[3px]
+           hover:border-zinc-300 hover:shadow-[0_10px_24px_-10px_rgb(0_0_0/0.16)]
            dark:hover:border-zinc-700;
+  }
+  .nav-item-motion {
+    @apply transition-all duration-[180ms] ease-out-soft;
   }
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
@@ -73,7 +77,7 @@ body {
   }
   .surface-blur {
     @apply bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70
-           dark:bg-neutral-900/70 dark:supports-[backdrop-filter]:bg-neutral-900/55;
+           dark:bg-[#1e1e26]/85 dark:supports-[backdrop-filter]:bg-[#1e1e26]/70;
   }
 }
 
@@ -81,3 +85,24 @@ body {
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(113,113,122,.3); border-radius: 8px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(113,113,122,.55); }
+
+/* Ambient login background blobs (used by Login page) */
+.login-blob {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  will-change: transform;
+  filter: blur(28px);
+}
+
+/* Tabular numerics for smoothly changing count-up values */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* Respect user preferences and cut motion where possible */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

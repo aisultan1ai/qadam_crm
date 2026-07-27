@@ -44,7 +44,7 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
 
   return (
     <Modal open={open} onClose={onClose} title="Глобальный поиск" size="lg">
-      <div className="mb-4 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mb-4 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-700/50 dark:bg-[#2b2b34]">
         <Search size={16} className="text-neutral-400" />
         <input
           autoFocus
