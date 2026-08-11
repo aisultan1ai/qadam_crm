@@ -200,6 +200,9 @@ def seed_admin(db, tenant: Tenant) -> None:
     admin = db.query(User).filter(User.email == email).first()
 
     if admin:
+        if not admin.is_platform_admin:
+            admin.is_platform_admin = True
+            db.commit()
         _ensure_admin_membership(db, admin, tenant)
         return
 
@@ -221,6 +224,7 @@ def seed_admin(db, tenant: Tenant) -> None:
         password_hash=hash_password(password),
         is_active=True,
         is_superuser=True,
+        is_platform_admin=True,
         roles=[role_admin] if role_admin else [],
     )
     db.add(admin)
@@ -266,6 +270,63 @@ def _ensure_admin_membership(db, admin: User, tenant: Tenant) -> None:
     db.commit()
 
 
+def migrate_uploads_to_tenant_dirs() -> None:
+    """Одноразово (идемпотентно) переносит legacy файлы в per-tenant подпапки.
+
+    Плоские `uploads/*.ext` и `uploads/avatars/*.ext`, оставшиеся от старых версий,
+    переносятся в `uploads/{tenant_id}/attachments|avatars/`. Значения в БД
+    (`Attachment.stored_name`, `User.avatar_url`) при этом ОСТАЮТСЯ старыми —
+    резолверы путей в attachments/users.py умеют читать оба формата.
+    Задача этой миграции — только выровнять disk layout, чтобы новые загрузки
+    и legacy-файлы жили в одной иерархии.
+    """
+    from .models import Attachment, User
+
+    root = Path(settings.UPLOAD_DIR)
+    if not root.exists():
+        return
+
+    with SessionLocal() as db:
+        # Attachments: если stored_name — плоское имя, физически перенесём в 1/attachments.
+        atts = db.query(Attachment).all()
+        for att in atts:
+            if "/" in att.stored_name:
+                continue  # уже в новом формате
+            src = root / att.stored_name
+            if not src.exists():
+                continue
+            target_dir = root / str(att.tenant_id) / "attachments"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            dest = target_dir / att.stored_name
+            try:
+                src.rename(dest)
+                att.stored_name = f"{att.tenant_id}/attachments/{att.stored_name}"
+            except OSError as e:
+                print(f"[bootstrap] cannot move {src}: {e}")
+        db.commit()
+
+        # Avatars: /media/avatars/{stored} → /media/{tenant_id}/avatars/{stored}
+        users = db.query(User).filter(User.avatar_url.like("/media/avatars/%")).all()
+        for u in users:
+            stored = u.avatar_url.split("/media/avatars/", 1)[1]
+            src = root / "avatars" / stored
+            if not src.exists():
+                continue
+            # Определяем tenant по первому membership пользователя.
+            from .models import TenantMembership
+            m = db.query(TenantMembership).filter(TenantMembership.user_id == u.id).first()
+            tenant_id = m.tenant_id if m else DEFAULT_TENANT_ID
+            target_dir = root / str(tenant_id) / "avatars"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            dest = target_dir / stored
+            try:
+                src.rename(dest)
+                u.avatar_url = f"/media/{tenant_id}/avatars/{stored}"
+            except OSError as e:
+                print(f"[bootstrap] cannot move {src}: {e}")
+        db.commit()
+
+
 def main() -> None:
     wait_for_db()
     run_migrations()
@@ -276,6 +337,8 @@ def main() -> None:
         tenant = seed_default_tenant(db)
         _ensure_tenant_roles(db, tenant.id)
         seed_admin(db, tenant)
+
+    migrate_uploads_to_tenant_dirs()
 
     print("[bootstrap] Done.")
 

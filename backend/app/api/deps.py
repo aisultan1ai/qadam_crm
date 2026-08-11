@@ -100,6 +100,16 @@ def get_current_context(
     if not tenant or not tenant.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Компания недоступна")
 
+    # Если запрос пришёл на кастомный subdomain (см. SubdomainTenantMiddleware),
+    # он должен совпадать со slug'ом tenant'а из JWT. Иначе — не позволяем
+    # смешивать сессию одной компании с домашней страницей другой.
+    forced_slug = getattr(request.state, "forced_tenant_slug", None)
+    if forced_slug and forced_slug not in (tenant.subdomain, tenant.slug):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Этот поддомен принадлежит другой компании — переключите tenant или откройте прямой URL",
+        )
+
     return TenantContext(user=user, tenant=tenant, membership=membership)
 
 

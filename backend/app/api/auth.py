@@ -17,8 +17,10 @@ from ..core.security import (
     TOKEN_TYPE_REFRESH,
 )
 from ..core.permissions import all_permission_codes
+from ..core.security import hash_password
+from ..core.tenant_setup import create_tenant_with_owner
 from ..models import User, Tenant, TenantMembership
-from ..schemas.auth import LoginRequest, TokenResponse, RefreshRequest
+from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshRequest
 from ..schemas.user import MeOut
 from ..schemas.common import Message
 from .deps import get_current_user, get_current_token, log_action
@@ -72,6 +74,43 @@ def login(
     db.commit()
 
     access, refresh, ttl = _issue_pair(user.id, tenant_id)
+    set_auth_cookies(response, access, refresh)
+    return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
+
+
+@router.post("/register", response_model=TokenResponse, status_code=201)
+@limiter.limit("5/hour")
+def register(
+    request: Request,
+    response: Response,
+    payload: RegisterRequest,
+    db: Session = Depends(get_db),
+):
+    """Публичная регистрация: создаёт компанию и владельца одним запросом."""
+    email = payload.email.lower().strip()
+    if db.query(User.id).filter(User.email == email).first():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пользователь с таким email уже существует")
+
+    user = User(
+        email=email,
+        name=payload.full_name.strip(),
+        password_hash=hash_password(payload.password),
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    tenant = create_tenant_with_owner(
+        db,
+        company_name=payload.company_name.strip(),
+        owner=user,
+        plan="free",
+    )
+
+    log_action(db, tenant_id=tenant.id, user_id=user.id, action="register", entity="tenant", entity_id=tenant.id, detail=tenant.name)
+    db.commit()
+
+    access, refresh, ttl = _issue_pair(user.id, tenant.id)
     set_auth_cookies(response, access, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
 
@@ -165,12 +204,57 @@ def logout(
 
 
 @router.get("/me", response_model=MeOut)
-def me(user: User = Depends(get_current_user)):
+def me(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     if user.is_superuser:
         perms = all_permission_codes()
     else:
         perms = sorted({p.code for r in user.roles for p in r.permissions})
-    data = MeOut.model_validate(user).model_copy(update={"permissions": perms})
+
+    current_tenant = None
+    # Читаем tid из access-cookie/Bearer напрямую, чтобы не тащить get_current_context в /me
+    tok = request.cookies.get(settings.AUTH_COOKIE_NAME)
+    if not tok:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            tok = auth_header[7:]
+    if tok:
+        try:
+            payload = decode_token(tok)
+            tenant_id = payload.get("tid")
+            if tenant_id is not None:
+                membership = (
+                    db.query(TenantMembership)
+                    .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+                    .filter(
+                        TenantMembership.user_id == user.id,
+                        TenantMembership.tenant_id == tenant_id,
+                        Tenant.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if membership:
+                    t = membership.tenant
+                    current_tenant = {
+                        "id": t.id,
+                        "name": t.name,
+                        "slug": t.slug,
+                        "plan": t.plan,
+                        "logo_url": t.logo_url,
+                        "primary_color": t.primary_color,
+                        "company_display_name": t.company_display_name,
+                        "is_owner": membership.is_owner,
+                    }
+        except JWTError:
+            pass
+
+    data = MeOut.model_validate(user).model_copy(update={
+        "permissions": perms,
+        "current_tenant": current_tenant,
+    })
     return data
 
 
@@ -193,6 +277,8 @@ def list_my_tenants(
             "slug": t.slug,
             "plan": t.plan,
             "logo_url": t.logo_url,
+            "primary_color": t.primary_color,
+            "company_display_name": t.company_display_name,
             "is_owner": m.is_owner,
         }
         for m, t in rows

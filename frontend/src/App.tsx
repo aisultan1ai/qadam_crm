@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/store/auth";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import Invite from "@/pages/Invite";
 import { Loader } from "@/components/ui";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -14,6 +16,7 @@ const Analytics = lazy(() => import("@/pages/Analytics"));
 const Users = lazy(() => import("@/pages/Users"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Profile = lazy(() => import("@/pages/Profile"));
+const Admin = lazy(() => import("@/pages/Admin"));
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { me, ready } = useAuth();
@@ -41,6 +44,22 @@ export default function App() {
         }
       />
       <Route
+        path="/register"
+        element={
+          <Suspense fallback={<Loader />}>
+            <Register />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/invite/:token"
+        element={
+          <Suspense fallback={<Loader />}>
+            <Invite />
+          </Suspense>
+        }
+      />
+      <Route
         path="/"
         element={
           <Protected>
@@ -57,6 +76,7 @@ export default function App() {
         <Route path="users/*" element={<Users />} />
         <Route path="settings/*" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

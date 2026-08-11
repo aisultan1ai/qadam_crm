@@ -27,6 +27,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     department_id: Mapped[Optional[int]] = mapped_column(ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)

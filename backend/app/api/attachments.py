@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..config import settings
+from ..core.plans import check_storage_limit
 from ..models import Task, Attachment, User
 from ..schemas.task import AttachmentOut
 from ..schemas.common import Message
@@ -106,8 +107,11 @@ def _load_task_in_tenant(db: Session, task_id: int, tenant_id: int) -> Task:
 def upload(task_id: int, file: UploadFile = File(...), ctx: TenantContext = Depends(require("files.upload")), db: Session = Depends(get_db)):
     user = ctx.user
     task = _load_task_in_tenant(db, task_id, ctx.tenant.id)
+    # Грубая предварительная проверка (текущий usage без нового файла).
+    # После записи ниже — ещё раз строгая проверка с реальным размером.
+    check_storage_limit(db, ctx.tenant, additional_bytes=0)
 
-    upload_dir = Path(settings.UPLOAD_DIR)
+    upload_dir = Path(settings.UPLOAD_DIR) / str(ctx.tenant.id) / "attachments"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     ext = Path(file.filename or "").suffix.lower()
@@ -116,11 +120,21 @@ def upload(task_id: int, file: UploadFile = File(...), ctx: TenantContext = Depe
 
     size = _validate_and_save(file, dest, settings.MAX_UPLOAD_BYTES)
 
+    # Строгая проверка: файл записан, проверяем что не вышли за лимит с ним.
+    try:
+        check_storage_limit(db, ctx.tenant, additional_bytes=size)
+    except HTTPException:
+        dest.unlink(missing_ok=True)
+        raise
+
+    # stored_name хранит относительный путь под UPLOAD_DIR, чтобы файлы разных
+    # tenant'ов не конфликтовали и download/delete находили файл однозначно.
+    rel_path = f"{ctx.tenant.id}/attachments/{stored}"
     att = Attachment(
         tenant_id=ctx.tenant.id,
         task_id=task.id,
         filename=file.filename or stored,
-        stored_name=stored,
+        stored_name=rel_path,
         content_type=file.content_type,
         size=size,
         uploaded_by=user.id,
@@ -132,12 +146,18 @@ def upload(task_id: int, file: UploadFile = File(...), ctx: TenantContext = Depe
     return att
 
 
+def _resolve_attachment_path(att: Attachment) -> Path:
+    """stored_name может быть относительным путём (новый формат: {tenant}/attachments/{uuid}.ext)
+    или плоским именем (legacy). Оба варианта резолвим относительно UPLOAD_DIR."""
+    return Path(settings.UPLOAD_DIR) / att.stored_name
+
+
 @router.get("/{attachment_id}")
 def download(task_id: int, attachment_id: int, ctx: TenantContext = Depends(require("files.download")), db: Session = Depends(get_db)):
     att = db.get(Attachment, attachment_id)
     if not att or att.tenant_id != ctx.tenant.id or att.task_id != task_id:
         raise HTTPException(404, "Файл не найден")
-    path = Path(settings.UPLOAD_DIR) / att.stored_name
+    path = _resolve_attachment_path(att)
     if not path.exists():
         raise HTTPException(404, "Файл отсутствует на диске")
     return FileResponse(path, media_type=att.content_type or "application/octet-stream", filename=att.filename)
@@ -149,7 +169,7 @@ def remove(task_id: int, attachment_id: int, ctx: TenantContext = Depends(requir
     att = db.get(Attachment, attachment_id)
     if not att or att.tenant_id != ctx.tenant.id or att.task_id != task_id:
         raise HTTPException(404, "Файл не найден")
-    path = Path(settings.UPLOAD_DIR) / att.stored_name
+    path = _resolve_attachment_path(att)
     if path.exists():
         try:
             os.remove(path)

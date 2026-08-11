@@ -11,13 +11,15 @@ from ..config import settings
 from ..database import get_db
 from ..models import User, Role, Department, TenantMembership
 from ..core.security import hash_password, verify_password
+from ..core.plans import check_user_limit
 from ..schemas.user import UserOut, UserCreate, UserUpdate, MeUpdate, DepartmentOut, DepartmentCreate
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, require, get_current_user, get_current_context, log_action
 
 router = APIRouter(prefix="/api", tags=["users"])
 
-AVATAR_URL_PREFIX = "/media/avatars/"
+AVATAR_URL_PREFIX_LEGACY = "/media/avatars/"
+AVATAR_URL_MEDIA_ROOT = "/media/"
 AVATAR_EXT_BY_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -28,9 +30,17 @@ AVATAR_CHUNK = 256 * 1024
 
 
 def _avatar_file_path(avatar_url: Optional[str]) -> Optional[Path]:
-    if not avatar_url or not avatar_url.startswith(AVATAR_URL_PREFIX):
+    """Резолвит путь к файлу аватара из URL.
+    - Новый формат: /media/{tenant_id}/avatars/{stored}.
+    - Legacy: /media/avatars/{stored} (файлы до миграции per-tenant).
+    """
+    if not avatar_url:
         return None
-    return Path(settings.UPLOAD_DIR) / "avatars" / avatar_url[len(AVATAR_URL_PREFIX):]
+    if avatar_url.startswith(AVATAR_URL_PREFIX_LEGACY):
+        return Path(settings.UPLOAD_DIR) / "avatars" / avatar_url[len(AVATAR_URL_PREFIX_LEGACY):]
+    if avatar_url.startswith(AVATAR_URL_MEDIA_ROOT):
+        return Path(settings.UPLOAD_DIR) / avatar_url[len(AVATAR_URL_MEDIA_ROOT):]
+    return None
 
 
 def _load_tenant_user(db: Session, tenant_id: int, user_id: int) -> User:
@@ -93,6 +103,7 @@ def list_users(
 @router.post("/users", response_model=UserOut, status_code=201)
 def create_user(payload: UserCreate, ctx: TenantContext = Depends(require("users.create")), db: Session = Depends(get_db)):
     actor = ctx.user
+    check_user_limit(db, ctx.tenant)
     email = payload.email.lower()
     existing = db.query(User).filter(User.email == email).first()
     if existing:
@@ -177,7 +188,7 @@ def upload_my_avatar(
 
     ext = AVATAR_EXT_BY_MIME[file.content_type]
 
-    avatars_dir = Path(settings.UPLOAD_DIR) / "avatars"
+    avatars_dir = Path(settings.UPLOAD_DIR) / str(ctx.tenant.id) / "avatars"
     avatars_dir.mkdir(parents=True, exist_ok=True)
 
     stored = f"{uuid.uuid4().hex}{ext}"
@@ -213,7 +224,7 @@ def upload_my_avatar(
         except OSError:
             pass
 
-    user.avatar_url = f"{AVATAR_URL_PREFIX}{stored}"
+    user.avatar_url = f"{AVATAR_URL_MEDIA_ROOT}{ctx.tenant.id}/avatars/{stored}"
     log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar")
     db.commit()
     db.refresh(user)

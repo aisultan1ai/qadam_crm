@@ -1,26 +1,59 @@
 import { useEffect, useMemo, useState } from "react";
-import { Route, Routes, Navigate } from "react-router-dom";
+import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { api } from "@/api/client";
+import { api, extractApiError } from "@/api/client";
 import type { Role, PermissionGroup } from "@/types";
 import { Loader, Modal } from "@/components/ui";
-import { Plus, Copy, Trash2, Save } from "lucide-react";
+import { Plus, Copy, Trash2, Save, CreditCard, Palette } from "lucide-react";
 import { useAuth } from "@/store/auth";
+import { useToast } from "@/components/Toast";
+
+const SETTINGS_TABS = [
+  { to: "roles", label: "Роли и права", icon: Save },
+  { to: "branding", label: "Брендинг", icon: Palette, ownerOnly: true },
+  { to: "billing", label: "Тариф", icon: CreditCard, ownerOnly: true },
+];
 
 export default function Settings() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
+  const isOwner = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin;
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Настройки</h1>
-        <p className="text-sm text-neutral-500">Роли и права доступа</p>
+        <p className="text-sm text-neutral-500">Компания, тариф и права доступа</p>
       </div>
+
+      <nav className="flex flex-wrap gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900/60">
+        {SETTINGS_TABS.map((t) => {
+          if (t.ownerOnly && !isOwner) return null;
+          return (
+            <NavLink
+              key={t.to}
+              to={t.to}
+              className={({ isActive }) =>
+                clsx(
+                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
+                  isActive
+                    ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-white"
+                    : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
+                )
+              }
+            >
+              <t.icon size={15} />
+              {t.label}
+            </NavLink>
+          );
+        })}
+      </nav>
 
       <Routes>
         <Route index element={<Navigate to="roles" replace />} />
         <Route path="roles" element={can("roles.manage") ? <RolesSettings /> : <Forbid />} />
+        <Route path="branding" element={isOwner ? <BrandingSettings /> : <Forbid />} />
+        <Route path="billing" element={isOwner ? <BillingSettings /> : <Forbid />} />
       </Routes>
     </div>
   );
@@ -238,3 +271,308 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   );
 }
 
+
+type TenantCurrent = {
+  id: number;
+  name: string;
+  slug: string;
+  plan: string;
+  logo_url: string | null;
+  primary_color: string | null;
+  subdomain: string | null;
+  company_display_name: string | null;
+  is_owner: boolean;
+};
+
+function BrandingSettings() {
+  const toast = useToast();
+  const { fetchMe } = useAuth();
+  const { data, refetch } = useQuery({
+    queryKey: ["tenant-current"],
+    queryFn: async () => (await api.get<TenantCurrent>("/api/tenants/current")).data,
+  });
+
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [color, setColor] = useState("");
+  const [subdomain, setSubdomain] = useState("");
+
+  useEffect(() => {
+    if (data) {
+      setName(data.name);
+      setDisplayName(data.company_display_name ?? "");
+      setColor(data.primary_color ?? "");
+      setSubdomain(data.subdomain ?? "");
+    }
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.patch("/api/tenants/current", {
+        name,
+        company_display_name: displayName,
+        primary_color: color,
+        subdomain,
+      }),
+    onSuccess: async () => {
+      await refetch();
+      await fetchMe();
+      toast.success("Сохранено");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const uploadLogo = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return api.post("/api/tenants/current/logo", fd, { headers: { "Content-Type": "multipart/form-data" } });
+    },
+    onSuccess: async () => {
+      await refetch();
+      await fetchMe();
+      toast.success("Логотип обновлён");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const removeLogo = useMutation({
+    mutationFn: () => api.delete("/api/tenants/current/logo"),
+    onSuccess: async () => {
+      await refetch();
+      await fetchMe();
+    },
+  });
+
+  if (!data) return <Loader />;
+
+  return (
+    <div className="card space-y-4 p-6">
+      <div className="flex items-center gap-3">
+        {data.logo_url ? (
+          <img src={data.logo_url} alt="" className="h-14 w-14 rounded-lg object-contain border" />
+        ) : (
+          <div className="grid h-14 w-14 place-items-center rounded-lg border bg-neutral-100 text-neutral-500 dark:bg-neutral-800">
+            {data.name.charAt(0)}
+          </div>
+        )}
+        <div>
+          <label className="btn-ghost cursor-pointer">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadLogo.mutate(f);
+              }}
+            />
+            Загрузить логотип
+          </label>
+          {data.logo_url && (
+            <button className="btn-ghost ml-2 text-rose-600" onClick={() => removeLogo.mutate()}>Удалить</button>
+          )}
+          <div className="mt-1 text-xs text-neutral-500">PNG, JPEG, WebP или SVG · до 2 МБ</div>
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название компании</span>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Отображаемое название (опционально)</span>
+        <input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Основной цвет (#RRGGBB)</span>
+        <input
+          className="input"
+          type="text"
+          placeholder="#6366f1"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Поддомен (acme.qadam.kz)</span>
+        <input
+          className="input"
+          type="text"
+          placeholder="acme"
+          value={subdomain}
+          onChange={(e) => setSubdomain(e.target.value)}
+        />
+      </label>
+
+      <div className="flex justify-end">
+        <button className="btn-primary" onClick={() => save.mutate()} disabled={save.isPending}>
+          Сохранить
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+type Usage = {
+  plan: string;
+  limits: Record<string, number | null>;
+  usage: { users: number; projects: number; storage_bytes: number };
+};
+
+type Sub = {
+  plan: string;
+  status: string;
+  current_period_end: string | null;
+};
+
+type PlanInfo = {
+  key: string;
+  title: string;
+  tagline: string;
+  price_month: number | null;
+  currency: string;
+  features: string[];
+  limits: Record<string, number | null>;
+};
+
+function formatPrice(price: number | null, currency: string): string {
+  if (price === null) return "По запросу";
+  if (price === 0) return "Бесплатно";
+  return `${new Intl.NumberFormat("ru-RU").format(price)} ${currency} / мес`;
+}
+
+function BillingSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { fetchMe } = useAuth();
+  const { data: sub } = useQuery({
+    queryKey: ["billing-sub"],
+    queryFn: async () => (await api.get<Sub>("/api/billing/subscription")).data,
+  });
+  const { data: usage } = useQuery({
+    queryKey: ["tenant-usage"],
+    queryFn: async () => (await api.get<Usage>("/api/tenants/current/usage")).data,
+  });
+  const { data: plans } = useQuery({
+    queryKey: ["billing-plans"],
+    queryFn: async () => (await api.get<PlanInfo[]>("/api/billing/plans")).data,
+    staleTime: 60_000,
+  });
+
+  const subscribe = useMutation({
+    mutationFn: (plan: string) => api.post("/api/billing/subscribe", { plan }),
+    onSuccess: async () => {
+      await qc.invalidateQueries();
+      await fetchMe();
+      toast.success("Тариф обновлён");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="card p-6">
+        <div className="text-sm text-neutral-500">Текущий план</div>
+        <div className="text-2xl font-semibold capitalize">{sub?.plan ?? "—"}</div>
+        {sub?.current_period_end && (
+          <div className="mt-1 text-xs text-neutral-500">
+            Действует до {new Date(sub.current_period_end).toLocaleDateString("ru-RU")}
+          </div>
+        )}
+      </div>
+
+      {usage && (
+        <div className="card grid gap-3 p-6 sm:grid-cols-3">
+          <UsageBar label="Пользователи" used={usage.usage.users} limit={usage.limits.max_users as number | null} />
+          <UsageBar label="Проекты" used={usage.usage.projects} limit={usage.limits.max_projects as number | null} />
+          <UsageBar
+            label="Хранилище"
+            used={Math.round((usage.usage.storage_bytes / (1024 * 1024)) * 10) / 10}
+            limit={usage.limits.max_storage_bytes ? Math.round((usage.limits.max_storage_bytes as number) / (1024 * 1024)) : null}
+            unit="МБ"
+          />
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {(plans ?? []).map((p) => {
+          const current = sub?.plan === p.key;
+          return (
+            <div
+              key={p.key}
+              className={clsx(
+                "card flex flex-col p-5",
+                current && "ring-2 ring-brand-500",
+              )}
+            >
+              <div className="flex items-start justify-between">
+                <div className="text-lg font-semibold">{p.title}</div>
+                {current && (
+                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                    Активен
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-xs text-neutral-500">{p.tagline}</div>
+
+              <div className="mt-3 text-2xl font-semibold tabular-nums">
+                {formatPrice(p.price_month, p.currency)}
+              </div>
+
+              <ul className="mt-4 space-y-1.5 text-sm text-neutral-700 dark:text-neutral-300">
+                {p.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                className="btn-primary mt-5 w-full disabled:opacity-50"
+                disabled={current || subscribe.isPending}
+                onClick={() => subscribe.mutate(p.key)}
+              >
+                {current ? "Текущий" : p.price_month === null ? "Связаться" : "Переключить"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function UsageBar({
+  label,
+  used,
+  limit,
+  unit,
+}: {
+  label: string;
+  used: number;
+  limit: number | null;
+  unit?: string;
+}) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  return (
+    <div>
+      <div className="text-xs text-neutral-500">{label}</div>
+      <div className="text-lg font-medium tabular-nums">
+        {used}
+        {unit ? ` ${unit}` : ""} / {limit ?? "∞"}
+        {limit && unit ? ` ${unit}` : ""}
+      </div>
+      {limit && (
+        <div className="mt-1 h-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800">
+          <div
+            className={clsx("h-full rounded-full", pct >= 90 ? "bg-rose-500" : "bg-brand-500")}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

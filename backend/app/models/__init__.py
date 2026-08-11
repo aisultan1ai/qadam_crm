@@ -8,6 +8,8 @@ from .attachment import Attachment
 from .notification import Notification
 from .activity import ActivityLog
 from .reaction import CommentReaction
+from .invitation import Invitation
+from .subscription import Subscription, SubscriptionStatus
 
 __all__ = [
     "Tenant",
@@ -29,4 +31,7 @@ __all__ = [
     "Notification",
     "ActivityLog",
     "CommentReaction",
+    "Invitation",
+    "Subscription",
+    "SubscriptionStatus",
 ]

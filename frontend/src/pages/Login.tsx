@@ -1,4 +1,4 @@
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useRef, useState } from "react";
@@ -214,6 +214,13 @@ export default function Login() {
               </svg>
             )}
           </button>
+        </div>
+
+        <div className="mt-4 text-center text-sm text-neutral-500">
+          Нет аккаунта?{" "}
+          <Link to="/register" className="link">
+            Зарегистрировать компанию
+          </Link>
         </div>
       </form>
     </div>

@@ -88,6 +88,7 @@ class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     is_superuser: bool
+    is_platform_admin: bool = False
     roles: List[RoleOut] = []
     department: Optional[DepartmentOut] = None
     last_login_at: Optional[datetime] = None
@@ -102,5 +103,18 @@ class UserBrief(BaseModel):
     avatar_url: Optional[str] = None
 
 
+class TenantBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    slug: str
+    plan: str
+    logo_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    company_display_name: Optional[str] = None
+    is_owner: bool = False
+
+
 class MeOut(UserOut):
     permissions: List[str] = []
+    current_tenant: Optional[TenantBrief] = None

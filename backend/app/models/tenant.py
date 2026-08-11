@@ -20,6 +20,7 @@ class Tenant(Base):
     logo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     primary_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     subdomain: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True, index=True)
+    company_display_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

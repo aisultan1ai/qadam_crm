@@ -84,12 +84,12 @@ def create_comment(task_id: int, payload: CommentCreate, ctx: TenantContext = De
     db.refresh(comment)
 
     for uid in notify_user_ids:
-        publish_to_user(uid, "notification.new", {"task_id": task.id})
+        publish_to_user(ctx.tenant.id, uid, "notification.new", {"task_id": task.id})
     # уведомим всех подписчиков задачи о новом комментарии
     if task.assignee_id:
-        publish_to_user(task.assignee_id, "task.comment", {"task_id": task.id, "comment_id": comment.id})
+        publish_to_user(ctx.tenant.id, task.assignee_id, "task.comment", {"task_id": task.id, "comment_id": comment.id})
     if task.author_id and task.author_id != user.id:
-        publish_to_user(task.author_id, "task.comment", {"task_id": task.id, "comment_id": comment.id})
+        publish_to_user(ctx.tenant.id, task.author_id, "task.comment", {"task_id": task.id, "comment_id": comment.id})
 
     return comment
 
@@ -157,5 +157,5 @@ def toggle_reaction(
     # WS: пушим автору и участникам треда
     for uid in {comment.author_id, comment.task.assignee_id, comment.task.author_id}:
         if uid and uid != user.id:
-            publish_to_user(uid, "task.comment", {"task_id": task_id, "comment_id": comment_id})
+            publish_to_user(ctx.tenant.id, uid, "task.comment", {"task_id": task_id, "comment_id": comment_id})
     return comment

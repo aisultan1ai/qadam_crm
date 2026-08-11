@@ -2,8 +2,10 @@
 
 Брокер и result backend — общий Redis (DB 1, чтобы не смешивать с rate-limit/blacklist в DB 0).
 Воркер запускается отдельным контейнером `celery_worker` из docker-compose.
+Периодические задачи планирует контейнер `celery_beat` (см. `beat_schedule`).
 """
 from celery import Celery
+from celery.schedules import crontab
 
 from ..config import settings
 
@@ -20,7 +22,12 @@ celery_app = Celery(
     "qadam",
     broker=_broker_url(),
     backend=_broker_url(),
-    include=["app.tasks.email", "app.tasks.reports", "app.tasks.imports"],
+    include=[
+        "app.tasks.email",
+        "app.tasks.reports",
+        "app.tasks.imports",
+        "app.tasks.scheduled",
+    ],
 )
 
 celery_app.conf.update(
@@ -35,6 +42,22 @@ celery_app.conf.update(
     worker_max_tasks_per_child=200,
     broker_connection_retry_on_startup=True,
 )
+
+celery_app.conf.beat_schedule = {
+    "check-deadlines-every-15min": {
+        "task": "scheduled.check_deadlines",
+        "schedule": crontab(minute="*/15"),
+    },
+    "cleanup-old-notifications-daily": {
+        "task": "scheduled.cleanup_old_notifications",
+        "schedule": crontab(hour=3, minute=0),
+        "kwargs": {"days": 30},
+    },
+    "check-expired-subscriptions-hourly": {
+        "task": "scheduled.check_expired_subscriptions",
+        "schedule": crontab(minute=0),
+    },
+}
 
 # Делаем этот app дефолтным, чтобы shared_task резолвился на него
 # и .delay() из web-процесса не пытался стучаться в RabbitMQ.

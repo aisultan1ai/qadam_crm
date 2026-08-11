@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, CheckSquare, BarChart3, Users, Settings,
   Sun, Moon, LogOut, Search, Bell, Menu, X, PanelLeftClose, PanelLeftOpen,
+  Shield,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
@@ -14,19 +15,31 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
 import type { Notification, Page } from "@/types";
 import GlobalSearch from "./GlobalSearch";
+import TenantSwitcher from "./TenantSwitcher";
 import { LogoMark } from "./Logo";
 import { useRealtimeUpdates } from "@/lib/ws";
+import { applyBrandColor } from "@/lib/branding";
 import { useToast } from "./Toast";
 import { modKey } from "@/lib/platform";
 import { fromNow } from "@/lib/date";
 
-const NAV = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+  code?: string | string[];
+  platformAdminOnly?: boolean;
+};
+
+const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/projects", label: "Проекты", icon: FolderKanban, code: "projects.view" },
   { to: "/tasks", label: "Задачи", icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
   { to: "/analytics", label: "Аналитика", icon: BarChart3, code: "analytics.reports" },
   { to: "/users", label: "Пользователи", icon: Users, code: "users.view" },
   { to: "/settings", label: "Настройки", icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
+  { to: "/admin", label: "Платформа", icon: Shield, platformAdminOnly: true },
 ];
 
 export default function Layout() {
@@ -43,6 +56,10 @@ export default function Layout() {
   const notifRef = useRef<HTMLDivElement | null>(null);
 
   useRealtimeUpdates();
+
+  useEffect(() => {
+    applyBrandColor(me?.current_tenant?.primary_color ?? null);
+  }, [me?.current_tenant?.id, me?.current_tenant?.primary_color]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -175,6 +192,8 @@ export default function Layout() {
               <span className="kbd">K</span>
             </span>
           </button>
+
+          <TenantSwitcher />
 
           <button className="btn-ghost !p-2" onClick={toggle} title="Тема" aria-label="Переключить тему">
             {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
@@ -324,8 +343,20 @@ function Sidebar({
           showLabels ? "px-5" : "justify-center px-2",
         )}
       >
-        <LogoMark size={32} className="shadow-soft rounded-lg" />
-        {showLabels && <span className="text-base font-semibold tracking-tight">Qadam CRM</span>}
+        {me?.current_tenant?.logo_url ? (
+          <img
+            src={me.current_tenant.logo_url}
+            alt=""
+            className="h-8 w-8 rounded-lg object-contain shadow-soft"
+          />
+        ) : (
+          <LogoMark size={32} className="shadow-soft rounded-lg" />
+        )}
+        {showLabels && (
+          <span className="text-base font-semibold tracking-tight truncate">
+            {me?.current_tenant?.company_display_name || me?.current_tenant?.name || "Qadam CRM"}
+          </span>
+        )}
         {!desktop && onClose && (
           <button className="btn-ghost ml-auto !p-1.5" onClick={onClose} aria-label="Закрыть меню">
             <X size={16} />
@@ -335,6 +366,7 @@ function Sidebar({
 
       <nav className={clsx("flex-1 space-y-0.5 overflow-y-auto", showLabels ? "px-2" : "px-1.5")}>
         {NAV.map((n) => {
+          if (n.platformAdminOnly && !me?.is_platform_admin) return null;
           if (n.code && !can(n.code as any)) return null;
           const Icon = n.icon;
           return (

@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from ..database import get_db
 from ..models import Project, User, Task, TenantMembership
+from ..core.plans import check_project_limit
 from ..schemas.project import ProjectOut, ProjectCreate, ProjectUpdate
 from ..schemas.common import Message, Page, PageParams, page_params
 from .deps import TenantContext, require, log_action
@@ -107,6 +108,7 @@ def get_project(project_id: int, ctx: TenantContext = Depends(require("projects.
 @router.post("", response_model=ProjectOut, status_code=201)
 def create_project(payload: ProjectCreate, ctx: TenantContext = Depends(require("projects.create")), db: Session = Depends(get_db)):
     actor = ctx.user
+    check_project_limit(db, ctx.tenant)
     owner_id = payload.owner_id or actor.id
     _assert_user_in_tenant(db, ctx.tenant.id, owner_id, "Владелец не является членом компании")
 

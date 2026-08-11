@@ -59,3 +59,11 @@ export const departmentSchema = z.object({
   name: z.string().trim().min(2, "Минимум 2 символа").max(150),
 });
 export type DepartmentForm = z.infer<typeof departmentSchema>;
+
+export const registerSchema = z.object({
+  company_name: z.string().trim().min(2, "Минимум 2 символа").max(200),
+  full_name: z.string().trim().min(2, "Минимум 2 символа").max(200),
+  email: emailSchema,
+  password: passwordSchema,
+});
+export type RegisterForm = z.infer<typeof registerSchema>;

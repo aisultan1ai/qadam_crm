@@ -9,6 +9,7 @@ from ..models import Task, User, ChecklistItem, Notification, Project, TenantMem
 from ..models.task import TaskStatus, TaskPriority
 from ..core.permissions import user_has
 from ..core.ws_hub import publish_to_user
+from ..core.cache import invalidate_analytics
 from ..schemas.task import (
     TaskOut, TaskListItem, TaskCreate, TaskUpdate, TaskBulkUpdate,
     ChecklistItemCreate, ChecklistItemOut,
@@ -146,9 +147,10 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
         _notify(db, ctx.tenant.id, task.assignee_id, "assigned", "Новая задача", task.title, task.id)
     db.commit()
     db.refresh(task)
+    invalidate_analytics(ctx.tenant.id)
     if task.assignee_id and task.assignee_id != user.id:
-        publish_to_user(task.assignee_id, "notification.new", {"task_id": task.id})
-        publish_to_user(task.assignee_id, "task.assigned", {"task_id": task.id})
+        publish_to_user(ctx.tenant.id, task.assignee_id, "notification.new", {"task_id": task.id})
+        publish_to_user(ctx.tenant.id, task.assignee_id, "task.assigned", {"task_id": task.id})
     return task
 
 
@@ -204,13 +206,15 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="task", entity_id=task.id, task_id=task.id, detail=", ".join(changes))
     db.commit()
     db.refresh(task)
+    if changes:
+        invalidate_analytics(ctx.tenant.id)
 
     if changes:
         subscribers = {uid for uid in (task.assignee_id, task.author_id) if uid and uid != user.id}
         for uid in subscribers:
-            publish_to_user(uid, "task.updated", {"task_id": task.id, "changes": changes})
+            publish_to_user(ctx.tenant.id, uid, "task.updated", {"task_id": task.id, "changes": changes})
             if any(c.startswith("статус") for c in changes) or any(c == "исполнитель" for c in changes):
-                publish_to_user(uid, "notification.new", {"task_id": task.id})
+                publish_to_user(ctx.tenant.id, uid, "notification.new", {"task_id": task.id})
 
     return task
 
@@ -261,9 +265,10 @@ def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("t
 
     log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="bulk_update", entity="task", detail=f"{len(tasks)} задач")
     db.commit()
+    invalidate_analytics(ctx.tenant.id)
 
     for uid, ev, payload_ in ws_events:
-        publish_to_user(uid, ev, payload_)
+        publish_to_user(ctx.tenant.id, uid, ev, payload_)
 
     return Message(message=f"Обновлено задач: {len(tasks)}")
 
@@ -277,6 +282,7 @@ def delete_task(task_id: int, ctx: TenantContext = Depends(require("tasks.delete
     log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="delete", entity="task", entity_id=task.id, detail=task.title)
     db.delete(task)
     db.commit()
+    invalidate_analytics(ctx.tenant.id)
     return Message(message="Задача удалена")
 
 

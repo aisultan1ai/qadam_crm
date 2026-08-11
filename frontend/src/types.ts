@@ -19,6 +19,7 @@ export type User = {
   name: string;
   is_active: boolean;
   is_superuser: boolean;
+  is_platform_admin?: boolean;
   avatar_url?: string | null;
   department?: Department | null;
   department_id?: number | null;
@@ -27,7 +28,21 @@ export type User = {
   created_at: string;
 };
 
-export type Me = User & { permissions: string[] };
+export type Tenant = {
+  id: number;
+  name: string;
+  slug: string;
+  plan: string;
+  logo_url?: string | null;
+  primary_color?: string | null;
+  company_display_name?: string | null;
+  is_owner: boolean;
+};
+
+export type Me = User & {
+  permissions: string[];
+  current_tenant?: Tenant | null;
+};
 
 export type Project = {
   id: number;

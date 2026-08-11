@@ -13,9 +13,13 @@ from .config import settings
 from .core.limiter import limiter
 from .core.errors import install_error_handlers
 from .core.redis_client import get_redis
-from .core.scheduler import start_scheduler, stop_scheduler
+from .core.subdomain import SubdomainTenantMiddleware
 from .database import engine
-from .api import auth, roles, users, projects, tasks, comments, attachments, notifications, analytics, search, ws, exports, imports
+from .api import (
+    auth, roles, users, projects, tasks, comments, attachments,
+    notifications, analytics, search, ws, exports, imports,
+    invitations, tenants as tenants_api, admin as admin_api, billing,
+)
 
 
 logging.basicConfig(
@@ -62,11 +66,7 @@ DOCS_CSP = (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    start_scheduler()
-    try:
-        yield
-    finally:
-        stop_scheduler()
+    yield
 
 
 def create_app() -> FastAPI:
@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
 
     app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
+    app.add_middleware(SubdomainTenantMiddleware)
 
     install_error_handlers(app)
 
@@ -105,9 +106,11 @@ def create_app() -> FastAPI:
         response.headers.setdefault("Content-Security-Policy", csp)
         return response
 
-    avatars_dir = Path(settings.UPLOAD_DIR) / "avatars"
-    avatars_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/media/avatars", StaticFiles(directory=str(avatars_dir)), name="media-avatars")
+    uploads_dir = Path(settings.UPLOAD_DIR)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    # /media/{tenant_id}/... (аватары, брендинг). Аттачменты не отдаём статикой —
+    # там нужны permission-проверки, они идут через /api/tasks/{id}/attachments/{aid}.
+    app.mount("/media", StaticFiles(directory=str(uploads_dir)), name="media")
 
     for r in (
         auth.router,
@@ -123,6 +126,10 @@ def create_app() -> FastAPI:
         ws.router,
         exports.router,
         imports.router,
+        invitations.router,
+        tenants_api.router,
+        admin_api.router,
+        billing.router,
     ):
         app.include_router(r)
 

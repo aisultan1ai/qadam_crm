@@ -1,7 +1,11 @@
-"""Простой in-memory WebSocket-хаб для рассылки событий пользователям.
+"""WebSocket-хаб с изоляцией по tenant.
 
-События идут через Redis pub/sub — так работает даже при нескольких uvicorn-воркерах.
-Формат: JSON {"type": "...", "payload": {...}}. Комнаты — по user_id.
+События идут через Redis pub/sub. Каналы построены так, чтобы данные одного tenant'а
+никогда не могли попасть подписчику другого:
+    ws:tenant:{tenant_id}:user:{user_id}      — точечное сообщение конкретному юзеру
+    ws:tenant:{tenant_id}:broadcast           — всем подписчикам tenant'а
+
+Формат сообщения: JSON {"type": "...", "payload": {...}}.
 """
 from __future__ import annotations
 
@@ -16,35 +20,46 @@ from .redis_client import get_redis
 
 log = logging.getLogger("qadam.ws")
 
-CHANNEL_PREFIX = "ws:user:"
+USER_CHANNEL_PREFIX = "ws:tenant:"
+
+
+def _user_channel(tenant_id: int, user_id: int) -> str:
+    return f"ws:tenant:{tenant_id}:user:{user_id}"
+
+
+def _broadcast_channel(tenant_id: int) -> str:
+    return f"ws:tenant:{tenant_id}:broadcast"
 
 
 class WSHub:
     def __init__(self) -> None:
-        self._rooms: dict[int, set[WebSocket]] = {}
+        # (tenant_id, user_id) -> set of websockets
+        self._rooms: dict[tuple[int, int], set[WebSocket]] = {}
         self._lock = asyncio.Lock()
         self._listener_task: asyncio.Task | None = None
         self._pubsub = None
 
-    async def connect(self, user_id: int, ws: WebSocket) -> None:
+    async def connect(self, tenant_id: int, user_id: int, ws: WebSocket) -> None:
         await ws.accept()
         async with self._lock:
-            self._rooms.setdefault(user_id, set()).add(ws)
-            await self._subscribe(user_id)
+            self._rooms.setdefault((tenant_id, user_id), set()).add(ws)
+            await self._subscribe(tenant_id, user_id)
 
-    async def disconnect(self, user_id: int, ws: WebSocket) -> None:
+    async def disconnect(self, tenant_id: int, user_id: int, ws: WebSocket) -> None:
         async with self._lock:
-            room = self._rooms.get(user_id)
+            key = (tenant_id, user_id)
+            room = self._rooms.get(key)
             if room:
                 room.discard(ws)
                 if not room:
-                    del self._rooms[user_id]
+                    del self._rooms[key]
 
-    async def _subscribe(self, user_id: int) -> None:
+    async def _subscribe(self, tenant_id: int, user_id: int) -> None:
         if self._pubsub is None:
             r = get_redis()
             self._pubsub = r.pubsub(ignore_subscribe_messages=True)
-        self._pubsub.subscribe(f"{CHANNEL_PREFIX}{user_id}")
+        self._pubsub.subscribe(_user_channel(tenant_id, user_id))
+        self._pubsub.subscribe(_broadcast_channel(tenant_id))
         if self._listener_task is None or self._listener_task.done():
             self._listener_task = asyncio.create_task(self._listener_loop())
 
@@ -59,25 +74,40 @@ class WSHub:
                 channel = msg.get("channel", "")
                 if isinstance(channel, bytes):
                     channel = channel.decode()
-                if not channel.startswith(CHANNEL_PREFIX):
-                    continue
-                try:
-                    user_id = int(channel[len(CHANNEL_PREFIX):])
-                except ValueError:
-                    continue
                 data = msg.get("data")
-                await self._broadcast_local(user_id, data if isinstance(data, str) else str(data))
+                text = data if isinstance(data, str) else str(data)
+                await self._route(channel, text)
         except Exception:
             log.exception("ws listener loop failed")
 
-    async def _broadcast_local(self, user_id: int, data: str) -> None:
-        room = self._rooms.get(user_id)
+    async def _route(self, channel: str, text: str) -> None:
+        parts = channel.split(":")
+        # ws:tenant:{tid}:user:{uid}
+        if len(parts) == 5 and parts[3] == "user":
+            try:
+                tenant_id = int(parts[2])
+                user_id = int(parts[4])
+            except ValueError:
+                return
+            room = self._rooms.get((tenant_id, user_id))
+            await self._send_all(room, text)
+        # ws:tenant:{tid}:broadcast
+        elif len(parts) == 4 and parts[3] == "broadcast":
+            try:
+                tenant_id = int(parts[2])
+            except ValueError:
+                return
+            for (t_id, _u_id), room in list(self._rooms.items()):
+                if t_id == tenant_id:
+                    await self._send_all(room, text)
+
+    async def _send_all(self, room: set[WebSocket] | None, text: str) -> None:
         if not room:
             return
         dead: list[WebSocket] = []
         for ws in list(room):
             try:
-                await ws.send_text(data)
+                await ws.send_text(text)
             except Exception:
                 dead.append(ws)
         for ws in dead:
@@ -87,9 +117,23 @@ class WSHub:
 hub = WSHub()
 
 
-def publish_to_user(user_id: int, event_type: str, payload: dict[str, Any] | None = None) -> None:
-    """Публикация события — sync, из любого места кода (эндпоинт, фоновый воркер)."""
+def publish_to_user(tenant_id: int, user_id: int, event_type: str, payload: dict[str, Any] | None = None) -> None:
+    """Точечное сообщение пользователю в контексте tenant'а."""
     try:
-        get_redis().publish(f"{CHANNEL_PREFIX}{user_id}", json.dumps({"type": event_type, "payload": payload or {}}))
+        get_redis().publish(
+            _user_channel(tenant_id, user_id),
+            json.dumps({"type": event_type, "payload": payload or {}}),
+        )
     except Exception:
         log.exception("publish_to_user failed")
+
+
+def publish_to_tenant(tenant_id: int, event_type: str, payload: dict[str, Any] | None = None) -> None:
+    """Broadcast всем подписчикам tenant'а."""
+    try:
+        get_redis().publish(
+            _broadcast_channel(tenant_id),
+            json.dumps({"type": event_type, "payload": payload or {}}),
+        )
+    except Exception:
+        log.exception("publish_to_tenant failed")
