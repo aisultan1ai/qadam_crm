@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -8,7 +9,7 @@ from ..config import settings
 from ..database import get_db
 from ..core.security import decode_token, is_blacklisted, TOKEN_TYPE_ACCESS
 from ..core.permissions import user_has
-from ..models import User, ActivityLog
+from ..models import User, ActivityLog, Tenant, TenantMembership
 
 # auto_error=False — если Bearer не пришёл, не роняем, а проверим cookie.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
@@ -20,6 +21,18 @@ def _extract_token(request: Request, bearer: Optional[str]) -> Optional[str]:
     return cookie_token or bearer
 
 
+def _decode_and_validate(token: str) -> dict:
+    try:
+        payload = decode_token(token)
+    except JWTError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+    if payload.get("typ") not in (None, TOKEN_TYPE_ACCESS):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong token type")
+    if is_blacklisted(payload.get("jti")):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token revoked")
+    return payload
+
+
 def get_current_user(
     request: Request,
     token: str | None = Depends(oauth2_scheme),
@@ -28,22 +41,70 @@ def get_current_user(
     tok = _extract_token(request, token)
     if not tok:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    payload = _decode_and_validate(tok)
     try:
-        payload = decode_token(tok)
         user_id = int(payload.get("sub"))
-    except (JWTError, TypeError, ValueError):
+    except (TypeError, ValueError):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
-
-    if payload.get("typ") not in (None, TOKEN_TYPE_ACCESS):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong token type")
-
-    if is_blacklisted(payload.get("jti")):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token revoked")
 
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
     return user
+
+
+@dataclass
+class TenantContext:
+    user: User
+    tenant: Tenant
+    membership: TenantMembership
+
+
+def get_current_context(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> TenantContext:
+    """Возвращает пользователя, tenant и membership из JWT.
+
+    Валидирует, что tenant активен и пользователь состоит в нём.
+    Использовать во всех защищённых endpoint'ах вместо get_current_user,
+    когда нужна изоляция данных по tenant'у.
+    """
+    tok = _extract_token(request, token)
+    if not tok:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    payload = _decode_and_validate(tok)
+    try:
+        user_id = int(payload.get("sub"))
+    except (TypeError, ValueError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+
+    user = db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
+
+    tenant_id = payload.get("tid")
+    if tenant_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No active tenant in token")
+
+    membership = (
+        db.query(TenantMembership)
+        .filter(TenantMembership.user_id == user.id, TenantMembership.tenant_id == tenant_id)
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к компании")
+
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant or not tenant.is_active:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Компания недоступна")
+
+    return TenantContext(user=user, tenant=tenant, membership=membership)
+
+
+def get_current_tenant(ctx: TenantContext = Depends(get_current_context)) -> Tenant:
+    return ctx.tenant
 
 
 def get_current_token(
@@ -54,22 +115,41 @@ def get_current_token(
     return _extract_token(request, token)
 
 
-def require(*codes: str) -> Callable[..., User]:
-    def _dep(user: User = Depends(get_current_user)) -> User:
-        if not user_has(user, codes):
+def require(*codes: str) -> Callable[..., TenantContext]:
+    """Проверка permissions + возврат tenant-context.
+
+    Возвращает TenantContext — эндпоинты, которым важен tenant_id, берут user/tenant из него.
+    Для endpoint'ов, где нужен только User (например /me), используем get_current_user.
+    """
+    def _dep(ctx: TenantContext = Depends(get_current_context)) -> TenantContext:
+        if not user_has(ctx.user, codes):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
-        return user
+        return ctx
     return _dep
 
 
-def require_any(codes: Iterable[str]) -> Callable[..., User]:
+def require_any(codes: Iterable[str]) -> Callable[..., TenantContext]:
     return require(*codes)
 
 
-def log_action(db: Session, *, user_id: int | None, action: str, entity: str | None = None,
-               entity_id: int | None = None, detail: str | None = None, task_id: int | None = None) -> None:
+def log_action(
+    db: Session,
+    *,
+    tenant_id: int | None,
+    user_id: int | None,
+    action: str,
+    entity: str | None = None,
+    entity_id: int | None = None,
+    detail: str | None = None,
+    task_id: int | None = None,
+) -> None:
     entry = ActivityLog(
-        user_id=user_id, action=action, entity=entity, entity_id=entity_id,
-        detail=detail, task_id=task_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action=action,
+        entity=entity,
+        entity_id=entity_id,
+        detail=detail,
+        task_id=task_id,
     )
     db.add(entry)

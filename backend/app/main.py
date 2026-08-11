@@ -15,7 +15,7 @@ from .core.errors import install_error_handlers
 from .core.redis_client import get_redis
 from .core.scheduler import start_scheduler, stop_scheduler
 from .database import engine
-from .api import auth, roles, users, projects, tasks, comments, attachments, notifications, analytics, search, ws
+from .api import auth, roles, users, projects, tasks, comments, attachments, notifications, analytics, search, ws, exports, imports
 
 
 logging.basicConfig(
@@ -121,6 +121,8 @@ def create_app() -> FastAPI:
         analytics.router,
         search.router,
         ws.router,
+        exports.router,
+        imports.router,
     ):
         app.include_router(r)
 

@@ -4,12 +4,12 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from ..database import get_db
-from ..models import Task, Comment, User, Notification, CommentReaction
+from ..models import Task, Comment, User, Notification, CommentReaction, TenantMembership
 from ..core.permissions import user_has
 from ..core.ws_hub import publish_to_user
 from ..schemas.task import CommentOut, CommentCreate
 from ..schemas.common import Message
-from .deps import require, get_current_user, log_action
+from .deps import TenantContext, require, get_current_context, log_action
 
 router = APIRouter(prefix="/api/tasks/{task_id}/comments", tags=["comments"])
 
@@ -20,37 +20,66 @@ MAX_EMOJI_LEN = 8
 MENTION_RE = re.compile(r"@([A-Za-z0-9_.\-]+)")
 
 
-@router.get("", response_model=List[CommentOut])
-def list_comments(task_id: int, _: User = Depends(require("comments.view")), db: Session = Depends(get_db)):
+def _load_task_in_tenant(db: Session, task_id: int, tenant_id: int) -> Task:
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.tenant_id != tenant_id:
         raise HTTPException(404, "Задача не найдена")
+    return task
+
+
+@router.get("", response_model=List[CommentOut])
+def list_comments(task_id: int, ctx: TenantContext = Depends(require("comments.view")), db: Session = Depends(get_db)):
+    task = _load_task_in_tenant(db, task_id, ctx.tenant.id)
+    # comments уже загружены через relationship; фильтр по task достаточен,
+    # т.к. tenant проверен на task.
     return task.comments
 
 
 @router.post("", response_model=CommentOut, status_code=201)
-def create_comment(task_id: int, payload: CommentCreate, user: User = Depends(require("comments.create")), db: Session = Depends(get_db)):
-    task = db.get(Task, task_id)
-    if not task:
-        raise HTTPException(404, "Задача не найдена")
-    comment = Comment(task_id=task.id, author_id=user.id, body=payload.body)
+def create_comment(task_id: int, payload: CommentCreate, ctx: TenantContext = Depends(require("comments.create")), db: Session = Depends(get_db)):
+    user = ctx.user
+    task = _load_task_in_tenant(db, task_id, ctx.tenant.id)
+    comment = Comment(tenant_id=ctx.tenant.id, task_id=task.id, author_id=user.id, body=payload.body)
     db.add(comment)
 
     notify_user_ids: set[int] = set()
     if task.assignee_id and task.assignee_id != user.id:
-        db.add(Notification(user_id=task.assignee_id, kind="comment", title=f"Новый комментарий: {task.title}", body=payload.body[:200], task_id=task.id))
+        db.add(Notification(
+            tenant_id=ctx.tenant.id,
+            user_id=task.assignee_id,
+            kind="comment",
+            title=f"Новый комментарий: {task.title}",
+            body=payload.body[:200],
+            task_id=task.id,
+        ))
         notify_user_ids.add(task.assignee_id)
 
     handles = set(MENTION_RE.findall(payload.body))
     if handles:
         emails = [h.lower() for h in handles]
-        mentioned = db.query(User).filter(User.email.in_(emails)).all()
+        # Только пользователи, состоящие в текущем tenant'е
+        mentioned = (
+            db.query(User)
+            .join(TenantMembership, TenantMembership.user_id == User.id)
+            .filter(
+                TenantMembership.tenant_id == ctx.tenant.id,
+                User.email.in_(emails),
+            )
+            .all()
+        )
         for m in mentioned:
             if m.id != user.id:
-                db.add(Notification(user_id=m.id, kind="mention", title=f"Вас упомянули: {task.title}", body=payload.body[:200], task_id=task.id))
+                db.add(Notification(
+                    tenant_id=ctx.tenant.id,
+                    user_id=m.id,
+                    kind="mention",
+                    title=f"Вас упомянули: {task.title}",
+                    body=payload.body[:200],
+                    task_id=task.id,
+                ))
                 notify_user_ids.add(m.id)
 
-    log_action(db, user_id=user.id, action="comment", entity="task", entity_id=task.id, task_id=task.id)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="comment", entity="task", entity_id=task.id, task_id=task.id)
     db.commit()
     db.refresh(comment)
 
@@ -66,9 +95,10 @@ def create_comment(task_id: int, payload: CommentCreate, user: User = Depends(re
 
 
 @router.patch("/{comment_id}", response_model=CommentOut)
-def update_comment(task_id: int, comment_id: int, payload: CommentCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_comment(task_id: int, comment_id: int, payload: CommentCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    user = ctx.user
     comment = db.get(Comment, comment_id)
-    if not comment or comment.task_id != task_id:
+    if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
         raise HTTPException(404, "Комментарий не найден")
     is_own = comment.author_id == user.id
     if not (is_own and user_has(user, ["comments.update_own"])) and not user_has(user, ["comments.delete"]):
@@ -80,9 +110,9 @@ def update_comment(task_id: int, comment_id: int, payload: CommentCreate, user: 
 
 
 @router.delete("/{comment_id}", response_model=Message)
-def delete_comment(task_id: int, comment_id: int, user: User = Depends(require("comments.delete")), db: Session = Depends(get_db)):
+def delete_comment(task_id: int, comment_id: int, ctx: TenantContext = Depends(require("comments.delete")), db: Session = Depends(get_db)):
     comment = db.get(Comment, comment_id)
-    if not comment or comment.task_id != task_id:
+    if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
         raise HTTPException(404, "Комментарий не найден")
     db.delete(comment)
     db.commit()
@@ -103,11 +133,12 @@ def toggle_reaction(
     task_id: int,
     comment_id: int,
     emoji: str = Body(..., embed=True),
-    user: User = Depends(require("comments.create")),
+    ctx: TenantContext = Depends(require("comments.create")),
     db: Session = Depends(get_db),
 ):
+    user = ctx.user
     comment = db.get(Comment, comment_id)
-    if not comment or comment.task_id != task_id:
+    if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
         raise HTTPException(404, "Комментарий не найден")
     e = _validate_emoji(emoji)
 

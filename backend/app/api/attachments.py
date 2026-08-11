@@ -10,7 +10,7 @@ from ..config import settings
 from ..models import Task, Attachment, User
 from ..schemas.task import AttachmentOut
 from ..schemas.common import Message
-from .deps import require, log_action
+from .deps import TenantContext, require, log_action
 
 router = APIRouter(prefix="/api/tasks/{task_id}/attachments", tags=["attachments"])
 
@@ -95,11 +95,17 @@ def _validate_and_save(file: UploadFile, dest: Path, max_bytes: int) -> int:
     return written
 
 
-@router.post("", response_model=AttachmentOut, status_code=201)
-def upload(task_id: int, file: UploadFile = File(...), user: User = Depends(require("files.upload")), db: Session = Depends(get_db)):
+def _load_task_in_tenant(db: Session, task_id: int, tenant_id: int) -> Task:
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.tenant_id != tenant_id:
         raise HTTPException(404, "Задача не найдена")
+    return task
+
+
+@router.post("", response_model=AttachmentOut, status_code=201)
+def upload(task_id: int, file: UploadFile = File(...), ctx: TenantContext = Depends(require("files.upload")), db: Session = Depends(get_db)):
+    user = ctx.user
+    task = _load_task_in_tenant(db, task_id, ctx.tenant.id)
 
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -111,6 +117,7 @@ def upload(task_id: int, file: UploadFile = File(...), user: User = Depends(requ
     size = _validate_and_save(file, dest, settings.MAX_UPLOAD_BYTES)
 
     att = Attachment(
+        tenant_id=ctx.tenant.id,
         task_id=task.id,
         filename=file.filename or stored,
         stored_name=stored,
@@ -119,16 +126,16 @@ def upload(task_id: int, file: UploadFile = File(...), user: User = Depends(requ
         uploaded_by=user.id,
     )
     db.add(att)
-    log_action(db, user_id=user.id, action="upload", entity="attachment", entity_id=att.id, task_id=task.id, detail=file.filename)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="upload", entity="attachment", entity_id=att.id, task_id=task.id, detail=file.filename)
     db.commit()
     db.refresh(att)
     return att
 
 
 @router.get("/{attachment_id}")
-def download(task_id: int, attachment_id: int, user: User = Depends(require("files.download")), db: Session = Depends(get_db)):
+def download(task_id: int, attachment_id: int, ctx: TenantContext = Depends(require("files.download")), db: Session = Depends(get_db)):
     att = db.get(Attachment, attachment_id)
-    if not att or att.task_id != task_id:
+    if not att or att.tenant_id != ctx.tenant.id or att.task_id != task_id:
         raise HTTPException(404, "Файл не найден")
     path = Path(settings.UPLOAD_DIR) / att.stored_name
     if not path.exists():
@@ -137,9 +144,10 @@ def download(task_id: int, attachment_id: int, user: User = Depends(require("fil
 
 
 @router.delete("/{attachment_id}", response_model=Message)
-def remove(task_id: int, attachment_id: int, user: User = Depends(require("files.delete")), db: Session = Depends(get_db)):
+def remove(task_id: int, attachment_id: int, ctx: TenantContext = Depends(require("files.delete")), db: Session = Depends(get_db)):
+    user = ctx.user
     att = db.get(Attachment, attachment_id)
-    if not att or att.task_id != task_id:
+    if not att or att.tenant_id != ctx.tenant.id or att.task_id != task_id:
         raise HTTPException(404, "Файл не найден")
     path = Path(settings.UPLOAD_DIR) / att.stored_name
     if path.exists():
@@ -147,7 +155,7 @@ def remove(task_id: int, attachment_id: int, user: User = Depends(require("files
             os.remove(path)
         except OSError:
             pass
-    log_action(db, user_id=user.id, action="delete", entity="attachment", entity_id=att.id, task_id=task_id)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="delete", entity="attachment", entity_id=att.id, task_id=task_id)
     db.delete(att)
     db.commit()
     return Message(message="Файл удалён")

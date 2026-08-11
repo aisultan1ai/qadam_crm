@@ -35,17 +35,23 @@ def _encode(payload: dict[str, Any]) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_access_token(subject: str | int) -> Tuple[str, str, datetime]:
+def create_access_token(subject: str | int, tenant_id: Optional[int] = None) -> Tuple[str, str, datetime]:
     jti = uuid.uuid4().hex
     expire = _now() + timedelta(minutes=settings.JWT_ACCESS_MINUTES)
-    token = _encode({"sub": str(subject), "exp": expire, "jti": jti, "typ": TOKEN_TYPE_ACCESS})
+    payload: dict[str, Any] = {"sub": str(subject), "exp": expire, "jti": jti, "typ": TOKEN_TYPE_ACCESS}
+    if tenant_id is not None:
+        payload["tid"] = tenant_id
+    token = _encode(payload)
     return token, jti, expire
 
 
-def create_refresh_token(subject: str | int) -> Tuple[str, str, datetime]:
+def create_refresh_token(subject: str | int, tenant_id: Optional[int] = None) -> Tuple[str, str, datetime]:
     jti = uuid.uuid4().hex
     expire = _now() + timedelta(days=settings.JWT_REFRESH_DAYS)
-    token = _encode({"sub": str(subject), "exp": expire, "jti": jti, "typ": TOKEN_TYPE_REFRESH})
+    payload: dict[str, Any] = {"sub": str(subject), "exp": expire, "jti": jti, "typ": TOKEN_TYPE_REFRESH}
+    if tenant_id is not None:
+        payload["tid"] = tenant_id
+    token = _encode(payload)
     return token, jti, expire
 
 

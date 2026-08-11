@@ -19,9 +19,12 @@ from alembic.script import ScriptDirectory
 from .config import settings
 from .database import Base, engine, SessionLocal
 from . import models  # noqa: F401 -- register models
-from .models import Role, Permission, User
+from .models import Role, Permission, User, Tenant, TenantMembership
 from .core.security import hash_password
 from .core.permissions import PERMISSIONS
+
+DEFAULT_TENANT_ID = 1
+DEFAULT_TENANT_SLUG = "default"
 
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -98,12 +101,16 @@ def sync_permissions(db) -> None:
 
 
 def seed_roles(db) -> None:
+    """Создать системные роли-шаблоны (tenant_id=NULL, is_system=True).
+
+    При создании нового tenant'а эти шаблоны копируются в per-tenant роли.
+    """
     all_perms = {p.code: p for p in db.query(Permission).all()}
 
     def ensure_role(name: str, description: str, codes: list[str]) -> Role:
-        role = db.query(Role).filter(Role.name == name).first()
+        role = db.query(Role).filter(Role.name == name, Role.tenant_id.is_(None)).first()
         if not role:
-            role = Role(name=name, description=description)
+            role = Role(name=name, description=description, tenant_id=None, is_system=True)
             role.permissions = [all_perms[c] for c in codes if c in all_perms]
             db.add(role)
             db.flush()
@@ -137,9 +144,63 @@ def seed_roles(db) -> None:
     db.commit()
 
 
-def seed_admin(db) -> None:
+def seed_default_tenant(db) -> Tenant:
+    """Создать default tenant (id=1) если ни одного нет.
+
+    Для fresh БД (create_all + stamp) — миграция 0004 не запускалась, tenants пуст.
+    Для существующих БД миграция уже создала tenant id=1 — здесь идемпотентно.
+    """
+    tenant = db.get(Tenant, DEFAULT_TENANT_ID)
+    if tenant:
+        return tenant
+
+    tenant = Tenant(
+        id=DEFAULT_TENANT_ID,
+        name="Default",
+        slug=DEFAULT_TENANT_SLUG,
+        plan="enterprise",
+        is_active=True,
+    )
+    db.add(tenant)
+    db.commit()
+
+    # На postgres нужно синхронизировать sequence, иначе следующий insert упадёт с dup key.
+    from sqlalchemy import text as _text
+    try:
+        db.execute(_text(
+            "SELECT setval('tenants_id_seq', GREATEST((SELECT MAX(id) FROM tenants), 1))"
+        ))
+        db.commit()
+    except Exception:
+        pass
+
+    return tenant
+
+
+def _ensure_tenant_roles(db, tenant_id: int) -> None:
+    """Скопировать системные шаблоны ролей в per-tenant роли для указанного tenant'а."""
+    system_roles = db.query(Role).filter(Role.tenant_id.is_(None), Role.is_system.is_(True)).all()
+    for sys_role in system_roles:
+        exists = db.query(Role).filter(Role.tenant_id == tenant_id, Role.name == sys_role.name).first()
+        if exists:
+            continue
+        tenant_role = Role(
+            tenant_id=tenant_id,
+            name=sys_role.name,
+            description=sys_role.description,
+            is_system=False,
+        )
+        tenant_role.permissions = list(sys_role.permissions)
+        db.add(tenant_role)
+    db.commit()
+
+
+def seed_admin(db, tenant: Tenant) -> None:
     email = settings.ADMIN_EMAIL.lower().strip()
-    if db.query(User).filter(User.email == email).first():
+    admin = db.query(User).filter(User.email == email).first()
+
+    if admin:
+        _ensure_admin_membership(db, admin, tenant)
         return
 
     password = settings.ADMIN_PASSWORD
@@ -148,7 +209,12 @@ def seed_admin(db) -> None:
         password = secrets.token_urlsafe(16)
         generated = True
 
-    role_admin = db.query(Role).filter(Role.name == "Администратор").first()
+    role_admin = (
+        db.query(Role)
+        .filter(Role.tenant_id == tenant.id, Role.name == "Администратор")
+        .first()
+    ) or db.query(Role).filter(Role.tenant_id.is_(None), Role.name == "Администратор").first()
+
     admin = User(
         email=email,
         name="Администратор",
@@ -159,6 +225,8 @@ def seed_admin(db) -> None:
     )
     db.add(admin)
     db.commit()
+
+    _ensure_admin_membership(db, admin, tenant)
 
     if generated:
         print("=" * 70)
@@ -171,6 +239,33 @@ def seed_admin(db) -> None:
         print(f"[bootstrap] Создан администратор {email} (пароль из ADMIN_PASSWORD)")
 
 
+def _ensure_admin_membership(db, admin: User, tenant: Tenant) -> None:
+    membership = (
+        db.query(TenantMembership)
+        .filter(TenantMembership.tenant_id == tenant.id, TenantMembership.user_id == admin.id)
+        .first()
+    )
+    role_admin = (
+        db.query(Role)
+        .filter(Role.tenant_id == tenant.id, Role.name == "Администратор")
+        .first()
+    )
+    if not membership:
+        db.add(TenantMembership(
+            tenant_id=tenant.id,
+            user_id=admin.id,
+            role_id=role_admin.id if role_admin else None,
+            is_owner=True,
+        ))
+    elif not membership.is_owner:
+        membership.is_owner = True
+
+    if tenant.owner_id is None:
+        tenant.owner_id = admin.id
+
+    db.commit()
+
+
 def main() -> None:
     wait_for_db()
     run_migrations()
@@ -178,7 +273,9 @@ def main() -> None:
     with SessionLocal() as db:
         sync_permissions(db)
         seed_roles(db)
-        seed_admin(db)
+        tenant = seed_default_tenant(db)
+        _ensure_tenant_roles(db, tenant.id)
+        seed_admin(db, tenant)
 
     print("[bootstrap] Done.")
 

@@ -18,6 +18,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)

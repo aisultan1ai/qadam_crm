@@ -10,6 +10,7 @@ class Attachment(Base):
     __tablename__ = "attachments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
     filename: Mapped[str] = mapped_column(String(500))
     stored_name: Mapped[str] = mapped_column(String(500))

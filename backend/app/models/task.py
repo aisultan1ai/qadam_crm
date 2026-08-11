@@ -25,6 +25,7 @@ class TaskPriority(str, enum.Enum):
 class Task(Base):
     __tablename__ = "tasks"
     __table_args__ = (
+        Index("ix_tasks_tenant_status", "tenant_id", "status"),
         Index("ix_tasks_project_status", "project_id", "status"),
         Index("ix_tasks_assignee_status", "assignee_id", "status"),
         Index("ix_tasks_project_order", "project_id", "order_index"),
@@ -32,6 +33,7 @@ class Task(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
     title: Mapped[str] = mapped_column(String(300), index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

@@ -1,3 +1,4 @@
+from .tenant import Tenant, TenantMembership
 from .user import User, Department
 from .role import Role, Permission, user_roles, role_permissions
 from .project import Project, project_members
@@ -9,6 +10,8 @@ from .activity import ActivityLog
 from .reaction import CommentReaction
 
 __all__ = [
+    "Tenant",
+    "TenantMembership",
     "User",
     "Department",
     "Role",

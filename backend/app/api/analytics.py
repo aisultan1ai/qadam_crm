@@ -4,29 +4,54 @@ from sqlalchemy import func, case
 from datetime import datetime, timedelta, timezone
 
 from ..database import get_db
-from ..models import Task, User, ActivityLog
+from ..models import Task, User, ActivityLog, TenantMembership
 from ..models.task import TaskStatus
-from .deps import require, get_current_user
+from .deps import TenantContext, require, get_current_context
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
 @router.get("/dashboard")
-def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def dashboard(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    tenant_id = ctx.tenant.id
     now = datetime.now(timezone.utc)
-    total = db.query(func.count(Task.id)).scalar() or 0
-    in_progress = db.query(func.count(Task.id)).filter(Task.status == TaskStatus.in_progress).scalar() or 0
-    done = db.query(func.count(Task.id)).filter(Task.status == TaskStatus.done).scalar() or 0
-    overdue = db.query(func.count(Task.id)).filter(
-        Task.deadline.is_not(None),
-        Task.deadline < now,
-        Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]),
-    ).scalar() or 0
+    total = db.query(func.count(Task.id)).filter(Task.tenant_id == tenant_id).scalar() or 0
+    in_progress = (
+        db.query(func.count(Task.id))
+        .filter(Task.tenant_id == tenant_id, Task.status == TaskStatus.in_progress)
+        .scalar() or 0
+    )
+    done = (
+        db.query(func.count(Task.id))
+        .filter(Task.tenant_id == tenant_id, Task.status == TaskStatus.done)
+        .scalar() or 0
+    )
+    overdue = (
+        db.query(func.count(Task.id))
+        .filter(
+            Task.tenant_id == tenant_id,
+            Task.deadline.is_not(None),
+            Task.deadline < now,
+            Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]),
+        )
+        .scalar() or 0
+    )
 
-    by_status_rows = db.query(Task.status, func.count(Task.id)).group_by(Task.status).all()
+    by_status_rows = (
+        db.query(Task.status, func.count(Task.id))
+        .filter(Task.tenant_id == tenant_id)
+        .group_by(Task.status)
+        .all()
+    )
     by_status = {s.value: c for s, c in by_status_rows}
 
-    recent = db.query(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(15).all()
+    recent = (
+        db.query(ActivityLog)
+        .filter(ActivityLog.tenant_id == tenant_id)
+        .order_by(ActivityLog.created_at.desc())
+        .limit(15)
+        .all()
+    )
     recent_out = [
         {
             "id": a.id,
@@ -51,18 +76,30 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
 
 
 @router.get("/employees")
-def employees(_: User = Depends(require("analytics.employees")), db: Session = Depends(get_db)):
+def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: Session = Depends(get_db)):
+    tenant_id = ctx.tenant.id
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=30)
-    rows = db.query(
-        User.id,
-        User.name,
-        User.email,
-        func.count(Task.id).label("total"),
-        func.sum(case((Task.status == TaskStatus.done, 1), else_=0)).label("done"),
-        func.sum(case((
-            (Task.deadline.is_not(None)) & (Task.deadline < now) & (Task.status.notin_([TaskStatus.done, TaskStatus.cancelled])), 1), else_=0)).label("overdue"),
-    ).outerjoin(Task, Task.assignee_id == User.id).group_by(User.id).all()
+    # Только пользователи, состоящие в этом tenant'е; задачи — тоже per-tenant.
+    rows = (
+        db.query(
+            User.id,
+            User.name,
+            User.email,
+            func.count(Task.id).label("total"),
+            func.sum(case((Task.status == TaskStatus.done, 1), else_=0)).label("done"),
+            func.sum(case((
+                (Task.deadline.is_not(None)) & (Task.deadline < now) & (Task.status.notin_([TaskStatus.done, TaskStatus.cancelled])), 1), else_=0)).label("overdue"),
+        )
+        .join(TenantMembership, TenantMembership.user_id == User.id)
+        .outerjoin(
+            Task,
+            (Task.assignee_id == User.id) & (Task.tenant_id == tenant_id),
+        )
+        .filter(TenantMembership.tenant_id == tenant_id)
+        .group_by(User.id)
+        .all()
+    )
 
     result = []
     for r in rows:

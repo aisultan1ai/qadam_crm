@@ -5,7 +5,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from ..database import get_db
-from ..models import Task, User, ChecklistItem, Notification
+from ..models import Task, User, ChecklistItem, Notification, Project, TenantMembership
 from ..models.task import TaskStatus, TaskPriority
 from ..core.permissions import user_has
 from ..core.ws_hub import publish_to_user
@@ -14,7 +14,7 @@ from ..schemas.task import (
     ChecklistItemCreate, ChecklistItemOut,
 )
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
-from .deps import require, get_current_user, log_action
+from .deps import TenantContext, require, get_current_context, log_action
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -39,10 +39,28 @@ def _apply_view_scope(query, user: User):
     return query.filter(Task.id == -1)
 
 
-def _notify(db: Session, user_id: int, kind: str, title: str, body: str | None = None, task_id: int | None = None):
+def _notify(db: Session, tenant_id: int, user_id: int, kind: str, title: str, body: str | None = None, task_id: int | None = None):
     if not user_id:
         return
-    db.add(Notification(user_id=user_id, kind=kind, title=title, body=body, task_id=task_id))
+    db.add(Notification(tenant_id=tenant_id, user_id=user_id, kind=kind, title=title, body=body, task_id=task_id))
+
+
+def _assert_user_in_tenant(db: Session, tenant_id: int, user_id: int, err: str = "Пользователь не в компании") -> None:
+    exists = (
+        db.query(TenantMembership.id)
+        .filter(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id)
+        .first()
+    )
+    if not exists:
+        raise HTTPException(400, err)
+
+
+def _assert_project_in_tenant(db: Session, tenant_id: int, project_id: int | None) -> None:
+    if project_id is None:
+        return
+    proj = db.get(Project, project_id)
+    if not proj or proj.tenant_id != tenant_id:
+        raise HTTPException(400, "Проект не найден в этой компании")
 
 
 @router.get("", response_model=Page[TaskListItem])
@@ -54,12 +72,13 @@ def list_tasks(
     priority: Optional[TaskPriority] = None,
     overdue: Optional[bool] = None,
     pagination: PageParams = Depends(page_params),
-    user: User = Depends(get_current_user),
+    ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
+    user = ctx.user
     if not user_has(user, ["tasks.view_all", "tasks.view_own"]):
         raise HTTPException(403, "Нет доступа к задачам")
-    query = db.query(Task).options(
+    query = db.query(Task).filter(Task.tenant_id == ctx.tenant.id).options(
         noload(Task.checklist),
         noload(Task.comments),
         noload(Task.attachments),
@@ -88,9 +107,10 @@ def list_tasks(
 
 
 @router.get("/{task_id}", response_model=TaskOut)
-def get_task(task_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_task(task_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    user = ctx.user
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Задача не найдена")
     if not _user_can_view_task(user, task):
         raise HTTPException(403, "Нет доступа")
@@ -98,10 +118,16 @@ def get_task(task_id: int, user: User = Depends(get_current_user), db: Session =
 
 
 @router.post("", response_model=TaskOut, status_code=201)
-def create_task(payload: TaskCreate, user: User = Depends(require("tasks.create")), db: Session = Depends(get_db)):
+def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks.create")), db: Session = Depends(get_db)):
+    user = ctx.user
     if payload.assignee_id and not user_has(user, ["tasks.assign"]) and payload.assignee_id != user.id:
         raise HTTPException(403, "Нет права назначать исполнителей")
+    if payload.assignee_id:
+        _assert_user_in_tenant(db, ctx.tenant.id, payload.assignee_id, "Исполнитель не является членом компании")
+    _assert_project_in_tenant(db, ctx.tenant.id, payload.project_id)
+
     task = Task(
+        tenant_id=ctx.tenant.id,
         title=payload.title,
         description=payload.description,
         status=payload.status,
@@ -115,9 +141,9 @@ def create_task(payload: TaskCreate, user: User = Depends(require("tasks.create"
         task.checklist.append(ChecklistItem(text=item.text, done=item.done))
     db.add(task)
     db.flush()
-    log_action(db, user_id=user.id, action="create", entity="task", entity_id=task.id, task_id=task.id, detail=task.title)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="create", entity="task", entity_id=task.id, task_id=task.id, detail=task.title)
     if task.assignee_id and task.assignee_id != user.id:
-        _notify(db, task.assignee_id, "assigned", "Новая задача", task.title, task.id)
+        _notify(db, ctx.tenant.id, task.assignee_id, "assigned", "Новая задача", task.title, task.id)
     db.commit()
     db.refresh(task)
     if task.assignee_id and task.assignee_id != user.id:
@@ -127,9 +153,10 @@ def create_task(payload: TaskCreate, user: User = Depends(require("tasks.create"
 
 
 @router.patch("/{task_id}", response_model=TaskOut)
-def update_task(task_id: int, payload: TaskUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    user = ctx.user
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Задача не найдена")
     if not user_has(user, ["tasks.update"]):
         raise HTTPException(403, "Нет права редактировать")
@@ -149,7 +176,7 @@ def update_task(task_id: int, payload: TaskUpdate, user: User = Depends(get_curr
         task.status = payload.status
         changes.append(f"статус {old} → {payload.status.value}")
         if task.assignee_id and task.assignee_id != user.id:
-            _notify(db, task.assignee_id, "status", f"Статус изменён: {task.title}", f"{old} → {payload.status.value}", task.id)
+            _notify(db, ctx.tenant.id, task.assignee_id, "status", f"Статус изменён: {task.title}", f"{old} → {payload.status.value}", task.id)
     if payload.priority is not None and payload.priority != task.priority:
         if not user_has(user, ["tasks.change_priority"]):
             raise HTTPException(403, "Нет права менять приоритет")
@@ -157,21 +184,24 @@ def update_task(task_id: int, payload: TaskUpdate, user: User = Depends(get_curr
         task.priority = payload.priority
         changes.append(f"приоритет {old} → {payload.priority.value}")
     if payload.project_id is not None:
+        _assert_project_in_tenant(db, ctx.tenant.id, payload.project_id)
         task.project_id = payload.project_id
     if payload.assignee_id is not None and payload.assignee_id != task.assignee_id:
         if not user_has(user, ["tasks.assign"]):
             raise HTTPException(403, "Нет права назначать исполнителей")
+        if payload.assignee_id:
+            _assert_user_in_tenant(db, ctx.tenant.id, payload.assignee_id, "Исполнитель не является членом компании")
         task.assignee_id = payload.assignee_id
         changes.append("исполнитель")
         if task.assignee_id and task.assignee_id != user.id:
-            _notify(db, task.assignee_id, "assigned", "Вам назначена задача", task.title, task.id)
+            _notify(db, ctx.tenant.id, task.assignee_id, "assigned", "Вам назначена задача", task.title, task.id)
     if payload.deadline is not None:
         task.deadline = payload.deadline
     if payload.order_index is not None:
         task.order_index = payload.order_index
 
     if changes:
-        log_action(db, user_id=user.id, action="update", entity="task", entity_id=task.id, task_id=task.id, detail=", ".join(changes))
+        log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="task", entity_id=task.id, task_id=task.id, detail=", ".join(changes))
     db.commit()
     db.refresh(task)
 
@@ -186,10 +216,16 @@ def update_task(task_id: int, payload: TaskUpdate, user: User = Depends(get_curr
 
 
 @router.post("/bulk", response_model=Message)
-def bulk_update(payload: TaskBulkUpdate, user: User = Depends(require("tasks.bulk_update")), db: Session = Depends(get_db)):
-    tasks = db.query(Task).filter(Task.id.in_(payload.ids)).all()
+def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("tasks.bulk_update")), db: Session = Depends(get_db)):
+    user = ctx.user
+    tasks = db.query(Task).filter(Task.tenant_id == ctx.tenant.id, Task.id.in_(payload.ids)).all()
     p = payload.patch
     ws_events: list[tuple[int, str, dict]] = []
+
+    if p.project_id is not None:
+        _assert_project_in_tenant(db, ctx.tenant.id, p.project_id)
+    if p.assignee_id:
+        _assert_user_in_tenant(db, ctx.tenant.id, p.assignee_id, "Исполнитель не является членом компании")
 
     for t in tasks:
         changes: list[str] = []
@@ -199,7 +235,7 @@ def bulk_update(payload: TaskBulkUpdate, user: User = Depends(require("tasks.bul
             t.status = p.status
             changes.append(f"статус {old} → {p.status.value}")
             if t.assignee_id and t.assignee_id != user.id:
-                _notify(db, t.assignee_id, "status", f"Статус изменён: {t.title}", f"{old} → {p.status.value}", t.id)
+                _notify(db, ctx.tenant.id, t.assignee_id, "status", f"Статус изменён: {t.title}", f"{old} → {p.status.value}", t.id)
         if p.priority is not None and p.priority != t.priority:
             old = t.priority.value
             t.priority = p.priority
@@ -208,7 +244,7 @@ def bulk_update(payload: TaskBulkUpdate, user: User = Depends(require("tasks.bul
             t.assignee_id = p.assignee_id
             changes.append("исполнитель")
             if t.assignee_id and t.assignee_id != user.id:
-                _notify(db, t.assignee_id, "assigned", "Вам назначена задача", t.title, t.id)
+                _notify(db, ctx.tenant.id, t.assignee_id, "assigned", "Вам назначена задача", t.title, t.id)
         if p.project_id is not None and p.project_id != t.project_id:
             t.project_id = p.project_id
             changes.append("проект")
@@ -217,13 +253,13 @@ def bulk_update(payload: TaskBulkUpdate, user: User = Depends(require("tasks.bul
             changes.append("дедлайн")
 
         if changes:
-            log_action(db, user_id=user.id, action="update", entity="task", entity_id=t.id, task_id=t.id, detail=", ".join(changes))
+            log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="task", entity_id=t.id, task_id=t.id, detail=", ".join(changes))
             for uid in {u for u in (t.assignee_id, t.author_id) if u and u != user.id}:
                 ws_events.append((uid, "task.updated", {"task_id": t.id, "changes": changes}))
                 if any(c.startswith("статус") for c in changes) or "исполнитель" in changes:
                     ws_events.append((uid, "notification.new", {"task_id": t.id}))
 
-    log_action(db, user_id=user.id, action="bulk_update", entity="task", detail=f"{len(tasks)} задач")
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="bulk_update", entity="task", detail=f"{len(tasks)} задач")
     db.commit()
 
     for uid, ev, payload_ in ws_events:
@@ -233,11 +269,12 @@ def bulk_update(payload: TaskBulkUpdate, user: User = Depends(require("tasks.bul
 
 
 @router.delete("/{task_id}", response_model=Message)
-def delete_task(task_id: int, user: User = Depends(require("tasks.delete")), db: Session = Depends(get_db)):
+def delete_task(task_id: int, ctx: TenantContext = Depends(require("tasks.delete")), db: Session = Depends(get_db)):
+    user = ctx.user
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Задача не найдена")
-    log_action(db, user_id=user.id, action="delete", entity="task", entity_id=task.id, detail=task.title)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="delete", entity="task", entity_id=task.id, detail=task.title)
     db.delete(task)
     db.commit()
     return Message(message="Задача удалена")
@@ -246,9 +283,9 @@ def delete_task(task_id: int, user: User = Depends(require("tasks.delete")), db:
 # --- Checklist ---
 
 @router.post("/{task_id}/checklist", response_model=ChecklistItemOut, status_code=201)
-def add_checklist(task_id: int, payload: ChecklistItemCreate, user: User = Depends(require("tasks.update")), db: Session = Depends(get_db)):
+def add_checklist(task_id: int, payload: ChecklistItemCreate, ctx: TenantContext = Depends(require("tasks.update")), db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Задача не найдена")
     item = ChecklistItem(task_id=task.id, text=payload.text, done=payload.done)
     db.add(item)
@@ -258,7 +295,10 @@ def add_checklist(task_id: int, payload: ChecklistItemCreate, user: User = Depen
 
 
 @router.patch("/{task_id}/checklist/{item_id}", response_model=ChecklistItemOut)
-def update_checklist(task_id: int, item_id: int, payload: ChecklistItemCreate, user: User = Depends(require("tasks.update")), db: Session = Depends(get_db)):
+def update_checklist(task_id: int, item_id: int, payload: ChecklistItemCreate, ctx: TenantContext = Depends(require("tasks.update")), db: Session = Depends(get_db)):
+    task = db.get(Task, task_id)
+    if not task or task.tenant_id != ctx.tenant.id:
+        raise HTTPException(404, "Задача не найдена")
     item = db.get(ChecklistItem, item_id)
     if not item or item.task_id != task_id:
         raise HTTPException(404, "Пункт не найден")
@@ -270,7 +310,10 @@ def update_checklist(task_id: int, item_id: int, payload: ChecklistItemCreate, u
 
 
 @router.delete("/{task_id}/checklist/{item_id}", response_model=Message)
-def delete_checklist(task_id: int, item_id: int, user: User = Depends(require("tasks.update")), db: Session = Depends(get_db)):
+def delete_checklist(task_id: int, item_id: int, ctx: TenantContext = Depends(require("tasks.update")), db: Session = Depends(get_db)):
+    task = db.get(Task, task_id)
+    if not task or task.tenant_id != ctx.tenant.id:
+        raise HTTPException(404, "Задача не найдена")
     item = db.get(ChecklistItem, item_id)
     if not item or item.task_id != task_id:
         raise HTTPException(404, "Пункт не найден")

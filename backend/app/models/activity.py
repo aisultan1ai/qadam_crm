@@ -9,11 +9,15 @@ from ..database import Base
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
     __table_args__ = (
+        Index("ix_activity_tenant_created", "tenant_id", "created_at"),
         Index("ix_activity_task_created", "task_id", "created_at"),
         Index("ix_activity_user_created", "user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(100))

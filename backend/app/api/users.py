@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..models import User, Role, Department
+from ..models import User, Role, Department, TenantMembership
 from ..core.security import hash_password, verify_password
 from ..schemas.user import UserOut, UserCreate, UserUpdate, MeUpdate, DepartmentOut, DepartmentCreate
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
-from .deps import require, get_current_user, log_action
+from .deps import TenantContext, require, get_current_user, get_current_context, log_action
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -33,16 +33,52 @@ def _avatar_file_path(avatar_url: Optional[str]) -> Optional[Path]:
     return Path(settings.UPLOAD_DIR) / "avatars" / avatar_url[len(AVATAR_URL_PREFIX):]
 
 
+def _load_tenant_user(db: Session, tenant_id: int, user_id: int) -> User:
+    """Загружает пользователя и проверяет его членство в tenant'е.
+
+    404 если пользователя нет или он не член tenant'а — чтобы не палить чужие id.
+    """
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    is_member = (
+        db.query(TenantMembership.id)
+        .filter(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id)
+        .first()
+    )
+    if not is_member:
+        raise HTTPException(404, "Пользователь не найден")
+    return user
+
+
+def _tenant_roles_query(db: Session, tenant_id: int, role_ids: list[int]):
+    """Роли, доступные для назначения в tenant'е: собственные роли tenant'а
+    плюс системные шаблоны (tenant_id IS NULL).
+    """
+    return (
+        db.query(Role)
+        .filter(
+            Role.id.in_(role_ids),
+            or_(Role.tenant_id == tenant_id, Role.tenant_id.is_(None)),
+        )
+    )
+
+
 @router.get("/users", response_model=Page[UserOut])
 def list_users(
     q: Optional[str] = None,
     role_id: Optional[int] = None,
     is_active: Optional[bool] = None,
     pagination: PageParams = Depends(page_params),
-    _: User = Depends(require("users.view")),
+    ctx: TenantContext = Depends(require("users.view")),
     db: Session = Depends(get_db),
 ):
-    query = db.query(User)
+    # Показываем только тех, кто состоит в текущем tenant'е.
+    query = (
+        db.query(User)
+        .join(TenantMembership, TenantMembership.user_id == User.id)
+        .filter(TenantMembership.tenant_id == ctx.tenant.id)
+    )
     if q:
         like = f"%{q.strip()}%"
         query = query.filter(or_(User.name.ilike(like), User.email.ilike(like)))
@@ -55,10 +91,27 @@ def list_users(
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
-def create_user(payload: UserCreate, actor: User = Depends(require("users.create")), db: Session = Depends(get_db)):
+def create_user(payload: UserCreate, ctx: TenantContext = Depends(require("users.create")), db: Session = Depends(get_db)):
+    actor = ctx.user
     email = payload.email.lower()
-    if db.query(User).filter(User.email == email).first():
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        # Пользователь уже есть глобально. Проверим, не член ли он этой компании.
+        already_member = (
+            db.query(TenantMembership.id)
+            .filter(TenantMembership.tenant_id == ctx.tenant.id, TenantMembership.user_id == existing.id)
+            .first()
+        )
+        if already_member:
+            raise HTTPException(400, "Пользователь с таким email уже в компании")
         raise HTTPException(400, "Пользователь с таким email уже существует")
+
+    # Департамент должен принадлежать текущему tenant'у.
+    if payload.department_id is not None:
+        dep = db.get(Department, payload.department_id)
+        if not dep or dep.tenant_id != ctx.tenant.id:
+            raise HTTPException(400, "Отдел не найден в этой компании")
+
     user = User(
         email=email,
         name=payload.name,
@@ -68,17 +121,20 @@ def create_user(payload: UserCreate, actor: User = Depends(require("users.create
         department_id=payload.department_id,
     )
     if payload.role_ids:
-        user.roles = db.query(Role).filter(Role.id.in_(payload.role_ids)).all()
+        user.roles = _tenant_roles_query(db, ctx.tenant.id, payload.role_ids).all()
     db.add(user)
     db.flush()
-    log_action(db, user_id=actor.id, action="create", entity="user", entity_id=user.id, detail=user.email)
+    # Добавляем в текущий tenant.
+    db.add(TenantMembership(tenant_id=ctx.tenant.id, user_id=user.id, is_owner=False))
+    log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="create", entity="user", entity_id=user.id, detail=user.email)
     db.commit()
     db.refresh(user)
     return user
 
 
 @router.patch("/users/me", response_model=UserOut)
-def update_me(payload: MeUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_me(payload: MeUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    user = ctx.user
     changes: list[str] = []
     email_changing = payload.email is not None and payload.email.lower() != user.email
     password_changing = payload.new_password is not None
@@ -103,7 +159,7 @@ def update_me(payload: MeUpdate, user: User = Depends(get_current_user), db: Ses
         changes.append("пароль")
 
     if changes:
-        log_action(db, user_id=user.id, action="update", entity="user", entity_id=user.id, detail=", ".join(changes))
+        log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail=", ".join(changes))
     db.commit()
     db.refresh(user)
     return user
@@ -112,9 +168,10 @@ def update_me(payload: MeUpdate, user: User = Depends(get_current_user), db: Ses
 @router.post("/users/me/avatar", response_model=UserOut)
 def upload_my_avatar(
     file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
+    user = ctx.user
     if not file.content_type or file.content_type not in AVATAR_EXT_BY_MIME:
         raise HTTPException(400, "Разрешены только JPEG, PNG, WebP или GIF")
 
@@ -157,14 +214,15 @@ def upload_my_avatar(
             pass
 
     user.avatar_url = f"{AVATAR_URL_PREFIX}{stored}"
-    log_action(db, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar")
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar")
     db.commit()
     db.refresh(user)
     return user
 
 
 @router.delete("/users/me/avatar", response_model=UserOut)
-def delete_my_avatar(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_my_avatar(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    user = ctx.user
     old = _avatar_file_path(user.avatar_url)
     if old and old.exists():
         try:
@@ -172,25 +230,21 @@ def delete_my_avatar(user: User = Depends(get_current_user), db: Session = Depen
         except OSError:
             pass
     user.avatar_url = None
-    log_action(db, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar_removed")
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar_removed")
     db.commit()
     db.refresh(user)
     return user
 
 
 @router.get("/users/{user_id}", response_model=UserOut)
-def get_user(user_id: int, _: User = Depends(require("users.view")), db: Session = Depends(get_db)):
-    user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(404, "Пользователь не найден")
-    return user
+def get_user(user_id: int, ctx: TenantContext = Depends(require("users.view")), db: Session = Depends(get_db)):
+    return _load_tenant_user(db, ctx.tenant.id, user_id)
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, actor: User = Depends(require("users.update")), db: Session = Depends(get_db)):
-    user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(404, "Пользователь не найден")
+def update_user(user_id: int, payload: UserUpdate, ctx: TenantContext = Depends(require("users.update")), db: Session = Depends(get_db)):
+    actor = ctx.user
+    user = _load_tenant_user(db, ctx.tenant.id, user_id)
     if payload.email is not None:
         new_email = payload.email.lower()
         if new_email != user.email and db.query(User).filter(User.email == new_email).first():
@@ -205,40 +259,59 @@ def update_user(user_id: int, payload: UserUpdate, actor: User = Depends(require
     if payload.avatar_url is not None:
         user.avatar_url = payload.avatar_url
     if payload.department_id is not None:
-        user.department_id = payload.department_id or None
+        if payload.department_id:
+            dep = db.get(Department, payload.department_id)
+            if not dep or dep.tenant_id != ctx.tenant.id:
+                raise HTTPException(400, "Отдел не найден в этой компании")
+            user.department_id = payload.department_id
+        else:
+            user.department_id = None
     if payload.role_ids is not None:
-        user.roles = db.query(Role).filter(Role.id.in_(payload.role_ids)).all()
-    log_action(db, user_id=actor.id, action="update", entity="user", entity_id=user.id)
+        user.roles = _tenant_roles_query(db, ctx.tenant.id, payload.role_ids).all()
+    log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="update", entity="user", entity_id=user.id)
     db.commit()
     db.refresh(user)
     return user
 
 
 @router.delete("/users/{user_id}", response_model=Message)
-def delete_user(user_id: int, actor: User = Depends(require("users.delete")), db: Session = Depends(get_db)):
-    user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(404, "Пользователь не найден")
+def delete_user(user_id: int, ctx: TenantContext = Depends(require("users.delete")), db: Session = Depends(get_db)):
+    actor = ctx.user
+    user = _load_tenant_user(db, ctx.tenant.id, user_id)
     if user.id == actor.id:
         raise HTTPException(400, "Нельзя удалить самого себя")
     if user.is_superuser:
         raise HTTPException(400, "Нельзя удалить суперпользователя")
-    log_action(db, user_id=actor.id, action="delete", entity="user", entity_id=user.id, detail=user.email)
-    db.delete(user)
+    # Удаляем только членство в текущем tenant'е (юзер глобальный, может состоять в других).
+    db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == ctx.tenant.id,
+        TenantMembership.user_id == user.id,
+    ).delete(synchronize_session=False)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="delete", entity="user", entity_id=user.id, detail=user.email)
     db.commit()
-    return Message(message="Пользователь удалён")
+    return Message(message="Пользователь удалён из компании")
 
 
 @router.get("/departments", response_model=List[DepartmentOut])
-def list_departments(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(Department).order_by(Department.name).all()
+def list_departments(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    return (
+        db.query(Department)
+        .filter(Department.tenant_id == ctx.tenant.id)
+        .order_by(Department.name)
+        .all()
+    )
 
 
 @router.post("/departments", response_model=DepartmentOut, status_code=201)
-def create_department(payload: DepartmentCreate, _: User = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
-    if db.query(Department).filter(Department.name == payload.name).first():
+def create_department(payload: DepartmentCreate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
+    exists = (
+        db.query(Department)
+        .filter(Department.tenant_id == ctx.tenant.id, Department.name == payload.name)
+        .first()
+    )
+    if exists:
         raise HTTPException(400, "Отдел с таким названием уже существует")
-    dep = Department(name=payload.name)
+    dep = Department(tenant_id=ctx.tenant.id, name=payload.name)
     db.add(dep)
     db.commit()
     db.refresh(dep)
@@ -246,9 +319,9 @@ def create_department(payload: DepartmentCreate, _: User = Depends(require("sett
 
 
 @router.delete("/departments/{department_id}", response_model=Message)
-def delete_department(department_id: int, _: User = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
+def delete_department(department_id: int, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     dep = db.get(Department, department_id)
-    if not dep:
+    if not dep or dep.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Отдел не найден")
     db.delete(dep)
     db.commit()

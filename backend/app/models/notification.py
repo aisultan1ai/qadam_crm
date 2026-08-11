@@ -10,9 +10,11 @@ class Notification(Base):
     __tablename__ = "notifications"
     __table_args__ = (
         Index("ix_notifications_user_read_created", "user_id", "is_read", "created_at"),
+        Index("ix_notifications_tenant_user", "tenant_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     kind: Mapped[str] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(300))

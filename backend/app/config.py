@@ -26,6 +26,21 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://redis:6379/0"
 
+    # === SMTP (для отправки писем через Celery) ===
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = "noreply@qadam.local"
+    SMTP_FROM_NAME: str = "Qadam CRM"
+    SMTP_USE_TLS: bool = True
+    # Если не задан SMTP_HOST — письма только логируются, реальной отправки нет.
+    SMTP_DRY_RUN: bool = False
+
+    APP_BASE_URL: str = "http://localhost"
+
+    EXPORT_DIR: str = "/app/exports"
+
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_RECYCLE: int = 1800

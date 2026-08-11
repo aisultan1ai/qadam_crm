@@ -17,7 +17,7 @@ from ..core.security import (
     TOKEN_TYPE_REFRESH,
 )
 from ..core.permissions import all_permission_codes
-from ..models import User
+from ..models import User, Tenant, TenantMembership
 from ..schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from ..schemas.user import MeOut
 from ..schemas.common import Message
@@ -26,9 +26,21 @@ from .deps import get_current_user, get_current_token, log_action
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _issue_pair(user_id: int) -> tuple[str, str, int]:
-    access, _access_jti, access_exp = create_access_token(user_id)
-    refresh, _refresh_jti, _ = create_refresh_token(user_id)
+def _pick_default_tenant(db: Session, user_id: int) -> int | None:
+    """Первый активный tenant пользователя (owner в приоритете)."""
+    row = (
+        db.query(TenantMembership)
+        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+        .filter(TenantMembership.user_id == user_id, Tenant.is_active.is_(True))
+        .order_by(TenantMembership.is_owner.desc(), TenantMembership.joined_at.asc())
+        .first()
+    )
+    return row.tenant_id if row else None
+
+
+def _issue_pair(user_id: int, tenant_id: int | None) -> tuple[str, str, int]:
+    access, _access_jti, access_exp = create_access_token(user_id, tenant_id=tenant_id)
+    refresh, _refresh_jti, _ = create_refresh_token(user_id, tenant_id=tenant_id)
     ttl = int((access_exp - datetime.now(timezone.utc)).total_seconds())
     return access, refresh, ttl
 
@@ -55,12 +67,12 @@ def login(
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь заблокирован")
     user.last_login_at = datetime.now(timezone.utc)
-    log_action(db, user_id=user.id, action="login", entity="user", entity_id=user.id)
+    tenant_id = _pick_default_tenant(db, user.id)
+    log_action(db, tenant_id=tenant_id, user_id=user.id, action="login", entity="user", entity_id=user.id)
     db.commit()
 
-    access, refresh, ttl = _issue_pair(user.id)
+    access, refresh, ttl = _issue_pair(user.id, tenant_id)
     set_auth_cookies(response, access, refresh)
-    # Возвращаем и в body — для API-клиентов / тестов, которые не используют cookies.
     return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
 
 
@@ -99,7 +111,24 @@ def refresh(
     old_exp = datetime.fromtimestamp(data["exp"], tz=timezone.utc)
     blacklist_token(data.get("jti"), old_exp)
 
-    access, new_refresh, ttl = _issue_pair(user.id)
+    tenant_id = data.get("tid")
+    if tenant_id is not None:
+        membership = (
+            db.query(TenantMembership)
+            .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+            .filter(
+                TenantMembership.user_id == user.id,
+                TenantMembership.tenant_id == tenant_id,
+                Tenant.is_active.is_(True),
+            )
+            .first()
+        )
+        if not membership:
+            tenant_id = _pick_default_tenant(db, user.id)
+    else:
+        tenant_id = _pick_default_tenant(db, user.id)
+
+    access, new_refresh, ttl = _issue_pair(user.id, tenant_id)
     set_auth_cookies(response, access, new_refresh)
     return TokenResponse(access_token=access, refresh_token=new_refresh, expires_in=ttl)
 
@@ -130,7 +159,7 @@ def logout(
             pass
 
     clear_auth_cookies(response)
-    log_action(db, user_id=user.id, action="logout", entity="user", entity_id=user.id)
+    log_action(db, tenant_id=None, user_id=user.id, action="logout", entity="user", entity_id=user.id)
     db.commit()
     return Message(message="Вы вышли из системы")
 
@@ -143,3 +172,53 @@ def me(user: User = Depends(get_current_user)):
         perms = sorted({p.code for r in user.roles for p in r.permissions})
     data = MeOut.model_validate(user).model_copy(update={"permissions": perms})
     return data
+
+
+@router.get("/tenants")
+def list_my_tenants(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(TenantMembership, Tenant)
+        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+        .filter(TenantMembership.user_id == user.id, Tenant.is_active.is_(True))
+        .order_by(TenantMembership.is_owner.desc(), TenantMembership.joined_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "slug": t.slug,
+            "plan": t.plan,
+            "logo_url": t.logo_url,
+            "is_owner": m.is_owner,
+        }
+        for m, t in rows
+    ]
+
+
+@router.post("/switch-tenant/{tenant_id}", response_model=TokenResponse)
+def switch_tenant(
+    tenant_id: int,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    membership = (
+        db.query(TenantMembership)
+        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+        .filter(
+            TenantMembership.user_id == user.id,
+            TenantMembership.tenant_id == tenant_id,
+            Tenant.is_active.is_(True),
+        )
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к компании")
+
+    access, refresh, ttl = _issue_pair(user.id, tenant_id)
+    set_auth_cookies(response, access, refresh)
+    return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
