@@ -47,13 +47,7 @@ def upgrade() -> None:
     op.create_index("ix_invitations_email", "invitations", ["email"])
     op.create_index("ix_invitations_token", "invitations", ["token"], unique=True)
 
-    # subscriptions
-    subscription_status = sa.Enum(
-        "trialing", "active", "past_due", "canceled",
-        name="subscription_status",
-    )
-    subscription_status.create(op.get_bind(), checkfirst=True)
-
+    # subscriptions — тип создастся автоматически при create_table (create_type=True по умолчанию)
     op.create_table(
         "subscriptions",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -61,7 +55,7 @@ def upgrade() -> None:
         sa.Column("plan", sa.String(length=50), nullable=False, server_default="free"),
         sa.Column(
             "status",
-            sa.Enum("trialing", "active", "past_due", "canceled", name="subscription_status", create_type=False),
+            sa.Enum("trialing", "active", "past_due", "canceled", name="subscription_status"),
             nullable=False,
             server_default="active",
         ),

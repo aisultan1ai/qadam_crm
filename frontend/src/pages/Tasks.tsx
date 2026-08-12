@@ -1,11 +1,12 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, extractApiError } from "@/api/client";
+import { api, API_URL, extractApiError } from "@/api/client";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Plus, LayoutGrid, List as ListIcon, Table as TableIcon, CalendarDays, Search, Trash2,
+  Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, Loader2,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -43,6 +44,8 @@ export default function Tasks() {
   const status = readParam(sp, "status");
 
   const [openNew, setOpenNew] = useState(false);
+  const [openImport, setOpenImport] = useState(false);
+  const [openExport, setOpenExport] = useState(false);
   const [qLocal, setQLocal] = useState(q);
   useEffect(() => setQLocal(q), [q]);
 
@@ -185,6 +188,24 @@ export default function Tasks() {
               </button>
             ))}
           </div>
+          {can("analytics.reports") && (
+            <button
+              className="btn-ghost"
+              onClick={() => setOpenExport(true)}
+              title="Экспорт задач в Excel (с учётом фильтров)"
+            >
+              <Download size={15} /> Экспорт
+            </button>
+          )}
+          {canCreate && (
+            <button
+              className="btn-ghost"
+              onClick={() => setOpenImport(true)}
+              title="Импортировать задачи из CSV"
+            >
+              <Upload size={15} /> Импорт
+            </button>
+          )}
           {canCreate && (
             <button className="btn-primary" onClick={() => setOpenNew(true)}>
               <Plus size={16} /> Новая задача
@@ -302,6 +323,22 @@ export default function Tasks() {
           projects={projects ?? []}
           users={users ?? []}
           onClose={() => setOpenNew(false)}
+        />
+      )}
+
+      {openImport && (
+        <ImportCsvModal
+          onClose={() => setOpenImport(false)}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: ["tasks"] });
+          }}
+        />
+      )}
+
+      {openExport && (
+        <ExportExcelModal
+          filters={filters}
+          onClose={() => setOpenExport(false)}
         />
       )}
 
@@ -715,6 +752,327 @@ export function TaskFormModal({
           <button type="submit" className="btn-primary" disabled={!isValid || create.isPending}>Создать</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+
+type ImportStatus = {
+  job_id: string;
+  state: string;
+  progress?: string;
+  total?: number;
+  created?: number;
+  error_count?: number;
+  errors?: string[];
+  error?: string;
+};
+
+function ImportCsvModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [status, setStatus] = useState<ImportStatus | null>(null);
+  const [starting, setStarting] = useState(false);
+
+  useEffect(() => {
+    if (!jobId) return;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const { data } = await api.get<ImportStatus>(`/api/imports/${jobId}`);
+        if (stop) return;
+        setStatus(data);
+        if (data.state === "SUCCESS" || data.state === "FAILURE") {
+          onDone();
+          return;
+        }
+      } catch (e) {
+        if (stop) return;
+        setStatus({ job_id: jobId, state: "FAILURE", error: extractApiError(e).message });
+        return;
+      }
+      if (!stop) window.setTimeout(tick, 1000);
+    };
+    tick();
+    return () => { stop = true; };
+  }, [jobId, onDone]);
+
+  const start = async () => {
+    if (!file) return;
+    setStarting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post<{ job_id: string; state: string }>(
+        "/api/imports/tasks",
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      setJobId(data.job_id);
+      setStatus({ job_id: data.job_id, state: data.state });
+    } catch (e) {
+      toast.error("Не удалось запустить импорт", extractApiError(e).message);
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const done = status?.state === "SUCCESS";
+  const failed = status?.state === "FAILURE";
+  const inFlight = jobId && !done && !failed;
+
+  return (
+    <Modal open onClose={onClose} title="Импорт задач из CSV" size="lg">
+      <div className="space-y-4">
+        {!jobId && (
+          <>
+            <div className="rounded-lg bg-neutral-50 p-3 text-xs text-neutral-600 dark:bg-neutral-800/50 dark:text-neutral-400">
+              <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-300">Формат CSV (UTF-8 или CP1251, до 5 МБ)</div>
+              <code className="block font-mono text-[11px]">title,description,status,priority,project_id,assignee_email,deadline</code>
+              <div className="mt-2 space-y-0.5">
+                <div>• <b>title</b> — обязательно</div>
+                <div>• <b>status</b> — new, in_progress, review, done, cancelled (по умолчанию new)</div>
+                <div>• <b>priority</b> — low, medium, high, critical (по умолчанию medium)</div>
+                <div>• <b>deadline</b> — YYYY-MM-DD или YYYY-MM-DD HH:MM</div>
+                <div>• <b>assignee_email</b> — email существующего сотрудника компании</div>
+              </div>
+            </div>
+
+            <div>
+              <label
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 px-6 py-8 text-sm text-neutral-600 hover:border-brand-400 hover:bg-brand-50 dark:border-neutral-700 dark:bg-neutral-800/40 dark:hover:border-brand-600 dark:hover:bg-brand-950/20"
+              >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+                <Upload size={18} />
+                {file ? (
+                  <span className="font-medium">{file.name} · {Math.round(file.size / 1024)} КБ</span>
+                ) : (
+                  <span>Нажмите чтобы выбрать CSV-файл</span>
+                )}
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button className="btn-ghost" onClick={onClose}>Отмена</button>
+              <button className="btn-primary" disabled={!file || starting} onClick={start}>
+                {starting ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                Запустить импорт
+              </button>
+            </div>
+          </>
+        )}
+
+        {inFlight && (
+          <div className="py-6 text-center">
+            <Loader2 size={28} className="mx-auto animate-spin text-brand-500" />
+            <div className="mt-3 text-sm font-medium">Обрабатываем CSV…</div>
+            {status?.progress && (
+              <div className="mt-1 text-xs text-neutral-500">{status.progress}</div>
+            )}
+            <div className="mt-1 text-xs text-neutral-500">Состояние: {status?.state}</div>
+          </div>
+        )}
+
+        {done && status && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+              <CheckCircle2 size={18} />
+              <div>
+                <div className="font-medium">Импорт завершён</div>
+                <div className="text-xs">
+                  Всего строк: {status.total ?? 0} · Создано: {status.created ?? 0}
+                  {(status.error_count ?? 0) > 0 && <> · С ошибками: {status.error_count}</>}
+                </div>
+              </div>
+            </div>
+
+            {status.errors && status.errors.length > 0 && (
+              <div>
+                <div className="mb-1 text-xs font-medium text-neutral-500">Ошибки</div>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900/60">
+                  {status.errors.map((e, i) => (
+                    <div key={i} className="py-0.5 text-rose-600 dark:text-rose-400">{e}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button className="btn-primary" onClick={onClose}>Готово</button>
+            </div>
+          </div>
+        )}
+
+        {failed && status && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">
+              <XCircle size={18} />
+              <div>
+                <div className="font-medium">Импорт не удался</div>
+                <div className="text-xs">{status.error || "Неизвестная ошибка"}</div>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button className="btn-ghost" onClick={onClose}>Закрыть</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+
+type ExportStatus = {
+  job_id: string;
+  state: string;
+  filename?: string;
+  rows?: number;
+  download_url?: string;
+  error?: string;
+};
+
+type TaskFilters = {
+  q?: string;
+  project_id?: number;
+  assignee_id?: number;
+  priority?: string;
+  status?: string;
+};
+
+function ExportExcelModal({ filters, onClose }: { filters: TaskFilters; onClose: () => void }) {
+  const toast = useToast();
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [status, setStatus] = useState<ExportStatus | null>(null);
+  const [downloaded, setDownloaded] = useState(false);
+
+  const start = async () => {
+    try {
+      const params: Record<string, string | number> = {};
+      if (filters.status) params.status_filter = filters.status;
+      if (filters.project_id) params.project_id = filters.project_id;
+      if (filters.assignee_id) params.assignee_id = filters.assignee_id;
+      const { data } = await api.post<{ job_id: string; state: string }>(
+        "/api/exports/tasks",
+        null,
+        { params },
+      );
+      setJobId(data.job_id);
+      setStatus({ job_id: data.job_id, state: data.state });
+    } catch (e) {
+      toast.error("Не удалось запустить экспорт", extractApiError(e).message);
+    }
+  };
+
+  useEffect(() => {
+    start();
+  }, []);
+
+  useEffect(() => {
+    if (!jobId) return;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const { data } = await api.get<ExportStatus>(`/api/exports/${jobId}`);
+        if (stop) return;
+        setStatus(data);
+        if (data.state === "SUCCESS" || data.state === "FAILURE") return;
+      } catch (e) {
+        if (stop) return;
+        setStatus({ job_id: jobId, state: "FAILURE", error: extractApiError(e).message });
+        return;
+      }
+      if (!stop) window.setTimeout(tick, 1000);
+    };
+    tick();
+    return () => { stop = true; };
+  }, [jobId]);
+
+  const done = status?.state === "SUCCESS";
+  const failed = status?.state === "FAILURE";
+
+  const download = () => {
+    if (!status?.download_url) return;
+    const url = `${API_URL}${status.download_url}`;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = status.filename || "tasks.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setDownloaded(true);
+  };
+
+  useEffect(() => {
+    if (done && status?.download_url && !downloaded) {
+      download();
+    }
+  }, [done, status?.download_url, downloaded]);
+
+  const activeFilters = [
+    filters.status && `статус: ${filters.status}`,
+    filters.project_id && `проект #${filters.project_id}`,
+    filters.assignee_id && `исполнитель #${filters.assignee_id}`,
+  ].filter(Boolean);
+
+  return (
+    <Modal open onClose={onClose} title="Экспорт задач в Excel" size="md">
+      <div className="space-y-4">
+        {activeFilters.length > 0 && (
+          <div className="rounded-lg bg-neutral-50 p-3 text-xs dark:bg-neutral-800/50">
+            <span className="font-medium text-neutral-700 dark:text-neutral-300">Фильтры: </span>
+            <span className="text-neutral-600 dark:text-neutral-400">{activeFilters.join(", ")}</span>
+          </div>
+        )}
+
+        {!done && !failed && (
+          <div className="py-6 text-center">
+            <FileSpreadsheet size={32} className="mx-auto text-brand-500" />
+            <div className="mt-3 flex items-center justify-center gap-2 text-sm font-medium">
+              <Loader2 size={15} className="animate-spin" />
+              Готовим файл…
+            </div>
+            <div className="mt-1 text-xs text-neutral-500">Состояние: {status?.state ?? "запуск"}</div>
+          </div>
+        )}
+
+        {done && status && (
+          <div className="space-y-3 py-2 text-center">
+            <CheckCircle2 size={36} className="mx-auto text-emerald-500" />
+            <div className="text-sm font-medium">Готово!</div>
+            <div className="text-xs text-neutral-500">
+              {status.filename} · {status.rows ?? 0} строк
+            </div>
+            <button className="btn-primary mx-auto" onClick={download}>
+              <Download size={15} /> Скачать снова
+            </button>
+          </div>
+        )}
+
+        {failed && status && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">
+              <XCircle size={18} />
+              <div>
+                <div className="font-medium">Экспорт не удался</div>
+                <div className="text-xs">{status.error || "Неизвестная ошибка"}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button className="btn-ghost" onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
     </Modal>
   );
 }

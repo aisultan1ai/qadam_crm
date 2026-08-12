@@ -35,6 +35,16 @@ router = APIRouter(prefix="/api", tags=["invitations"])
 TOKEN_TTL_DAYS = 7
 
 
+class InviteResponse(BaseModel):
+    id: int
+    email: str
+    role_id: Optional[int]
+    token: str
+    invite_url: str
+    expires_at: str
+    email_sent: bool
+
+
 class InviteCreate(BaseModel):
     email: EmailStr
     role_id: Optional[int] = None
@@ -58,7 +68,7 @@ def _tenant_role_or_none(db: Session, tenant_id: int, role_id: Optional[int]) ->
     return role
 
 
-@router.post("/tenants/{tenant_id}/invite", response_model=Message, status_code=201)
+@router.post("/tenants/{tenant_id}/invite", response_model=InviteResponse, status_code=201)
 def create_invite(
     request: Request,
     tenant_id: int,
@@ -120,8 +130,10 @@ def create_invite(
         action="invite", entity="user", detail=email,
     )
     db.commit()
+    db.refresh(invite)
 
     invite_url = f"{settings.APP_BASE_URL.rstrip('/')}/invite/{token}"
+    email_sent = False
     try:
         send_invitation_email.delay(
             to=email,
@@ -129,12 +141,21 @@ def create_invite(
             invite_url=invite_url,
             inviter_name=ctx.user.name,
         )
+        email_sent = True
     except Exception:
         # Не роняем запрос из-за Celery/SMTP — приглашение уже создано,
-        # админ увидит ссылку в списке и сможет её отправить руками.
+        # админ увидит ссылку в UI и сможет её скопировать вручную.
         pass
 
-    return Message(message=f"Приглашение отправлено на {email}")
+    return InviteResponse(
+        id=invite.id,
+        email=invite.email,
+        role_id=invite.role_id,
+        token=token,
+        invite_url=invite_url,
+        expires_at=expires_at.isoformat(),
+        email_sent=email_sent,
+    )
 
 
 @router.get("/invitations/{token}")

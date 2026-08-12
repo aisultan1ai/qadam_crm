@@ -60,7 +60,7 @@ PLAN_INFO: dict[str, dict] = {
     },
     Plan.pro.value: {
         "title": "Pro",
-        "price_month": 19_990,
+        "price_month": 9_990,
         "currency": "KZT",
         "tagline": "Для растущих компаний, где CRM — рабочий инструмент",
         "features": [
