@@ -3,12 +3,30 @@ import { Check, ChevronsUpDown, Building2 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
 import { useTenants } from "@/store/tenant";
+import { useConfirm } from "@/components/Confirm";
 
 export default function TenantSwitcher() {
   const me = useAuth((s) => s.me);
   const { tenants, fetchTenants, switchTenant } = useTenants();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const confirm = useConfirm();
+
+  const handleSwitch = async (targetId: number, targetName: string) => {
+    // switchTenant делает window.location.assign("/") — весь несохранённый
+    // ввод в формах пропадёт. Спрашиваем подтверждение, если есть незакрытые
+    // модалки/формы (грубая эвристика: dialog/aria-modal в DOM).
+    const hasOpenModal = document.querySelector('[role="dialog"], [aria-modal="true"]');
+    if (hasOpenModal) {
+      const ok = await confirm({
+        title: "Переключить компанию?",
+        message: `Приложение перезагрузится и переключится на «${targetName}». Несохранённые данные в открытых формах будут утеряны.`,
+        confirmLabel: "Переключить",
+      });
+      if (!ok) return;
+    }
+    switchTenant(targetId);
+  };
 
   useEffect(() => {
     if (me) fetchTenants();
@@ -72,7 +90,7 @@ export default function TenantSwitcher() {
                 type="button"
                 onClick={() => {
                   setOpen(false);
-                  if (!active) switchTenant(t.id);
+                  if (!active) handleSwitch(t.id, t.company_display_name || t.name);
                 }}
                 className={clsx(
                   "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors",

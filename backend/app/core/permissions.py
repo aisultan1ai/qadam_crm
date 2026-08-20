@@ -30,6 +30,7 @@ PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("comments.view", "Просмотр комментариев"),
         ("comments.create", "Создание комментариев"),
         ("comments.update_own", "Редактирование своих комментариев"),
+        ("comments.update_any", "Редактирование любых комментариев (модерация)"),
         ("comments.delete", "Удаление комментариев"),
     ],
     "Файлы": [

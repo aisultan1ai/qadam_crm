@@ -16,12 +16,12 @@ function mix(a: number, b: number, t: number) {
 export function applyBrandColor(hex: string | null | undefined) {
   const root = document.documentElement;
   if (!hex) {
-    // Возвращаем дефолт (indigo из tailwind.config).
+    // Возвращаем дефолт (Qadam brand из tailwind.config).
     const defaults: Record<string, string> = {
-      "--brand-50": "#eef2ff",
-      "--brand-500": "#6366f1",
-      "--brand-600": "#4f46e5",
-      "--brand-700": "#4338ca",
+      "--brand-50": "#EAF3FF",
+      "--brand-500": "#3B88FE",
+      "--brand-600": "#0F67FD",
+      "--brand-700": "#0C52CC",
     };
     for (const [k, v] of Object.entries(defaults)) root.style.setProperty(k, v);
     return;

@@ -6,6 +6,9 @@ Webhook — только логирует payload и меняет статус �
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -14,11 +17,12 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..core.plans import PLAN_LIMITS, plan_catalog
 from ..database import get_db
 from ..models import Subscription, SubscriptionStatus, Tenant
 from ..schemas.common import Message
-from .deps import TenantContext, get_current_context, log_action
+from .deps import TenantContext, get_current_context, log_action, verify_same_origin
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
@@ -60,7 +64,7 @@ def get_subscription(
     return _serialize(sub, ctx.tenant)
 
 
-@router.post("/subscribe")
+@router.post("/subscribe", dependencies=[Depends(verify_same_origin)])
 def subscribe(
     payload: SubscribeRequest,
     ctx: TenantContext = Depends(get_current_context),
@@ -103,14 +107,40 @@ def subscribe(
     return _serialize(sub, ctx.tenant)
 
 
+def _verify_webhook_signature(raw_body: bytes, signature_header: Optional[str]) -> None:
+    """Валидация HMAC-SHA256 подписи webhook. В prod BILLING_WEBHOOK_SECRET обязателен.
+    Пустой секрет разрешён только в dev (APP_ENV != production) — тогда пропускаем с warning.
+    """
+    secret = settings.BILLING_WEBHOOK_SECRET
+    if not secret:
+        if settings.is_prod:
+            log.error("BILLING_WEBHOOK_SECRET is not set in production — rejecting webhook")
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Webhook signature secret not configured")
+        log.warning("BILLING_WEBHOOK_SECRET not set (dev mode) — signature check skipped")
+        return
+
+    if not signature_header:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing X-Signature header")
+
+    # Поддержка формата "sha256=<hex>" (Stripe-like) и просто "<hex>"
+    provided = signature_header.split("=", 1)[1] if "=" in signature_header else signature_header
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(provided.lower(), expected.lower()):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid webhook signature")
+
+
 @router.post("/webhook", response_model=Message)
 async def webhook(request: Request, db: Session = Depends(get_db)):
-    """Приёмник событий провайдера. Пока — заготовка (mock/Stripe).
+    """Приёмник событий провайдера (Stripe/Kaspi mock).
 
-    В prod здесь должна быть валидация подписи (Stripe-Signature / Kaspi HMAC).
+    Валидирует HMAC-SHA256 подпись из заголовка X-Signature. В prod без BILLING_WEBHOOK_SECRET
+    вернёт 503; в dev — warning + пропуск (для локального тестирования).
     """
+    raw_body = await request.body()
+    _verify_webhook_signature(raw_body, request.headers.get("X-Signature"))
+
     try:
-        payload = await request.json()
+        payload = json.loads(raw_body.decode()) if raw_body else {}
     except Exception:
         payload = {}
     log.info("billing webhook: %s", payload)

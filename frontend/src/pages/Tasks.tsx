@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Plus, LayoutGrid, List as ListIcon, Table as TableIcon, CalendarDays, Search, Trash2,
-  Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, Loader2,
+  Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, Loader2, SlidersHorizontal, X,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -21,6 +21,10 @@ import { SkeletonKanban, SkeletonTable, SkeletonCard } from "@/components/Skelet
 import { taskSchema, type TaskForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
+import { VirtualList } from "@/components/VirtualList";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+
+const TASKS_VIEW_STORAGE_KEY = "tasks:view";
 
 type View = "kanban" | "table" | "list" | "calendar";
 const VIEWS: View[] = ["kanban", "table", "list", "calendar"];
@@ -30,13 +34,28 @@ function readParam(sp: URLSearchParams, key: string) {
   return v ?? "";
 }
 
+function activeFilterCount(project: string, assignee: string, status: string, priority: string): number {
+  return [project, assignee, status, priority].filter(Boolean).length;
+}
+
 export default function Tasks() {
   const { can } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
   const [sp, setSp] = useSearchParams();
+  const isMobile = useIsMobile();
 
-  const view = (VIEWS.includes(sp.get("view") as View) ? (sp.get("view") as View) : "kanban");
+  // Приоритет: URL > localStorage > дефолт. При переключении вида — сохраняем
+  // и в URL (для ссылок/back), и в localStorage (для сессий).
+  const storedView = typeof window !== "undefined" ? window.localStorage.getItem(TASKS_VIEW_STORAGE_KEY) : null;
+  const urlView = sp.get("view");
+  const rawView: View = (urlView && VIEWS.includes(urlView as View))
+    ? (urlView as View)
+    : (storedView && VIEWS.includes(storedView as View) ? (storedView as View) : "kanban");
+  // На мобилке "table" нечитаемо (min-w 900px) → показываем "list" автоматически,
+  // но выбор пользователя не затираем.
+  const view: View = isMobile && rawView === "table" ? "list" : rawView;
+
   const q = readParam(sp, "q");
   const projectId = readParam(sp, "project");
   const assigneeId = readParam(sp, "assignee");
@@ -46,14 +65,28 @@ export default function Tasks() {
   const [openNew, setOpenNew] = useState(false);
   const [openImport, setOpenImport] = useState(false);
   const [openExport, setOpenExport] = useState(false);
+  const [openFilters, setOpenFilters] = useState(false);
   const [qLocal, setQLocal] = useState(q);
   useEffect(() => setQLocal(q), [q]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkAction, setBulkAction] = useState<null | "status" | "priority" | "assignee" | "deadline">(null);
+  const canBulk = can("tasks.bulk_update");
 
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(sp);
     if (value) next.set(key, value);
     else next.delete(key);
     setSp(next, { replace: true });
+  };
+
+  const setView = (v: View) => {
+    try {
+      window.localStorage.setItem(TASKS_VIEW_STORAGE_KEY, v);
+    } catch {
+      // localStorage может быть недоступен (private mode) — не критично.
+    }
+    // "kanban" — дефолт, поэтому не мусорим URL.
+    updateParam("view", v === "kanban" ? "" : v);
   };
 
   useEffect(() => {
@@ -88,6 +121,11 @@ export default function Tasks() {
   });
 
   const updateStatus = useMutation({
+    // mutationKey нужен, чтобы отслеживать pending-очередь: при быстром dnd
+    // нескольких карт invalidate делаем только после того, как последняя
+    // мутация завершилась. Иначе рефетч в середине очереди сбросит optimistic
+    // updates других карт → карты «прыгают» обратно.
+    mutationKey: ["task-status-update"],
     mutationFn: ({ id, status }: { id: number; status: TaskStatus }) => api.patch(`/api/tasks/${id}`, { status }),
     onMutate: async ({ id, status }) => {
       await qc.cancelQueries({ queryKey: ["tasks"] });
@@ -103,8 +141,13 @@ export default function Tasks() {
       toast.error("Не удалось изменить статус", extractApiError(err).message);
     },
     onSettled: (_data, _err, vars) => {
-      qc.invalidateQueries({ queryKey: ["tasks"] });
-      qc.invalidateQueries({ queryKey: ["task", vars.id] });
+      const stillPending = qc
+        .getMutationCache()
+        .findAll({ mutationKey: ["task-status-update"], status: "pending" }).length;
+      if (stillPending === 0) {
+        qc.invalidateQueries({ queryKey: ["tasks"] });
+        qc.invalidateQueries({ queryKey: ["task", vars.id] });
+      }
     },
   });
 
@@ -118,6 +161,19 @@ export default function Tasks() {
       setConfirmDeleteId(null);
     },
     onError: (e) => toast.error("Не удалось удалить задачу", extractApiError(e).message),
+  });
+
+  const bulkUpdate = useMutation({
+    mutationFn: async ({ ids, patch }: { ids: number[]; patch: Record<string, unknown> }) =>
+      (await api.post("/api/tasks/bulk", { ids, patch })).data,
+    onSuccess: (_data, vars) => {
+      toast.success(`Обновлено задач: ${vars.ids.length}`);
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["project-tasks"] });
+      setSelectedIds(new Set());
+      setBulkAction(null);
+    },
+    onError: (e) => toast.error("Не удалось применить массовое действие", extractApiError(e).message),
   });
   const canDelete = can("tasks.delete");
   const requestDelete = canDelete ? (id: number) => setConfirmDeleteId(id) : undefined;
@@ -146,6 +202,13 @@ export default function Tasks() {
     const id = Number(taskIdStr);
     const current = tasks?.find((t) => t.id === id);
     if (!current || current.status === newStatus) return;
+    // Guard: не отправлять повторно для той же карты, если предыдущая мутация
+    // ещё в полёте. Иначе получаем два PATCH подряд с одинаковым body.
+    const inFlight = qc
+      .getMutationCache()
+      .findAll({ mutationKey: ["task-status-update"] })
+      .some((m) => m.state.status === "pending" && (m.state.variables as { id?: number } | undefined)?.id === id);
+    if (inFlight) return;
     updateStatus.mutate({ id, status: newStatus as TaskStatus });
     setLandedId(id);
     window.setTimeout(() => setLandedId((cur) => (cur === id ? null : cur)), 460);
@@ -155,6 +218,12 @@ export default function Tasks() {
 
   const filtersActive = Boolean(q || projectId || assigneeId || priority || status);
   const canCreate = can("tasks.create");
+  const resetFilters = () => {
+    const next = new URLSearchParams(sp);
+    ["q", "project", "assignee", "status", "priority"].forEach((k) => next.delete(k));
+    setSp(next, { replace: true });
+    setQLocal("");
+  };
 
   return (
     <div className="space-y-4">
@@ -172,29 +241,38 @@ export default function Tasks() {
                 ["list", <ListIcon size={15} />],
                 ["calendar", <CalendarDays size={15} />],
               ] as const
-            ).map(([v, icon]) => (
-              <button
-                key={v}
-                onClick={() => updateParam("view", v === "kanban" ? "" : v)}
-                className={clsx(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium capitalize",
-                  view === v
-                    ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-white"
-                    : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/50",
-                )}
-              >
-                {icon}
-                {v === "kanban" ? "Kanban" : v === "table" ? "Таблица" : v === "list" ? "Список" : "Календарь"}
-              </button>
-            ))}
+            ).map(([v, icon]) => {
+              // На мобилке скрываем table (всё равно нечитаемо).
+              if (isMobile && v === "table") return null;
+              return (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  aria-label={v === "kanban" ? "Kanban" : v === "table" ? "Таблица" : v === "list" ? "Список" : "Календарь"}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium capitalize",
+                    view === v
+                      ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-white"
+                      : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/50",
+                  )}
+                >
+                  {icon}
+                  <span className="hidden sm:inline">
+                    {v === "kanban" ? "Kanban" : v === "table" ? "Таблица" : v === "list" ? "Список" : "Календарь"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
           {can("analytics.reports") && (
             <button
               className="btn-ghost"
               onClick={() => setOpenExport(true)}
               title="Экспорт задач в Excel (с учётом фильтров)"
+              aria-label="Экспорт задач в Excel"
             >
-              <Download size={15} /> Экспорт
+              <Download size={15} /> <span className="hidden sm:inline">Экспорт</span>
             </button>
           )}
           {canCreate && (
@@ -202,75 +280,112 @@ export default function Tasks() {
               className="btn-ghost"
               onClick={() => setOpenImport(true)}
               title="Импортировать задачи из CSV"
+              aria-label="Импортировать задачи из CSV"
             >
-              <Upload size={15} /> Импорт
+              <Upload size={15} /> <span className="hidden sm:inline">Импорт</span>
             </button>
           )}
           {canCreate && (
-            <button className="btn-primary" onClick={() => setOpenNew(true)}>
-              <Plus size={16} /> Новая задача
+            <button className="btn-primary" onClick={() => setOpenNew(true)} aria-label="Новая задача">
+              <Plus size={16} /> <span className="hidden sm:inline">Новая задача</span>
             </button>
           )}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
+        <div className="relative flex-1 min-w-[180px] max-w-md">
           <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
           <input
             className="input pl-8"
             placeholder="Поиск задач…"
             value={qLocal}
             onChange={(e) => setQLocal(e.target.value)}
+            aria-label="Поиск задач"
           />
         </div>
-        <select
-          className="input max-w-[180px]"
-          value={projectId}
-          onChange={(e) => updateParam("project", e.target.value)}
+
+        {/* Десктоп: селекты в строке */}
+        <div className="hidden flex-wrap items-center gap-2 md:flex">
+          <select
+            className="input max-w-[180px]"
+            value={projectId}
+            onChange={(e) => updateParam("project", e.target.value)}
+            aria-label="Проект"
+          >
+            <option value="">Все проекты</option>
+            {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select
+            className="input max-w-[180px]"
+            value={assigneeId}
+            onChange={(e) => updateParam("assignee", e.target.value)}
+            aria-label="Исполнитель"
+          >
+            <option value="">Все исполнители</option>
+            {users?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select
+            className="input max-w-[160px]"
+            value={status}
+            onChange={(e) => updateParam("status", e.target.value)}
+            aria-label="Статус"
+          >
+            <option value="">Любой статус</option>
+            {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+          </select>
+          <select
+            className="input max-w-[160px]"
+            value={priority}
+            onChange={(e) => updateParam("priority", e.target.value)}
+            aria-label="Приоритет"
+          >
+            <option value="">Любой приоритет</option>
+            {(["low", "medium", "high", "critical"] as const).map((p) => (
+              <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Мобилка: одна кнопка "Фильтры" со счётчиком */}
+        <button
+          type="button"
+          className="btn-ghost md:hidden"
+          onClick={() => setOpenFilters(true)}
+          aria-label="Открыть фильтры"
         >
-          <option value="">Все проекты</option>
-          {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select
-          className="input max-w-[180px]"
-          value={assigneeId}
-          onChange={(e) => updateParam("assignee", e.target.value)}
-        >
-          <option value="">Все исполнители</option>
-          {users?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-        <select
-          className="input max-w-[160px]"
-          value={status}
-          onChange={(e) => updateParam("status", e.target.value)}
-        >
-          <option value="">Любой статус</option>
-          {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-        </select>
-        <select
-          className="input max-w-[160px]"
-          value={priority}
-          onChange={(e) => updateParam("priority", e.target.value)}
-        >
-          <option value="">Любой приоритет</option>
-          {(["low", "medium", "high", "critical"] as const).map((p) => (
-            <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
-          ))}
-        </select>
+          <SlidersHorizontal size={15} />
+          Фильтры
+          {activeFilterCount(projectId, assigneeId, status, priority) > 0 && (
+            <span className="ml-1 grid h-5 min-w-5 place-items-center rounded-full bg-brand-600 px-1.5 text-[10px] font-semibold text-white">
+              {activeFilterCount(projectId, assigneeId, status, priority)}
+            </span>
+          )}
+        </button>
+
         {filtersActive && (
           <button
             className="btn-ghost !px-2 !py-1 text-xs"
-            onClick={() => {
-              const next = new URLSearchParams(sp);
-              ["q", "project", "assignee", "status", "priority"].forEach((k) => next.delete(k));
-              setSp(next, { replace: true });
-            }}
+            onClick={resetFilters}
           >
             Сбросить фильтры
           </button>
         )}
       </div>
+
+      {openFilters && (
+        <FilterDrawer
+          onClose={() => setOpenFilters(false)}
+          projects={projects ?? []}
+          users={users ?? []}
+          projectId={projectId}
+          assigneeId={assigneeId}
+          status={status}
+          priority={priority}
+          onChange={updateParam}
+          onReset={resetFilters}
+        />
+      )}
 
       {isPending ? (
         view === "kanban" ? <SkeletonKanban /> :
@@ -278,15 +393,34 @@ export default function Tasks() {
         view === "list" ? <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}</div> :
         <SkeletonTable rows={4} cols={7} />
       ) : !tasks || tasks.length === 0 ? (
-        <EmptyState
-          title="Задач не найдено"
-          description={filtersActive ? "Измените фильтры или создайте новую задачу" : "Создайте первую задачу"}
-          action={canCreate && (
-            <button className="btn-primary" onClick={() => setOpenNew(true)}>
-              <Plus size={16} /> Новая задача
-            </button>
-          )}
-        />
+        filtersActive ? (
+          <EmptyState
+            title="По фильтру ничего не найдено"
+            description="Попробуйте изменить или сбросить фильтры"
+            action={
+              <div className="flex gap-2">
+                <button className="btn-secondary" onClick={resetFilters}>
+                  Сбросить фильтры
+                </button>
+                {canCreate && (
+                  <button className="btn-primary" onClick={() => setOpenNew(true)}>
+                    <Plus size={16} /> Новая задача
+                  </button>
+                )}
+              </div>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="Задач пока нет"
+            description="Создайте первую задачу — она появится на канбан-доске"
+            action={canCreate && (
+              <button className="btn-primary" onClick={() => setOpenNew(true)}>
+                <Plus size={16} /> Новая задача
+              </button>
+            )}
+          />
+        )
       ) : view === "kanban" ? (
         <DndContext
           sensors={sensors}
@@ -311,11 +445,48 @@ export default function Tasks() {
           </DragOverlay>
         </DndContext>
       ) : view === "table" ? (
-        <TableView tasks={tasks} onDelete={requestDelete} />
+        <TableView
+          tasks={tasks}
+          onDelete={requestDelete}
+          selectedIds={canBulk ? selectedIds : undefined}
+          onToggleSelect={canBulk ? (id) => toggleSelected(id, setSelectedIds) : undefined}
+          onToggleAll={canBulk ? (checked) => setSelectedIds(checked ? new Set(tasks.map((t) => t.id)) : new Set()) : undefined}
+        />
       ) : view === "list" ? (
-        <ListView tasks={tasks} onDelete={requestDelete} />
+        <ListView
+          tasks={tasks}
+          onDelete={requestDelete}
+          selectedIds={canBulk ? selectedIds : undefined}
+          onToggleSelect={canBulk ? (id) => toggleSelected(id, setSelectedIds) : undefined}
+        />
       ) : (
         <CalendarView tasks={tasks} />
+      )}
+
+      {canBulk && selectedIds.size > 0 && (view === "table" || view === "list") && (
+        <BulkToolbar
+          count={selectedIds.size}
+          onClear={() => setSelectedIds(new Set())}
+          onOpen={(action) => setBulkAction(action)}
+          onDelete={() => {
+            // Массовое удаление — просим подтверждение через ConfirmModal? Здесь простой поток:
+            // используем существующую deleteTask последовательно.
+            Array.from(selectedIds).forEach((id) => deleteTask.mutate(id));
+            setSelectedIds(new Set());
+          }}
+        />
+      )}
+
+      {bulkAction && (
+        <BulkPatchModal
+          action={bulkAction}
+          ids={Array.from(selectedIds)}
+          users={users ?? []}
+          projects={projects ?? []}
+          isPending={bulkUpdate.isPending}
+          onClose={() => setBulkAction(null)}
+          onSubmit={(patch) => bulkUpdate.mutate({ ids: Array.from(selectedIds), patch })}
+        />
       )}
 
       {openNew && (
@@ -494,57 +665,128 @@ function KanbanCardGhost({ task }: { task: TaskListItem }) {
   );
 }
 
+// Grid layout для Tasks table-view. Одинаковый template для header и rows.
+const TASKS_GRID_COLS = "36px minmax(240px,2.5fr) 130px 120px minmax(160px,1fr) 120px 60px";
+const TASKS_GRID_COLS_NO_SELECT = "minmax(240px,2.5fr) 130px 120px minmax(160px,1fr) 120px 60px";
+const TASK_ROW_HEIGHT = 52;
+const TASK_CARD_HEIGHT = 76;
+
+function toggleSelected(id: number, setter: React.Dispatch<React.SetStateAction<Set<number>>>) {
+  setter((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+}
+
 function TableView({
   tasks,
   onDelete,
+  selectedIds,
+  onToggleSelect,
+  onToggleAll,
 }: {
   tasks: TaskListItem[];
   onDelete?: (id: number) => void;
+  selectedIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
+  onToggleAll?: (checked: boolean) => void;
 }) {
+  const withSelect = !!onToggleSelect;
+  const gridCols = withSelect ? TASKS_GRID_COLS : TASKS_GRID_COLS_NO_SELECT;
+  const allSelected = withSelect && tasks.length > 0 && tasks.every((t) => selectedIds?.has(t.id));
+  const someSelected = withSelect && tasks.some((t) => selectedIds?.has(t.id)) && !allSelected;
   return (
-    <div className="card overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40">
-          <tr>
-            <th className="px-5 py-2.5 text-left">Задача</th>
-            <th className="px-5 py-2.5 text-left">Статус</th>
-            <th className="px-5 py-2.5 text-left">Приоритет</th>
-            <th className="px-5 py-2.5 text-left">Исполнитель</th>
-            <th className="px-5 py-2.5 text-left">Дедлайн</th>
-            {onDelete && <th className="px-5 py-2.5 text-right w-10" aria-label="Действия" />}
-          </tr>
-        </thead>
-        <tbody>
-          {tasks.map((t) => (
-            <tr key={t.id} className="table-row group">
-              <td className="px-5 py-3">
-                <Link to={`/tasks/${t.id}`} className="font-medium hover:text-brand-600">{t.title}</Link>
-              </td>
-              <td className="px-5 py-3"><StatusChip status={t.status} /></td>
-              <td className="px-5 py-3"><PriorityChip priority={t.priority} /></td>
-              <td className="px-5 py-3">
-                {t.assignee ? <div className="flex items-center gap-2"><Avatar name={t.assignee.name} size={22} url={t.assignee.avatar_url} />{t.assignee.name}</div> : "—"}
-              </td>
-              <td className="px-5 py-3 text-neutral-500">
-                {t.deadline ? new Date(t.deadline).toLocaleDateString("ru-RU") : "—"}
-              </td>
-              {onDelete && (
-                <td className="px-3 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onDelete(t.id)}
-                    className="rounded p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-950/30"
-                    title="Удалить задачу"
-                    aria-label="Удалить задачу"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="card overflow-hidden">
+      <div className="min-w-[900px]">
+        <div
+          className="grid bg-neutral-50 px-5 py-2.5 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40"
+          style={{ gridTemplateColumns: gridCols }}
+        >
+          {withSelect && (
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                aria-label="Выбрать все задачи"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected;
+                }}
+                onChange={(e) => onToggleAll?.(e.target.checked)}
+              />
+            </div>
+          )}
+          <div>Задача</div>
+          <div>Статус</div>
+          <div>Приоритет</div>
+          <div>Исполнитель</div>
+          <div>Дедлайн</div>
+          <div />
+        </div>
+        <VirtualList
+          items={tasks}
+          itemHeight={TASK_ROW_HEIGHT}
+          height={Math.min(tasks.length, 14) * TASK_ROW_HEIGHT + 4}
+          getKey={(t) => t.id}
+          threshold={50}
+          renderItem={(t) => {
+            const isSelected = !!selectedIds?.has(t.id);
+            return (
+              <div
+                className={clsx(
+                  "group grid items-center border-b border-neutral-100 px-5 text-sm hover:bg-neutral-50/70 dark:border-neutral-800/80 dark:hover:bg-neutral-800/40",
+                  isSelected && "bg-brand-50/50 dark:bg-brand-900/10",
+                )}
+                style={{ gridTemplateColumns: gridCols, height: TASK_ROW_HEIGHT }}
+              >
+                {withSelect && (
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      aria-label={`Выбрать «${t.title}»`}
+                      checked={isSelected}
+                      onChange={() => onToggleSelect?.(t.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <Link to={`/tasks/${t.id}`} className="truncate font-medium hover:text-brand-600 block">
+                    {t.title}
+                  </Link>
+                </div>
+                <div><StatusChip status={t.status} /></div>
+                <div><PriorityChip priority={t.priority} /></div>
+                <div className="min-w-0">
+                  {t.assignee ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avatar name={t.assignee.name} size={22} url={t.assignee.avatar_url} />
+                      <span className="truncate">{t.assignee.name}</span>
+                    </div>
+                  ) : "—"}
+                </div>
+                <div className="text-neutral-500">
+                  {t.deadline ? new Date(t.deadline).toLocaleDateString("ru-RU") : "—"}
+                </div>
+                <div className="flex justify-end">
+                  {onDelete && (
+                    <button
+                      type="button"
+                      onClick={() => onDelete(t.id)}
+                      className="rounded p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-950/30"
+                      title="Удалить задачу"
+                      aria-label="Удалить задачу"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -552,43 +794,72 @@ function TableView({
 function ListView({
   tasks,
   onDelete,
+  selectedIds,
+  onToggleSelect,
 }: {
   tasks: TaskListItem[];
   onDelete?: (id: number) => void;
+  selectedIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
 }) {
+  const withSelect = !!onToggleSelect;
   return (
-    <div className="space-y-2">
-      {tasks.map((t) => (
-        <div key={t.id} className="group relative">
-          <Link to={`/tasks/${t.id}`}
-            className="card-interactive flex items-center justify-between gap-3 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{t.title}</div>
-              <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
-                <StatusChip status={t.status} />
-                <PriorityChip priority={t.priority} />
-                {t.deadline && <span>до {new Date(t.deadline).toLocaleDateString("ru-RU")}</span>}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {t.assignee && <Avatar name={t.assignee.name} size={26} url={t.assignee.avatar_url} />}
-              {onDelete && <span className="w-6" aria-hidden />}
-            </div>
-          </Link>
-          {onDelete && (
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); onDelete(t.id); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-950/30"
-              title="Удалить задачу"
-              aria-label="Удалить задачу"
+    <VirtualList
+      items={tasks}
+      itemHeight={TASK_CARD_HEIGHT}
+      height={Math.min(tasks.length, 10) * TASK_CARD_HEIGHT + 4}
+      getKey={(t) => t.id}
+      threshold={50}
+      className="space-y-2"
+      rowClassName="pb-2"
+      renderItem={(t) => {
+        const isSelected = !!selectedIds?.has(t.id);
+        return (
+          <div className="group relative flex items-center gap-2">
+            {withSelect && (
+              <input
+                type="checkbox"
+                aria-label={`Выбрать «${t.title}»`}
+                checked={isSelected}
+                onChange={() => onToggleSelect?.(t.id)}
+                className="ml-1 shrink-0"
+              />
+            )}
+            <Link
+              to={`/tasks/${t.id}`}
+              className={clsx(
+                "card-interactive flex flex-1 items-center justify-between gap-3 px-4 py-3",
+                isSelected && "ring-2 ring-brand-500/40",
+              )}
             >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{t.title}</div>
+                <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
+                  <StatusChip status={t.status} />
+                  <PriorityChip priority={t.priority} />
+                  {t.deadline && <span>до {new Date(t.deadline).toLocaleDateString("ru-RU")}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {t.assignee && <Avatar name={t.assignee.name} size={26} url={t.assignee.avatar_url} />}
+                {onDelete && <span className="w-6" aria-hidden />}
+              </div>
+            </Link>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); onDelete(t.id); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-950/30"
+                title="Удалить задачу"
+                aria-label="Удалить задачу"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        );
+      }}
+    />
   );
 }
 
@@ -1074,5 +1345,250 @@ function ExportExcelModal({ filters, onClose }: { filters: TaskFilters; onClose:
         </div>
       </div>
     </Modal>
+  );
+}
+
+function BulkToolbar({
+  count,
+  onClear,
+  onOpen,
+  onDelete,
+}: {
+  count: number;
+  onClear: () => void;
+  onOpen: (action: "status" | "priority" | "assignee" | "deadline") => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 pointer-events-none">
+      <div className="card pointer-events-auto flex flex-wrap items-center gap-2 px-3 py-2 shadow-lg animate-slide-up">
+        <span className="pl-1 pr-2 text-sm font-medium">Выбрано: {count}</span>
+        <div className="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
+        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("status")}>Статус</button>
+        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("priority")}>Приоритет</button>
+        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("assignee")}>Исполнитель</button>
+        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("deadline")}>Дедлайн</button>
+        <button className="btn-ghost !py-1 !px-2 text-xs text-rose-500" onClick={onDelete}>
+          <Trash2 size={12} /> Удалить
+        </button>
+        <div className="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
+        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={onClear}>Отмена</button>
+      </div>
+    </div>
+  );
+}
+
+function BulkPatchModal({
+  action,
+  ids,
+  users,
+  projects: _projects,
+  isPending,
+  onClose,
+  onSubmit,
+}: {
+  action: "status" | "priority" | "assignee" | "deadline";
+  ids: number[];
+  users: User[];
+  projects: Project[];
+  isPending: boolean;
+  onClose: () => void;
+  onSubmit: (patch: Record<string, unknown>) => void;
+}) {
+  const [status, setStatus] = useState<TaskStatus>("new");
+  const [priority, setPriority] = useState("medium");
+  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [deadline, setDeadline] = useState("");
+
+  const title = {
+    status: "Изменить статус",
+    priority: "Изменить приоритет",
+    assignee: "Назначить исполнителя",
+    deadline: "Изменить дедлайн",
+  }[action];
+
+  const submit = () => {
+    let patch: Record<string, unknown> = {};
+    if (action === "status") patch = { status };
+    else if (action === "priority") patch = { priority };
+    else if (action === "assignee") patch = { assignee_id: assigneeId ? Number(assigneeId) : null };
+    else if (action === "deadline") patch = { deadline: deadline ? new Date(deadline).toISOString() : null };
+    onSubmit(patch);
+  };
+
+  return (
+    <Modal open onClose={onClose} title={title} size="sm">
+      <div className="space-y-4">
+        <p className="text-sm text-neutral-500">Применится к {ids.length} задачам.</p>
+
+        {action === "status" && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Новый статус</span>
+            <select className="input" value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)} autoFocus>
+              {STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {action === "priority" && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Новый приоритет</span>
+            <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)} autoFocus>
+              {(["low", "medium", "high", "critical"] as const).map((p) => (
+                <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {action === "assignee" && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Исполнитель</span>
+            <select className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} autoFocus>
+              <option value="">— (снять)</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {action === "deadline" && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Новый дедлайн</span>
+            <input
+              className="input"
+              type="datetime-local"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              autoFocus
+            />
+            <div className="mt-1 text-[11px] text-neutral-500">Пусто = снять дедлайн</div>
+          </label>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button className="btn-primary" onClick={submit} disabled={isPending}>
+            {isPending ? "Применяем…" : "Применить"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function FilterDrawer({
+  onClose,
+  projects,
+  users,
+  projectId,
+  assigneeId,
+  status,
+  priority,
+  onChange,
+  onReset,
+}: {
+  onClose: () => void;
+  projects: Project[];
+  users: User[];
+  projectId: string;
+  assigneeId: string;
+  status: string;
+  priority: string;
+  onChange: (key: string, value: string) => void;
+  onReset: () => void;
+}) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Фильтры задач">
+      <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
+      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#26262e]">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Фильтры</h3>
+          <button className="btn-ghost !p-1.5" onClick={onClose} aria-label="Закрыть фильтры">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Проект</span>
+            <select
+              className="input"
+              value={projectId}
+              onChange={(e) => onChange("project", e.target.value)}
+            >
+              <option value="">Все проекты</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Исполнитель</span>
+            <select
+              className="input"
+              value={assigneeId}
+              onChange={(e) => onChange("assignee", e.target.value)}
+            >
+              <option value="">Все исполнители</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Статус</span>
+            <select
+              className="input"
+              value={status}
+              onChange={(e) => onChange("status", e.target.value)}
+            >
+              <option value="">Любой статус</option>
+              {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Приоритет</span>
+            <select
+              className="input"
+              value={priority}
+              onChange={(e) => onChange("priority", e.target.value)}
+            >
+              <option value="">Любой приоритет</option>
+              {(["low", "medium", "high", "critical"] as const).map((p) => (
+                <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          <button
+            className="btn-secondary flex-1"
+            onClick={() => {
+              onReset();
+              onClose();
+            }}
+          >
+            Сбросить
+          </button>
+          <button className="btn-primary flex-1" onClick={onClose}>
+            Применить
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

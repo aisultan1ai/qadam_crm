@@ -70,13 +70,16 @@ async def lifespan(_: FastAPI):
 
 
 def create_app() -> FastAPI:
+    # В production скрываем Swagger/ReDoc и OpenAPI — они раскрывают структуру API,
+    # включая admin/billing эндпоинты. В dev оставляем для удобства.
+    docs_enabled = not settings.is_prod
     app = FastAPI(
         title="Qadam CRM API",
         version="1.0.0",
         description="Qadam CRM — учёт и трекинг задач компании",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
 

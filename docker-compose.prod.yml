@@ -52,7 +52,8 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 1440
-      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set to comma-separated allowed origins in prod}
+      APP_ENV: ${APP_ENV:-production}
       UPLOAD_DIR: /app/uploads
       EXPORT_DIR: /app/exports
     volumes:

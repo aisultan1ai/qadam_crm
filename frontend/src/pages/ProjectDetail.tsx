@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { Project, TaskListItem, Page, User } from "@/types";
 import { Loader, Avatar, StatusChip, PriorityChip } from "@/components/ui";
-import { ArrowLeft, Calendar, Plus } from "lucide-react";
+import { ArrowLeft, Calendar, Plus, ListTodo, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { TaskFormModal } from "./Tasks";
 
@@ -33,6 +33,25 @@ export default function ProjectDetail() {
     enabled: openNew,
   });
 
+  const stats = useMemo(() => {
+    const list = tasks ?? [];
+    const now = Date.now();
+    let done = 0;
+    let overdue = 0;
+    for (const t of list) {
+      if (t.status === "done") done += 1;
+      if (
+        t.deadline &&
+        t.status !== "done" &&
+        t.status !== "cancelled" &&
+        new Date(t.deadline).getTime() < now
+      ) {
+        overdue += 1;
+      }
+    }
+    return { total: list.length, done, overdue };
+  }, [tasks]);
+
   if (!project) return <Loader />;
 
   return (
@@ -46,7 +65,7 @@ export default function ProjectDetail() {
           <h1 className="text-2xl font-semibold tracking-tight">
             <span
               className="mr-2 inline-block h-3 w-3 rounded-full align-middle"
-              style={{ background: project.color || "#6366f1" }}
+              style={{ background: project.color || "#0F67FD" }}
             />
             {project.name}
           </h1>
@@ -68,6 +87,24 @@ export default function ProjectDetail() {
         </div>
       </div>
 
+      {!isLoading && tasks && tasks.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <MiniStat icon={<ListTodo size={16} />} label="Всего" value={stats.total} />
+          <MiniStat
+            icon={<CheckCircle2 size={16} />}
+            label="Завершено"
+            value={stats.done}
+            accent="text-emerald-600 dark:text-emerald-400"
+          />
+          <MiniStat
+            icon={<AlertTriangle size={16} />}
+            label="Просрочено"
+            value={stats.overdue}
+            accent={stats.overdue > 0 ? "text-rose-600 dark:text-rose-400" : undefined}
+          />
+        </div>
+      )}
+
       <div className="card overflow-x-auto">
         <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
           <h2 className="text-sm font-semibold">Задачи проекта</h2>
@@ -82,7 +119,8 @@ export default function ProjectDetail() {
         ) : !tasks || tasks.length === 0 ? (
           <div className="py-10 text-center text-sm text-neutral-500">Задач пока нет</div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm" aria-label={`Задачи проекта «${project.name}»`}>
+            <caption className="sr-only">Задачи проекта {project.name}: название, статус, приоритет, исполнитель, дедлайн.</caption>
             <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40">
               <tr>
                 <th className="px-5 py-2.5 text-left">Задача</th>
@@ -121,6 +159,28 @@ export default function ProjectDetail() {
           onClose={() => setOpenNew(false)}
         />
       )}
+    </div>
+  );
+}
+
+function MiniStat({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  accent?: string;
+}) {
+  return (
+    <div className="card p-3 sm:p-4">
+      <div className="flex items-center gap-2 text-xs text-neutral-500">
+        <span className={accent}>{icon}</span>
+        <span className="truncate">{label}</span>
+      </div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${accent ?? ""}`}>{value}</div>
     </div>
   );
 }

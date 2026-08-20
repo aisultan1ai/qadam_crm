@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QADAM logo mark">
+  <!-- Ring of the Q -->
+  <path d="M256 90 a150 150 0 1 0 0.1 0 Z M256 130 a110 110 0 1 1 -0.1 0 Z"
+        fill="#0d2758" fill-rule="evenodd"/>
+
+  <!-- Bold tail of the Q -->
+  <path d="M372 300 L409 399 L330 360 Z" fill="#0d2758"/>
+
+  <!-- Stairs: light -> bright, ascending toward upper-right -->
+  <rect x="274" y="176" width="80" height="60" rx="12" fill="#a2cafd"/>
+  <rect x="224" y="228" width="80" height="60" rx="12" fill="#5fa0fe"/>
+
+  <!-- bright bottom step + ramp wedge pointing down-right -->
+  <g fill="#0f67fd">
+    <rect x="184" y="278" width="70" height="50" rx="12"/>
+    <path d="M249 296 L318 340 L199 328 Z"/>
+  </g>
+</svg>

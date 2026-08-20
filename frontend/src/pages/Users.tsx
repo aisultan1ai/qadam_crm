@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import clsx from "clsx";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers } from "lucide-react";
 import type { User, Role, Department, Page } from "@/types";
 import { Avatar, Loader, Modal, FieldError, FormError } from "@/components/ui";
+import { useConfirm } from "@/components/Confirm";
+import { VirtualList } from "@/components/VirtualList";
 import { departmentSchema, type DepartmentForm, userCreateSchema, userUpdateSchema, type UserCreateForm, type UserUpdateForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
 
@@ -33,8 +35,8 @@ export default function Users() {
                 clsx(
                   "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
                   isActive
-                    ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-white"
-                    : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
+                    ? "bg-brand-600 font-medium text-white shadow-sm hover:bg-brand-700"
+                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
                 )
               }
             >
@@ -57,6 +59,7 @@ export default function Users() {
 function UsersList() {
   const { can } = useAuth();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [qLocal, setQLocal] = useState("");
   const [q, setQ] = useState("");
   const [openForm, setOpenForm] = useState<{ mode: "create" } | { mode: "edit"; user: User } | null>(null);
@@ -84,6 +87,7 @@ function UsersList() {
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/api/users/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onError: (e) => alert(extractApiError(e).message || "Не удалось удалить"),
   });
 
   return (
@@ -100,67 +104,24 @@ function UsersList() {
         )}
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card overflow-hidden">
         {isLoading ? (
           <Loader />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40">
-              <tr>
-                <th className="px-5 py-2.5 text-left">Имя</th>
-                <th className="px-5 py-2.5 text-left">Email</th>
-                <th className="px-5 py-2.5 text-left">Роли</th>
-                <th className="px-5 py-2.5 text-left">Отдел</th>
-                <th className="px-5 py-2.5 text-left">Статус</th>
-                <th className="px-5 py-2.5 text-left">Последний вход</th>
-                <th className="px-5 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {users?.map((u) => (
-                <tr key={u.id} className="table-row">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <Avatar name={u.name} url={u.avatar_url} />
-                      <span className="font-medium">{u.name}</span>
-                      {u.is_superuser && <span className="chip bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">super</span>}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-neutral-600">{u.email}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {u.roles.map((r) => (
-                        <span key={r.id} className="chip bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                          {r.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-neutral-600">{u.department?.name || "—"}</td>
-                  <td className="px-5 py-3">
-                    <span className={`chip ${u.is_active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800"}`}>
-                      {u.is_active ? "активен" : "заблокирован"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-xs text-neutral-500">
-                    {u.last_login_at ? new Date(u.last_login_at).toLocaleString("ru-RU") : "—"}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    {can("users.update") && (
-                      <button className="btn-ghost !p-1.5" onClick={() => setOpenForm({ mode: "edit", user: u })}>
-                        <Pencil size={14} />
-                      </button>
-                    )}
-                    {can("users.delete") && !u.is_superuser && (
-                      <button className="btn-ghost !p-1.5 text-rose-500" onClick={() => confirm("Удалить пользователя?") && del.mutate(u.id)}>
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <UsersGrid
+            users={users ?? []}
+            can={can}
+            onEdit={(u) => setOpenForm({ mode: "edit", user: u })}
+            onDelete={(u) =>
+              confirm({
+                title: "Удалить пользователя?",
+                message: `${u.name} (${u.email}) будет удалён.`,
+                danger: true,
+                confirmLabel: "Удалить",
+                onConfirm: () => del.mutateAsync(u.id),
+              })
+            }
+          />
         )}
       </div>
 
@@ -176,9 +137,115 @@ function UsersList() {
   );
 }
 
+// Grid layout: те же колонки что и раньше, но div-структура для виртуализации.
+// Ширины колонок в px + fr для гибких — header и rows используют один и тот же grid-template.
+const USERS_GRID_COLS = "minmax(200px,1.5fr) minmax(200px,1.5fr) minmax(160px,2fr) minmax(120px,1fr) 110px 150px 80px";
+const USER_ROW_HEIGHT = 56;
+
+function UsersGrid({
+  users,
+  can,
+  onEdit,
+  onDelete,
+}: {
+  users: User[];
+  can: (code: string | string[]) => boolean;
+  onEdit: (u: User) => void;
+  onDelete: (u: User) => void;
+}) {
+  const showActions = can("users.update") || can("users.delete");
+  return (
+    <div className="min-w-[900px]">
+      <div
+        className="grid bg-neutral-50 px-5 py-2.5 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40"
+        style={{ gridTemplateColumns: USERS_GRID_COLS }}
+      >
+        <div>Имя</div>
+        <div>Email</div>
+        <div>Роли</div>
+        <div>Отдел</div>
+        <div>Статус</div>
+        <div>Последний вход</div>
+        <div />
+      </div>
+      <VirtualList
+        items={users}
+        itemHeight={USER_ROW_HEIGHT}
+        // Больше 50 записей — фиксируем высоту вьюпорта и виртуализируем.
+        height={Math.min(users.length, 12) * USER_ROW_HEIGHT + 4}
+        getKey={(u) => u.id}
+        threshold={50}
+        renderItem={(u) => (
+          <div
+            className="grid items-center border-b border-neutral-100 px-5 text-sm hover:bg-neutral-50/70 dark:border-neutral-800/80 dark:hover:bg-neutral-800/40"
+            style={{ gridTemplateColumns: USERS_GRID_COLS, height: USER_ROW_HEIGHT }}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Avatar name={u.name} url={u.avatar_url} />
+              <span className="font-medium truncate">{u.name}</span>
+              {u.is_superuser && (
+                <span className="chip bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 shrink-0">
+                  super
+                </span>
+              )}
+            </div>
+            <div className="truncate text-neutral-600">{u.email}</div>
+            <div className="flex flex-wrap gap-1 overflow-hidden">
+              {u.roles.slice(0, 3).map((r) => (
+                <span
+                  key={r.id}
+                  className="chip bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
+                >
+                  {r.name}
+                </span>
+              ))}
+              {u.roles.length > 3 && (
+                <span className="text-xs text-neutral-500">+{u.roles.length - 3}</span>
+              )}
+            </div>
+            <div className="truncate text-neutral-600">{u.department?.name || "—"}</div>
+            <div>
+              <span
+                className={`chip ${
+                  u.is_active
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800"
+                }`}
+              >
+                {u.is_active ? "активен" : "заблокирован"}
+              </span>
+            </div>
+            <div className="text-xs text-neutral-500 truncate">
+              {u.last_login_at ? new Date(u.last_login_at).toLocaleString("ru-RU") : "—"}
+            </div>
+            <div className="flex items-center justify-end gap-0.5">
+              {can("users.update") && (
+                <button className="btn-ghost !p-1.5" onClick={() => onEdit(u)} aria-label="Изменить">
+                  <Pencil size={14} />
+                </button>
+              )}
+              {can("users.delete") && !u.is_superuser && (
+                <button
+                  className="btn-ghost !p-1.5 text-rose-500"
+                  onClick={() => onDelete(u)}
+                  aria-label="Удалить"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+              {!showActions && <span />}
+            </div>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
 function DepartmentsView() {
   const { can } = useAuth();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openNew, setOpenNew] = useState(false);
 
@@ -263,7 +330,13 @@ function DepartmentsView() {
                     tabIndex={0}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`Удалить отдел «${d.name}»?`)) del.mutate(d.id);
+                      confirm({
+                        title: "Удалить отдел?",
+                        message: `Отдел «${d.name}» будет удалён.`,
+                        danger: true,
+                        confirmLabel: "Удалить",
+                        onConfirm: () => del.mutateAsync(d.id),
+                      });
                     }}
                     className="opacity-0 text-rose-500 group-hover:opacity-100"
                     title="Удалить"
@@ -409,14 +482,21 @@ function UserFormModal({
   const isEdit = !!initial;
   const [formError, setFormError] = useState<string | null>(null);
 
+  // UserUpdateForm — supertype: те же поля, но password optional.
+  // Для create-формы валидация userCreateSchema гарантирует, что password непустой.
+  type FormData = UserUpdateForm;
+  const resolver: Resolver<FormData> = isEdit
+    ? zodResolver(userUpdateSchema)
+    : (zodResolver(userCreateSchema) as unknown as Resolver<FormData>);
+
   const {
     register,
     handleSubmit,
     watch,
     setValue,
     formState: { errors, isValid },
-  } = useForm<UserCreateForm | UserUpdateForm>({
-    resolver: zodResolver(isEdit ? userUpdateSchema : userCreateSchema) as any,
+  } = useForm<FormData>({
+    resolver,
     mode: "onChange",
     defaultValues: {
       name: initial?.name || "",
@@ -425,13 +505,13 @@ function UserFormModal({
       is_active: initial?.is_active ?? true,
       department_id: initial?.department?.id ?? "",
       role_ids: initial?.roles.map((r) => r.id) ?? [],
-    } as any,
+    },
   });
-  const roleIds = (watch("role_ids") as number[]) || [];
+  const roleIds = watch("role_ids") || [];
 
   const save = useMutation({
-    mutationFn: (data: any) => {
-      const body: any = {
+    mutationFn: (data: FormData) => {
+      const body: Record<string, unknown> = {
         email: data.email,
         name: data.name,
         is_active: data.is_active,

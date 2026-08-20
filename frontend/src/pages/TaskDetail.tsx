@@ -40,7 +40,7 @@ function formatActivityDetail(detail: string | null | undefined): string {
   return detail.split(",").map(localizeChange).join(", ");
 }
 import { Avatar, Loader, PriorityChip, StatusChip } from "@/components/ui";
-import { ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile } from "lucide-react";
+import { ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile, Pencil } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
 
@@ -87,11 +87,45 @@ export default function TaskDetail() {
 
   const addComment = useMutation({
     mutationFn: (body: string) => api.post(`/api/tasks/${taskId}/comments`, { body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    // Оптимистично добавляем комментарий с временным id < 0, чтобы UI не ждал refetch.
+    // На слабой сети (спутник/мобильный интернет) задержка 500-1500ms заметна.
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: ["task", taskId] });
+      const prev = qc.getQueryData<Task>(["task", taskId]);
+      if (prev) {
+        const now = new Date().toISOString();
+        const optimistic: CommentT = {
+          id: -Date.now(),
+          body,
+          created_at: now,
+          updated_at: now,
+          author: me
+            ? { id: me.id, name: me.name, email: me.email, avatar_url: me.avatar_url }
+            : null,
+          reactions: [],
+        };
+        qc.setQueryData<Task>(["task", taskId], {
+          ...prev,
+          comments: [...prev.comments, optimistic],
+        });
+      }
+      return { prev };
+    },
+    onError: (e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["task", taskId], ctx.prev);
+      toast.error("Не удалось отправить комментарий", extractApiError(e).message);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
   });
   const deleteComment = useMutation({
     mutationFn: (cid: number) => api.delete(`/api/tasks/${taskId}/comments/${cid}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+  });
+  const editComment = useMutation({
+    mutationFn: ({ cid, body }: { cid: number; body: string }) =>
+      api.patch(`/api/tasks/${taskId}/comments/${cid}`, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    onError: (e) => toast.error("Не удалось изменить комментарий", extractApiError(e).message),
   });
   const toggleReaction = useMutation({
     mutationFn: ({ commentId, emoji }: { commentId: number; emoji: string }) =>
@@ -102,11 +136,33 @@ export default function TaskDetail() {
   const addCheck = useMutation({
     mutationFn: (text: string) => api.post(`/api/tasks/${taskId}/checklist`, { text, done: false }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    onError: (e) => toast.error("Не удалось добавить пункт", extractApiError(e).message),
   });
   const toggleCheck = useMutation({
     mutationFn: (item: { id: number; text: string; done: boolean }) =>
       api.patch(`/api/tasks/${taskId}/checklist/${item.id}`, { text: item.text, done: !item.done }),
+    // Optimistic: toggle визуально мгновенный, потом сверяем с сервером.
+    onMutate: async (item) => {
+      await qc.cancelQueries({ queryKey: ["task", taskId] });
+      const prev = qc.getQueryData<Task>(["task", taskId]);
+      if (prev) {
+        qc.setQueryData<Task>(["task", taskId], {
+          ...prev,
+          checklist: prev.checklist.map((c) => (c.id === item.id ? { ...c, done: !item.done } : c)),
+        });
+      }
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["task", taskId], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+  });
+  const editCheck = useMutation({
+    mutationFn: (item: { id: number; text: string; done: boolean }) =>
+      api.patch(`/api/tasks/${taskId}/checklist/${item.id}`, { text: item.text, done: item.done }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    onError: (e) => toast.error("Не удалось изменить пункт", extractApiError(e).message),
   });
   const removeCheck = useMutation({
     mutationFn: (cid: number) => api.delete(`/api/tasks/${taskId}/checklist/${cid}`),
@@ -179,43 +235,57 @@ export default function TaskDetail() {
         <div className="card p-5">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Чек-лист</h3>
-            <span className="text-xs text-neutral-500">
+            <span className="text-xs text-neutral-500 tabular-nums">
               {task.checklist.filter((i) => i.done).length}/{task.checklist.length}
             </span>
           </div>
+          {task.checklist.length > 0 && (
+            <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+              <div
+                className="h-full rounded-full bg-brand-600 transition-all duration-300"
+                style={{
+                  width: `${Math.round(
+                    (task.checklist.filter((i) => i.done).length / task.checklist.length) * 100,
+                  )}%`,
+                }}
+              />
+            </div>
+          )}
           <div className="space-y-1.5">
             {task.checklist.map((item) => (
-              <div key={item.id} className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800/60">
-                <button
-                  onClick={() => toggleCheck.mutate(item)}
-                  className={`grid h-5 w-5 place-items-center rounded border ${item.done ? "border-brand-600 bg-brand-600 text-white" : "border-neutral-300 dark:border-neutral-600"}`}
-                >
-                  {item.done && <Check size={12} />}
-                </button>
-                <span className={item.done ? "flex-1 text-sm line-through text-neutral-400" : "flex-1 text-sm"}>{item.text}</span>
-                <button className="btn-ghost !p-1 opacity-0 group-hover:opacity-100" onClick={() => removeCheck.mutate(item.id)}>
-                  <X size={14} />
-                </button>
-              </div>
+              <ChecklistRow
+                key={item.id}
+                item={item}
+                canEdit={can("tasks.update")}
+                onToggle={() => toggleCheck.mutate(item)}
+                onRename={(text) => editCheck.mutate({ ...item, text })}
+                onRemove={() => removeCheck.mutate(item.id)}
+              />
             ))}
           </div>
-          <div className="mt-2 flex gap-2">
-            <input
-              className="input"
-              placeholder="Добавить пункт…"
-              value={newCheck}
-              onChange={(e) => setNewCheck(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newCheck.trim()) {
-                  addCheck.mutate(newCheck);
-                  setNewCheck("");
-                }
-              }}
-            />
-            <button className="btn-secondary" onClick={() => newCheck.trim() && (addCheck.mutate(newCheck), setNewCheck(""))}>
-              <Plus size={14} />
-            </button>
-          </div>
+          {can("tasks.update") && (
+            <div className="mt-2 flex gap-2">
+              <input
+                className="input"
+                placeholder="Добавить пункт…"
+                value={newCheck}
+                onChange={(e) => setNewCheck(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newCheck.trim()) {
+                    addCheck.mutate(newCheck);
+                    setNewCheck("");
+                  }
+                }}
+              />
+              <button
+                className="btn-secondary"
+                onClick={() => newCheck.trim() && (addCheck.mutate(newCheck), setNewCheck(""))}
+                aria-label="Добавить пункт"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="card p-5">
@@ -231,22 +301,46 @@ export default function TaskDetail() {
                 meId={me?.id}
                 canDelete={can("comments.delete")}
                 canReact={can("comments.create")}
+                canEditOwn={can("comments.update_own")}
+                canEditAny={can("comments.update_any")}
                 onDelete={() => deleteComment.mutate(c.id)}
                 onToggle={(emoji) => toggleReaction.mutate({ commentId: c.id, emoji })}
+                onSave={(body) => editComment.mutate({ cid: c.id, body })}
+                isSaving={editComment.isPending}
               />
             ))}
           </div>
           {can("comments.create") && (
-            <form onSubmit={submitComment} className="mt-4 flex gap-2">
-              <input
-                className="input"
-                placeholder="Написать комментарий. Используйте @email для упоминания…"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-              <button type="submit" className="btn-primary" disabled={!comment.trim()}>
-                <Send size={14} />
-              </button>
+            <form onSubmit={submitComment} className="mt-4">
+              <div className="relative">
+                <textarea
+                  className="input min-h-[72px] resize-y pr-12"
+                  placeholder="Написать комментарий. Используйте @email для упоминания…"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      if (comment.trim()) {
+                        addComment.mutate(comment);
+                        setComment("");
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="btn-primary absolute bottom-2 right-2 !py-1.5 !px-2.5"
+                  disabled={!comment.trim() || addComment.isPending}
+                  aria-label="Отправить комментарий"
+                  title="Отправить (⌘⏎)"
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+              <div className="mt-1 text-[11px] text-neutral-400">
+                Enter — новая строка · <span className="kbd">⌘</span>+<span className="kbd">⏎</span> — отправить
+              </div>
             </form>
           )}
         </div>
@@ -383,6 +477,84 @@ export default function TaskDetail() {
   );
 }
 
+function ChecklistRow({
+  item,
+  canEdit,
+  onToggle,
+  onRename,
+  onRemove,
+}: {
+  item: { id: number; text: string; done: boolean };
+  canEdit: boolean;
+  onToggle: () => void;
+  onRename: (text: string) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(item.text);
+
+  const commit = () => {
+    const t = draft.trim();
+    if (!t || t === item.text) {
+      setEditing(false);
+      return;
+    }
+    onRename(t);
+    setEditing(false);
+  };
+
+  return (
+    <div className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800/60">
+      <button
+        onClick={onToggle}
+        className={`grid h-5 w-5 shrink-0 place-items-center rounded border ${
+          item.done ? "border-brand-600 bg-brand-600 text-white" : "border-neutral-300 dark:border-neutral-600"
+        }`}
+        aria-label={item.done ? "Отметить как невыполненный" : "Отметить как выполненный"}
+      >
+        {item.done && <Check size={12} />}
+      </button>
+      {editing ? (
+        <input
+          className="input !py-1 flex-1 text-sm"
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") {
+              setDraft(item.text);
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <span
+          className={
+            item.done
+              ? "flex-1 cursor-text text-sm text-neutral-400 line-through"
+              : "flex-1 cursor-text text-sm"
+          }
+          onDoubleClick={() => canEdit && setEditing(true)}
+          title={canEdit ? "Двойной клик — редактировать" : undefined}
+        >
+          {item.text}
+        </span>
+      )}
+      {canEdit && !editing && (
+        <button
+          className="btn-ghost !p-1 opacity-0 transition-opacity group-hover:opacity-100"
+          onClick={onRemove}
+          aria-label="Удалить пункт"
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -425,17 +597,47 @@ function CommentRow({
   meId,
   canDelete,
   canReact,
+  canEditOwn,
+  canEditAny,
   onDelete,
   onToggle,
+  onSave,
+  isSaving,
 }: {
   comment: CommentT;
   meId?: number;
   canDelete: boolean;
   canReact: boolean;
+  canEditOwn: boolean;
+  canEditAny: boolean;
   onDelete: () => void;
   onToggle: (emoji: string) => void;
+  onSave: (body: string) => void;
+  isSaving: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment.body);
+  const isOwn = !!(meId && comment.author?.id === meId);
+  const canEdit = (isOwn && canEditOwn) || canEditAny;
+  const edited =
+    comment.updated_at && comment.created_at &&
+    Math.abs(new Date(comment.updated_at).getTime() - new Date(comment.created_at).getTime()) > 1500;
+
+  const startEdit = () => {
+    setDraft(comment.body);
+    setEditing(true);
+  };
+  const save = () => {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === comment.body) {
+      setEditing(false);
+      return;
+    }
+    onSave(trimmed);
+    setEditing(false);
+  };
+
   return (
     <div className="group flex gap-3">
       <Avatar name={comment.author?.name} url={comment.author?.avatar_url} />
@@ -443,16 +645,60 @@ function CommentRow({
         <div className="flex items-center gap-2 text-xs text-neutral-500">
           <span className="font-medium text-neutral-900 dark:text-neutral-100">{comment.author?.name || "—"}</span>
           <span>{new Date(comment.created_at).toLocaleString("ru-RU")}</span>
-          {canDelete && (
+          {edited && !editing && (
+            <span className="text-neutral-400" title={`Изменено ${new Date(comment.updated_at).toLocaleString("ru-RU")}`}>
+              (изменено)
+            </span>
+          )}
+          {canEdit && !editing && (
+            <button
+              className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-brand-600"
+              onClick={startEdit}
+              title="Редактировать"
+              aria-label="Редактировать комментарий"
+            >
+              <Pencil size={12} />
+            </button>
+          )}
+          {canDelete && !editing && (
             <button
               className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500"
               onClick={onDelete}
+              title="Удалить"
+              aria-label="Удалить комментарий"
             >
               <Trash2 size={12} />
             </button>
           )}
         </div>
-        <div className="mt-0.5 whitespace-pre-wrap break-words text-sm">{comment.body}</div>
+        {editing ? (
+          <div className="mt-1">
+            <textarea
+              className="input min-h-[72px] resize-y"
+              value={draft}
+              autoFocus
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  save();
+                }
+                if (e.key === "Escape") setEditing(false);
+              }}
+            />
+            <div className="mt-1 flex items-center gap-2">
+              <button className="btn-primary !py-1 !px-2.5 text-xs" onClick={save} disabled={isSaving || !draft.trim()}>
+                Сохранить
+              </button>
+              <button className="btn-ghost !py-1 !px-2.5 text-xs" onClick={() => setEditing(false)}>
+                Отмена
+              </button>
+              <span className="text-[11px] text-neutral-400">⌘⏎ сохранить · Esc отменить</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-0.5 whitespace-pre-wrap break-words text-sm">{comment.body}</div>
+        )}
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {comment.reactions?.map((r) => {
             const reacted = !!(meId && r.users.some((u) => u.id === meId));

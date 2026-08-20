@@ -12,11 +12,13 @@ import { useSidebar } from "@/store/sidebar";
 import { Avatar } from "./ui";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, extractApiError } from "@/api/client";
+import { api, extractApiError, onApiEvent } from "@/api/client";
+import { useOnline } from "@/hooks/useOnline";
 import type { Notification, Page } from "@/types";
 import GlobalSearch from "./GlobalSearch";
 import TenantSwitcher from "./TenantSwitcher";
 import { LogoMark } from "./Logo";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { useRealtimeUpdates } from "@/lib/ws";
 import { applyBrandColor } from "@/lib/branding";
 import { useToast } from "./Toast";
@@ -56,10 +58,27 @@ export default function Layout() {
   const notifRef = useRef<HTMLDivElement | null>(null);
 
   useRealtimeUpdates();
+  const online = useOnline();
 
   useEffect(() => {
     applyBrandColor(me?.current_tenant?.primary_color ?? null);
   }, [me?.current_tenant?.id, me?.current_tenant?.primary_color]);
+
+  useEffect(() => {
+    // Глобальные обработчики HTTP-событий: 403 → toast, сетевые ошибки → toast.
+    // Refresh 401 уже перекинет на /login — сюда не долетает.
+    const off403 = onApiEvent("forbidden", (err) => {
+      const msg = extractApiError(err).message || "У вас нет прав на это действие";
+      toast.error("Недостаточно прав", msg);
+    });
+    const offNet = onApiEvent("network_error", () => {
+      toast.error("Нет соединения", "Проверьте интернет и попробуйте ещё раз");
+    });
+    return () => {
+      off403();
+      offNet();
+    };
+  }, [toast]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -80,7 +99,9 @@ export default function Layout() {
   const { data: notifs = [] } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => (await api.get<Page<Notification>>("/api/notifications")).data.items,
-    refetchInterval: 60000,
+    // 60s было слишком редко на случай падения WS. 30s — компромисс.
+    // Когда сеть офлайн — не долбим сервер (networkMode="online" — дефолт).
+    refetchInterval: online ? 30000 : false,
     staleTime: 15000,
   });
 
@@ -131,6 +152,20 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-brand-600 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none"
+      >
+        Перейти к содержимому
+      </a>
+      {!online && (
+        <div
+          role="status"
+          className="fixed left-1/2 top-3 z-50 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 shadow-soft dark:border-amber-800/60 dark:bg-amber-900/50 dark:text-amber-200"
+        >
+          Нет соединения — работаем в офлайн-режиме
+        </div>
+      )}
       <Sidebar
         onLinkClick={() => setMobileNavOpen(false)}
         me={me}
@@ -294,10 +329,12 @@ export default function Layout() {
 
         </header>
 
-        <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 p-4 sm:p-6">
-          <Suspense fallback={<div className="min-h-[200px]" />}>
-            <Outlet />
-          </Suspense>
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 max-w-7xl flex-1 p-4 sm:p-6 focus:outline-none">
+          <ErrorBoundary>
+            <Suspense fallback={<div className="min-h-[200px]" />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 
@@ -367,7 +404,7 @@ function Sidebar({
       <nav className={clsx("flex-1 space-y-0.5 overflow-y-auto", showLabels ? "px-2" : "px-1.5")}>
         {NAV.map((n) => {
           if (n.platformAdminOnly && !me?.is_platform_admin) return null;
-          if (n.code && !can(n.code as any)) return null;
+          if (n.code && !can(n.code)) return null;
           const Icon = n.icon;
           return (
             <NavLink

@@ -117,6 +117,30 @@ def get_current_tenant(ctx: TenantContext = Depends(get_current_context)) -> Ten
     return ctx.tenant
 
 
+def verify_same_origin(request: Request) -> None:
+    """CSRF-защита для чувствительных операций (billing, tenant delete и т.п.).
+
+    Проверяет, что `Origin` header запроса присутствует и входит в CORS_ORIGINS.
+    SameSite=lax cookies уже блокируют большинство cross-site POST, но top-level
+    navigation (form submit) может обойти это — Origin-check закрывает лазейку.
+
+    В dev, если CORS_ORIGINS пуст (не должен), пропускает с warning.
+    """
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    allowed = settings.cors_origins_list
+    if not allowed:
+        # config validator запрещает это в prod; в dev — warning в логе достаточно.
+        return
+    if not origin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Missing Origin header")
+    # Referer может быть полным URL — берём scheme://host
+    from urllib.parse import urlparse
+    parsed = urlparse(origin)
+    origin_root = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme else origin
+    if origin_root not in allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Origin not allowed")
+
+
 def get_current_token(
     request: Request,
     token: str | None = Depends(oauth2_scheme),

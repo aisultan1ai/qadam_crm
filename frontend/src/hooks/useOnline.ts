@@ -1,0 +1,24 @@
+import { useEffect, useState } from "react";
+
+/**
+ * navigator.onLine + online/offline события. Даёт понять, что сеть отвалилась
+ * (не идеально: показывает "online" даже если сервер лежит, но лучше чем ничего).
+ */
+export function useOnline(): boolean {
+  const [online, setOnline] = useState<boolean>(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  return online;
+}

@@ -22,7 +22,9 @@ ALLOWED_EXTENSIONS = {
     ".xls", ".xlsx", ".csv",
     ".ppt", ".pptx",
     ".txt", ".md", ".rtf",
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+    # Растровые форматы. .svg НЕ включён — может содержать <script> и приводить к XSS
+    # при inline-рендеринге. Если нужны векторные иконки — используем контролируемый набор.
+    ".png", ".jpg", ".jpeg", ".gif", ".webp",
     ".zip", ".rar", ".7z",
     ".mp4", ".mov", ".webm",
     ".mp3", ".wav", ".ogg",
@@ -49,6 +51,8 @@ BLOCKED_EXTENSIONS = {
     ".exe", ".bat", ".cmd", ".sh", ".ps1", ".msi", ".scr", ".vbs", ".js",
     ".jar", ".php", ".phtml", ".py", ".pyc", ".pl", ".rb", ".dll", ".so",
     ".com", ".cpl", ".app", ".apk", ".ipa",
+    # HTML/SVG/XML — потенциальный XSS при inline-открытии в браузере.
+    ".html", ".htm", ".xhtml", ".svg", ".xml", ".xsl", ".xslt",
 }
 
 CHUNK_SIZE = 1024 * 1024  # 1 MB
@@ -148,8 +152,18 @@ def upload(task_id: int, file: UploadFile = File(...), ctx: TenantContext = Depe
 
 def _resolve_attachment_path(att: Attachment) -> Path:
     """stored_name может быть относительным путём (новый формат: {tenant}/attachments/{uuid}.ext)
-    или плоским именем (legacy). Оба варианта резолвим относительно UPLOAD_DIR."""
-    return Path(settings.UPLOAD_DIR) / att.stored_name
+    или плоским именем (legacy). Оба варианта резолвим относительно UPLOAD_DIR.
+
+    Защита от path traversal: результат обязан лежать внутри UPLOAD_DIR. Если БД
+    подделана (`../../etc/passwd`), symlink и т.п. — вернём 404.
+    """
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    candidate = (upload_root / att.stored_name).resolve()
+    try:
+        candidate.relative_to(upload_root)
+    except ValueError:
+        raise HTTPException(404, "Файл не найден")
+    return candidate
 
 
 @router.get("/{attachment_id}")

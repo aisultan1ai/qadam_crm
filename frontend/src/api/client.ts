@@ -53,6 +53,26 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+// Слушатели для сквозной обработки статусов — Toast/Layout подписываются на них,
+// чтобы показать баннер "нет прав" или "нет сети", не тряся весь роутинг.
+type ApiEvent = "forbidden" | "network_error";
+type ApiEventHandler = (err: AxiosError) => void;
+const listeners: Record<ApiEvent, Set<ApiEventHandler>> = {
+  forbidden: new Set(),
+  network_error: new Set(),
+};
+
+export function onApiEvent(event: ApiEvent, handler: ApiEventHandler): () => void {
+  listeners[event].add(handler);
+  return () => listeners[event].delete(handler);
+}
+
+function emit(event: ApiEvent, err: AxiosError) {
+  listeners[event].forEach((h) => {
+    try { h(err); } catch { /* handler errors ignored */ }
+  });
+}
+
 api.interceptors.response.use(
   (r) => r,
   async (err: AxiosError) => {
@@ -82,6 +102,17 @@ api.interceptors.response.use(
 
     if (status === 401 && !location.pathname.startsWith("/login")) {
       location.replace("/login");
+    }
+
+    // 403 — не редиректим, показываем toast. Юзер залогинен, но конкретно
+    // на эту операцию у него нет прав; пусть остаётся где был.
+    if (status === 403) {
+      emit("forbidden", err);
+    }
+
+    // Сетевая ошибка (нет соединения, DNS, таймаут) — показываем баннер.
+    if (!err.response && err.code !== "ERR_CANCELED") {
+      emit("network_error", err);
     }
 
     return Promise.reject(err);

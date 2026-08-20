@@ -5,7 +5,7 @@ import { useAuth } from "@/store/auth";
 import { Navigate } from "react-router-dom";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
-import { Pencil, Trash2, Search, Building2, Power } from "lucide-react";
+import { Pencil, Trash2, Search, Building2, Power, ChevronRight, Users as UsersIcon, HardDrive, Loader2 } from "lucide-react";
 import clsx from "clsx";
 
 type AdminTenant = {
@@ -22,15 +22,43 @@ type AdminTenant = {
   tasks: number;
 };
 
+type TenantUsage = {
+  plan: string;
+  limits: { max_users: number | null; max_projects: number | null; max_storage_bytes: number | null };
+  usage: { users: number; projects: number; storage_bytes: number };
+};
+
+type GlobalUser = {
+  id: number;
+  email: string;
+  name: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  is_platform_admin: boolean;
+  created_at: string | null;
+};
+
+type Tab = "tenants" | "users";
+
 const PLANS = ["free", "pro", "enterprise"] as const;
+
+function formatBytes(bytes: number | null): string {
+  if (bytes == null) return "—";
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} ГБ`;
+}
 
 export default function Admin() {
   const me = useAuth((s) => s.me);
   const qc = useQueryClient();
   const toast = useToast();
+  const [tab, setTab] = useState<Tab>("tenants");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<AdminTenant | null>(null);
   const [deleting, setDeleting] = useState<AdminTenant | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   if (me && !me.is_platform_admin) return <Navigate to="/" replace />;
 
@@ -85,19 +113,50 @@ export default function Admin() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Платформа</h1>
-          <p className="text-sm text-neutral-500">Все компании Qadam CRM</p>
+          <p className="text-sm text-neutral-500">
+            {tab === "tenants" ? "Все компании Qadam CRM" : "Все пользователи платформы"}
+          </p>
         </div>
         <div className="relative">
           <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
           <input
             className="input pl-8 w-64"
-            placeholder="Поиск по названию / slug…"
+            placeholder={tab === "tenants" ? "Поиск по названию / slug…" : "Поиск по email / имени…"}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
       </div>
 
+      <nav className="flex gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900/60 w-fit">
+        <button
+          className={clsx(
+            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
+            tab === "tenants"
+              ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
+              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
+          )}
+          onClick={() => setTab("tenants")}
+        >
+          <Building2 size={14} /> Компании
+        </button>
+        <button
+          className={clsx(
+            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
+            tab === "users"
+              ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
+              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
+          )}
+          onClick={() => setTab("users")}
+        >
+          <UsersIcon size={14} /> Пользователи
+        </button>
+      </nav>
+
+      {tab === "users" ? (
+        <GlobalUsersTab query={q} />
+      ) : (
+        <>
       {stats && (
         <div className="grid gap-3 sm:grid-cols-4">
           <StatCard label="Всего компаний" value={stats.total} icon={<Building2 size={16} />} />
@@ -121,6 +180,7 @@ export default function Admin() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 dark:bg-neutral-900/40 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
+              <th className="w-8 px-3 py-2" />
               <th className="px-3 py-2">ID</th>
               <th className="px-3 py-2">Название</th>
               <th className="px-3 py-2">Slug</th>
@@ -136,78 +196,105 @@ export default function Admin() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-neutral-500">Загрузка…</td>
+                <td colSpan={11} className="px-3 py-6 text-center text-neutral-500">Загрузка…</td>
               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-neutral-500">
+                <td colSpan={11} className="px-3 py-6 text-center text-neutral-500">
                   {q ? "Ничего не найдено" : "Компаний ещё нет"}
                 </td>
               </tr>
             )}
-            {filtered.map((t) => (
-              <tr key={t.id} className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20">
-                <td className="px-3 py-2 text-neutral-500 tabular-nums">{t.id}</td>
-                <td className="px-3 py-2">
-                  <div className="font-medium">{t.name}</div>
-                  {t.company_display_name && t.company_display_name !== t.name && (
-                    <div className="text-xs text-neutral-500">«{t.company_display_name}»</div>
+            {filtered.map((t) => {
+              const isOpen = expandedId === t.id;
+              return (
+                <>
+                  <tr
+                    key={t.id}
+                    className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20"
+                  >
+                    <td className="px-3 py-2">
+                      <button
+                        className="btn-ghost !p-1"
+                        onClick={() => setExpandedId(isOpen ? null : t.id)}
+                        aria-label={isOpen ? "Свернуть" : "Развернуть детали"}
+                        aria-expanded={isOpen}
+                      >
+                        <ChevronRight size={14} className={clsx("transition-transform", isOpen && "rotate-90")} />
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 text-neutral-500 tabular-nums">{t.id}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{t.name}</div>
+                      {t.company_display_name && t.company_display_name !== t.name && (
+                        <div className="text-xs text-neutral-500">«{t.company_display_name}»</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{t.slug}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{t.subdomain ?? "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{t.users}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{t.projects}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{t.tasks}</td>
+                    <td className="px-3 py-2">
+                      <select
+                        className="input !py-1"
+                        value={t.plan}
+                        onChange={(e) => patch.mutate({ id: t.id, body: { plan: e.target.value } })}
+                      >
+                        {PLANS.map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <button
+                        className={clsx(
+                          "chip",
+                          t.is_active
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            : "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
+                        )}
+                        title={t.is_active ? "Нажмите чтобы деактивировать" : "Нажмите чтобы активировать"}
+                        onClick={() => patch.mutate({ id: t.id, body: { is_active: !t.is_active } })}
+                      >
+                        {t.is_active ? "active" : "inactive"}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex justify-end gap-1">
+                        <button
+                          className="btn-ghost !py-1 !px-1.5"
+                          title="Редактировать"
+                          onClick={() => setEditing(t)}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          className="btn-ghost !py-1 !px-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          title="Удалить компанию"
+                          onClick={() => setDeleting(t)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="border-t border-neutral-100 bg-neutral-50/40 dark:border-neutral-800 dark:bg-neutral-900/40">
+                      <td colSpan={11} className="px-3 py-3">
+                        <TenantUsagePanel tenantId={t.id} plan={t.plan} />
+                      </td>
+                    </tr>
                   )}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs text-neutral-500">{t.slug}</td>
-                <td className="px-3 py-2 font-mono text-xs text-neutral-500">{t.subdomain ?? "—"}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{t.users}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{t.projects}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{t.tasks}</td>
-                <td className="px-3 py-2">
-                  <select
-                    className="input !py-1"
-                    value={t.plan}
-                    onChange={(e) => patch.mutate({ id: t.id, body: { plan: e.target.value } })}
-                  >
-                    {PLANS.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-3 py-2">
-                  <button
-                    className={clsx(
-                      "chip",
-                      t.is_active
-                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                        : "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
-                    )}
-                    title={t.is_active ? "Нажмите чтобы деактивировать" : "Нажмите чтобы активировать"}
-                    onClick={() => patch.mutate({ id: t.id, body: { is_active: !t.is_active } })}
-                  >
-                    {t.is_active ? "active" : "inactive"}
-                  </button>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <div className="flex justify-end gap-1">
-                    <button
-                      className="btn-ghost !py-1 !px-1.5"
-                      title="Редактировать"
-                      onClick={() => setEditing(t)}
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      className="btn-ghost !py-1 !px-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                      title="Удалить компанию"
-                      onClick={() => setDeleting(t)}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                </>
+              );
+            })}
           </tbody>
         </table>
       </div>
+        </>
+      )}
 
       {editing && (
         <EditTenantModal
@@ -447,5 +534,187 @@ function DeleteTenantModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function UsageProgressRow({
+  label,
+  icon,
+  used,
+  limit,
+  formatFn,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  used: number;
+  limit: number | null;
+  formatFn: (n: number) => string;
+}) {
+  const percent = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const isOver = limit != null && used >= limit;
+  const isNear = limit != null && percent >= 80 && !isOver;
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
+          {icon}
+          {label}
+        </div>
+        <div className="tabular-nums text-neutral-500">
+          {formatFn(used)} {limit != null && <>/ {formatFn(limit)}</>}
+          {limit == null && <span className="text-neutral-400">/ ∞</span>}
+        </div>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+        {limit != null && (
+          <div
+            className={clsx(
+              "h-full rounded-full transition-all duration-300",
+              isOver ? "bg-rose-500" : isNear ? "bg-amber-500" : "bg-brand-600",
+            )}
+            style={{ width: `${percent}%` }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TenantUsagePanel({ tenantId, plan }: { tenantId: number; plan: string }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin-tenant-usage", tenantId],
+    queryFn: async () => (await api.get<TenantUsage>(`/api/admin/tenants/${tenantId}/usage`)).data,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-neutral-500">
+        <Loader2 size={14} className="animate-spin" /> Загружаем статистику…
+      </div>
+    );
+  }
+  if (error || !data) {
+    return <div className="text-sm text-rose-500">Не удалось загрузить статистику</div>;
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      <UsageProgressRow
+        label="Пользователи"
+        icon={<UsersIcon size={12} />}
+        used={data.usage.users}
+        limit={data.limits.max_users}
+        formatFn={(n) => String(n)}
+      />
+      <UsageProgressRow
+        label="Проекты"
+        icon={<Building2 size={12} />}
+        used={data.usage.projects}
+        limit={data.limits.max_projects}
+        formatFn={(n) => String(n)}
+      />
+      <UsageProgressRow
+        label="Хранилище"
+        icon={<HardDrive size={12} />}
+        used={data.usage.storage_bytes}
+        limit={data.limits.max_storage_bytes}
+        formatFn={formatBytes}
+      />
+      <div className="sm:col-span-3 text-[11px] text-neutral-500">
+        Тариф: <span className="font-medium">{plan}</span>
+      </div>
+    </div>
+  );
+}
+
+function GlobalUsersTab({ query }: { query: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-global-users"],
+    queryFn: async () => (await api.get<GlobalUser[]>("/api/admin/users", { params: { limit: 500 } })).data,
+  });
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data;
+    return data.filter(
+      (u) => u.email.toLowerCase().includes(needle) || u.name.toLowerCase().includes(needle),
+    );
+  }, [data, query]);
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
+      <table className="w-full text-sm">
+        <thead className="bg-neutral-50 dark:bg-neutral-900/40 text-left text-xs uppercase tracking-wide text-neutral-500">
+          <tr>
+            <th className="px-3 py-2">ID</th>
+            <th className="px-3 py-2">Email</th>
+            <th className="px-3 py-2">Имя</th>
+            <th className="px-3 py-2">Статус</th>
+            <th className="px-3 py-2">Роли</th>
+            <th className="px-3 py-2">Создан</th>
+          </tr>
+        </thead>
+        <tbody>
+          {isLoading && (
+            <tr>
+              <td colSpan={6} className="px-3 py-6 text-center text-neutral-500">
+                Загрузка…
+              </td>
+            </tr>
+          )}
+          {!isLoading && filtered.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-3 py-6 text-center text-neutral-500">
+                {query ? "Ничего не найдено" : "Пользователей ещё нет"}
+              </td>
+            </tr>
+          )}
+          {filtered.map((u) => (
+            <tr
+              key={u.id}
+              className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20"
+            >
+              <td className="px-3 py-2 tabular-nums text-neutral-500">{u.id}</td>
+              <td className="px-3 py-2 font-mono text-xs">{u.email}</td>
+              <td className="px-3 py-2 font-medium">{u.name}</td>
+              <td className="px-3 py-2">
+                <span
+                  className={clsx(
+                    "chip",
+                    u.is_active
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
+                  )}
+                >
+                  {u.is_active ? "active" : "inactive"}
+                </span>
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex flex-wrap gap-1">
+                  {u.is_platform_admin && (
+                    <span className="chip bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
+                      platform admin
+                    </span>
+                  )}
+                  {u.is_superuser && (
+                    <span className="chip bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                      super
+                    </span>
+                  )}
+                  {!u.is_platform_admin && !u.is_superuser && (
+                    <span className="text-xs text-neutral-400">—</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-3 py-2 text-xs text-neutral-500">
+                {u.created_at ? new Date(u.created_at).toLocaleDateString("ru-RU") : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

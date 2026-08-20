@@ -6,6 +6,7 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Invite from "@/pages/Invite";
 import { Loader } from "@/components/ui";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -17,6 +18,7 @@ const Users = lazy(() => import("@/pages/Users"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const Admin = lazy(() => import("@/pages/Admin"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { me, ready } = useAuth();
@@ -34,6 +36,7 @@ export default function App() {
   if (!ready) return <Loader />;
 
   return (
+    <ErrorBoundary>
     <Routes>
       <Route
         path="/login"
@@ -77,8 +80,19 @@ export default function App() {
         <Route path="settings/*" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
         <Route path="admin" element={<Admin />} />
+        {/* 404 внутри Layout — авторизованный юзер видит sidebar/header */}
+        <Route path="*" element={<NotFound />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Публичный 404 — для неавторизованных ошибок URL */}
+      <Route
+        path="*"
+        element={
+          <Suspense fallback={<Loader />}>
+            <NotFound />
+          </Suspense>
+        }
+      />
     </Routes>
+    </ErrorBoundary>
   );
 }

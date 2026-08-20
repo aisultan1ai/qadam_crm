@@ -1,0 +1,10 @@
+<svg width="824" height="180" viewBox="0 0 824 180" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QADAM wordmark">
+  <g fill="none" stroke="#0d2758" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="12">
+    <path d="M 38.5 90.0 a 52.5 52.5 0 1 0 105.0 0 a 52.5 52.5 0 1 0 -105.0 0" stroke-width="17"/>
+    <path d="M 127.0 122.5 L 144.9 138.5" stroke-width="17"/>
+    <path d="M 204.5 150.0 L 255.0 30.0 L 305.5 150.0" stroke-width="17"/>
+    <path d="M 366.5 150.0 L 366.5 30.0 L 384.5 30.0 C 471.5 30.0 471.5 150.0 384.5 150.0 Z" stroke-width="17"/>
+    <path d="M 518.5 150.0 L 569.0 30.0 L 619.5 150.0" stroke-width="17"/>
+    <path d="M 680.5 150.0 L 680.5 30.0 L 733.0 96.0 L 785.5 30.0 L 785.5 150.0" stroke-width="17"/>
+  </g>
+</svg>

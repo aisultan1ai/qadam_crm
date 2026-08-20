@@ -7,6 +7,7 @@ from ..database import get_db
 from ..models import Task, User, ActivityLog, TenantMembership
 from ..models.task import TaskStatus
 from ..core.cache import make_key, get_or_set_json
+from ..core.permissions import user_has
 from .deps import TenantContext, require, get_current_context
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -86,12 +87,16 @@ def dashboard(ctx: TenantContext = Depends(get_current_context), db: Session = D
 @router.get("/employees")
 def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: Session = Depends(get_db)):
     tenant_id = ctx.tenant.id
-    key = make_key(tenant_id, "employees")
+    # Scope: если у юзера нет tasks.view_all — показываем только его собственную
+    # статистику. Иначе аналитика могла бы утечь чужую производительность.
+    view_all = user_has(ctx.user, ["tasks.view_all"])
+    scope_uid = None if view_all else ctx.user.id
+    key = make_key(tenant_id, "employees", "all" if view_all else f"u{scope_uid}")
 
     def _compute():
         now = datetime.now(timezone.utc)
         since = now - timedelta(days=30)
-        rows = (
+        q = (
             db.query(
                 User.id,
                 User.name,
@@ -108,8 +113,10 @@ def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: 
             )
             .filter(TenantMembership.tenant_id == tenant_id)
             .group_by(User.id)
-            .all()
         )
+        if scope_uid is not None:
+            q = q.filter(User.id == scope_uid)
+        rows = q.all()
 
         result = []
         for r in rows:

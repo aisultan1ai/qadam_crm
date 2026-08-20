@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { api } from "@/api/client";
-import { CheckCircle2, Clock, ListTodo, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Clock, ListTodo, AlertTriangle, FolderKanban, Plus, Sparkles } from "lucide-react";
 import { STATUS_LABEL, TaskStatus } from "@/types";
 import { Skeleton } from "@/components/Skeleton";
 import { useCountUp } from "@/hooks/useCountUp";
+import { useAuth } from "@/store/auth";
 
 type Dashboard = {
   total: number;
@@ -30,6 +32,16 @@ export default function DashboardPage() {
     staleTime: 0,
     refetchOnMount: "always",
   });
+
+  // Онбординг: если проектов и задач нет — показываем баннер вместо пустых цифр.
+  // Пустой tenant — новый пользователь: нужна не статистика, а первое действие.
+  const { data: projectsMeta } = useQuery({
+    queryKey: ["projects-count"],
+    queryFn: async () =>
+      (await api.get<{ total: number }>("/api/projects", { params: { page: 1, per_page: 1 } })).data,
+    staleTime: 60_000,
+  });
+  const isEmptyTenant = !!data && data.total === 0 && (projectsMeta?.total ?? 0) === 0;
 
   // Управляем кроссфейдом: скелетон над контентом, снимается после 460мс
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -62,9 +74,105 @@ export default function DashboardPage() {
             contentVisible ? "opacity-100" : "opacity-0",
           )}
         >
-          <DashboardContent data={data} startAnimations={contentVisible} />
+          {isEmptyTenant ? (
+            <OnboardingBanner />
+          ) : (
+            <DashboardContent data={data} startAnimations={contentVisible} />
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function OnboardingBanner() {
+  const { can } = useAuth();
+  const canCreateProject = can("projects.create");
+  return (
+    <div className="space-y-6">
+      <div style={{ animation: "rise .52s cubic-bezier(.2,.8,.2,1) both" }}>
+        <h1 className="text-2xl font-semibold tracking-tight">Добро пожаловать в Qadam CRM</h1>
+        <p className="text-sm text-neutral-500">Настроим рабочее пространство за пару шагов</p>
+      </div>
+
+      <div
+        className="card relative overflow-hidden p-8 sm:p-10"
+        style={{ animation: "rise .52s cubic-bezier(.2,.8,.2,1) both", animationDelay: "80ms" }}
+      >
+        <div
+          aria-hidden
+          className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-500/10 blur-3xl"
+        />
+        <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
+            <FolderKanban size={26} />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold">Создайте первый проект</h2>
+            <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+              Проекты объединяют задачи и участников. Начните с одного — задачи и статистика появятся здесь.
+            </p>
+          </div>
+          {canCreateProject ? (
+            <Link to="/projects" className="btn-primary shrink-0">
+              <Plus size={16} /> Новый проект
+            </Link>
+          ) : (
+            <Link to="/projects" className="btn-secondary shrink-0">
+              Перейти к проектам
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="grid gap-3 sm:grid-cols-3"
+        style={{ animation: "rise .52s cubic-bezier(.2,.8,.2,1) both", animationDelay: "160ms" }}
+      >
+        <OnboardingStep
+          index={1}
+          icon={<FolderKanban size={16} />}
+          title="Создайте проект"
+          desc="Дайте ему имя, цвет и добавьте участников"
+        />
+        <OnboardingStep
+          index={2}
+          icon={<ListTodo size={16} />}
+          title="Добавьте задачи"
+          desc="Kanban, таблица или календарь — выберите удобный вид"
+        />
+        <OnboardingStep
+          index={3}
+          icon={<Sparkles size={16} />}
+          title="Пригласите команду"
+          desc="Раздайте роли и следите за прогрессом на Dashboard"
+        />
+      </div>
+    </div>
+  );
+}
+
+function OnboardingStep({
+  index,
+  icon,
+  title,
+  desc,
+}: {
+  index: number;
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <div className="card p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-neutral-100 text-xs font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+          {index}
+        </span>
+        <span className="text-neutral-500">{icon}</span>
+      </div>
+      <div className="text-sm font-medium">{title}</div>
+      <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{desc}</div>
     </div>
   );
 }

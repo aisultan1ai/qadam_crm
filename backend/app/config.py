@@ -1,11 +1,14 @@
 from functools import lru_cache
 from typing import List, Optional
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # "development" | "production". В prod ужесточаются проверки (CORS, docs, etc.)
+    APP_ENV: str = "development"
 
     DATABASE_URL: str = "postgresql+psycopg://qadam_crm:qadam_crm@db:5432/qadam_crm"
 
@@ -20,6 +23,10 @@ class Settings(BaseSettings):
     MAX_AVATAR_BYTES: int = 5 * 1024 * 1024
 
     LOGIN_RATE_LIMIT: str = "5/minute"
+
+    # HMAC-подпись для billing webhook. Провайдер (Stripe/Kaspi) шлёт X-Signature = HMAC-SHA256(secret, raw_body).
+    # В dev может быть None — тогда подпись НЕ проверяется (только warning в логе).
+    BILLING_WEBHOOK_SECRET: Optional[str] = None
 
     ADMIN_EMAIL: str = "admin@qadam.local"
     ADMIN_PASSWORD: Optional[str] = None
@@ -69,6 +76,23 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def is_prod(self) -> bool:
+        return self.APP_ENV.lower() == "production"
+
+    @model_validator(mode="after")
+    def _validate_prod(self) -> "Settings":
+        if self.is_prod:
+            if not self.cors_origins_list:
+                raise ValueError("CORS_ORIGINS must be set to a non-empty list in production")
+            if self.COOKIE_SECURE is False:
+                # Warning-only: не роняем старт, но требует HTTPS для реальной защиты cookies.
+                import logging
+                logging.getLogger("qadam.config").warning(
+                    "COOKIE_SECURE=False in production — cookies WILL be sent over HTTP. Set COOKIE_SECURE=True."
+                )
+        return self
 
 
 @lru_cache

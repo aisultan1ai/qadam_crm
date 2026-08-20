@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/Confirm";
 
 type TabDef = {
   to: string;
@@ -50,8 +51,8 @@ export default function Settings() {
                 clsx(
                   "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
                   isActive
-                    ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-white"
-                    : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
+                    ? "bg-brand-600 font-medium text-white shadow-sm hover:bg-brand-700"
+                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
                 )
               }
             >
@@ -79,6 +80,7 @@ function Forbid() {
 
 function RolesSettings() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const { data: roles } = useQuery({
     queryKey: ["roles"],
     queryFn: async () => (await api.get<Role[]>("/api/roles")).data,
@@ -186,7 +188,15 @@ function RolesSettings() {
               <button
                 className="btn-ghost !p-2 text-rose-500"
                 title="Удалить"
-                onClick={() => confirm(`Удалить роль «${selected.name}»?`) && delRole.mutate(selected.id)}
+                onClick={() =>
+                  confirm({
+                    title: "Удалить роль?",
+                    message: `Роль «${selected.name}» будет удалена.`,
+                    danger: true,
+                    confirmLabel: "Удалить",
+                    onConfirm: () => delRole.mutateAsync(selected.id),
+                  })
+                }
               >
                 <Trash2 size={16} />
               </button>
@@ -315,6 +325,7 @@ function inviteStatus(inv: Invitation): "accepted" | "expired" | "pending" {
 function TeamSettings() {
   const qc = useQueryClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const { me } = useAuth();
   const tenantId = me?.current_tenant?.id;
 
@@ -508,9 +519,15 @@ function TeamSettings() {
                       <button
                         className="btn-ghost !py-1.5 !px-2 text-rose-500"
                         title="Отозвать"
-                        onClick={() => {
-                          if (confirm(`Отозвать приглашение для ${inv.email}?`)) revoke.mutate(inv.id);
-                        }}
+                        onClick={() =>
+                          confirm({
+                            title: "Отозвать приглашение?",
+                            message: `Приглашение для ${inv.email} будет отозвано.`,
+                            danger: true,
+                            confirmLabel: "Отозвать",
+                            onConfirm: () => revoke.mutateAsync(inv.id),
+                          })
+                        }
                         disabled={revoke.isPending}
                       >
                         <XCircle size={14} />
@@ -677,7 +694,7 @@ function BrandingSettings() {
         <input
           className="input"
           type="text"
-          placeholder="#6366f1"
+          placeholder="#0F67FD"
           value={color}
           onChange={(e) => setColor(e.target.value)}
         />

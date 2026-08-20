@@ -43,6 +43,17 @@ def _apply_view_scope(query, user: User):
 def _notify(db: Session, tenant_id: int, user_id: int, kind: str, title: str, body: str | None = None, task_id: int | None = None):
     if not user_id:
         return
+    # Defense-in-depth: не создаём уведомление, если получатель больше не член
+    # этого tenant'а (мог быть удалён после назначения задачи). Notification.user_id
+    # ссылается на глобального User; без этой проверки старые задачи могли бы слать
+    # уведомления бывшим сотрудникам.
+    still_member = (
+        db.query(TenantMembership.id)
+        .filter(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id)
+        .first()
+    )
+    if not still_member:
+        return
     db.add(Notification(tenant_id=tenant_id, user_id=user_id, kind=kind, title=title, body=body, task_id=task_id))
 
 

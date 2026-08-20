@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -9,6 +11,23 @@ from ..database import get_db
 from ..models import Tenant, TenantMembership
 
 router = APIRouter()
+
+# Re-check membership не чаще чем раз в 60 секунд (по клиентскому ping).
+MEMBERSHIP_RECHECK_SEC = 60
+
+
+def _membership_active(db: Session, user_id: int, tenant_id: int) -> bool:
+    return (
+        db.query(TenantMembership.id)
+        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+        .filter(
+            TenantMembership.user_id == user_id,
+            TenantMembership.tenant_id == tenant_id,
+            Tenant.is_active.is_(True),
+        )
+        .first()
+        is not None
+    )
 
 
 @router.websocket("/ws")
@@ -45,25 +64,25 @@ async def websocket_endpoint(
 
     # Проверяем, что юзер реально состоит в этом tenant'е — токен мог остаться,
     # а membership отозвали (owner удалил пользователя из компании).
-    membership = (
-        db.query(TenantMembership.id)
-        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
-        .filter(
-            TenantMembership.user_id == user_id,
-            TenantMembership.tenant_id == tenant_id,
-            Tenant.is_active.is_(True),
-        )
-        .first()
-    )
-    if not membership:
+    if not _membership_active(db, user_id, tenant_id):
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     await hub.connect(tenant_id, user_id, ws)
+    last_check = time.monotonic()
     try:
         while True:
             msg = await ws.receive_text()
             if msg == "ping":
+                # Re-validate membership по ping'у, но не чаще MEMBERSHIP_RECHECK_SEC —
+                # чтобы не бить БД на каждом пинге и не ловить события удалённого юзера.
+                now = time.monotonic()
+                if now - last_check >= MEMBERSHIP_RECHECK_SEC:
+                    if not _membership_active(db, user_id, tenant_id) or is_blacklisted(payload.get("jti")):
+                        await ws.send_text('{"type":"membership.revoked"}')
+                        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                    last_check = now
                 await ws.send_text('{"type":"pong"}')
     except WebSocketDisconnect:
         pass

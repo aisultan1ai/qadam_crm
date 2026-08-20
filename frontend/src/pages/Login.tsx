@@ -86,7 +86,7 @@ export default function Login() {
               width: 420,
               height: 420,
               background:
-                "radial-gradient(circle, rgba(99,102,241,.30), transparent 68%)",
+                "radial-gradient(circle, rgba(15,103,253,.28), transparent 68%)",
             }}
           />
           <span
@@ -98,7 +98,7 @@ export default function Login() {
               width: 480,
               height: 480,
               background:
-                "radial-gradient(circle, rgba(165,180,252,.34), transparent 70%)",
+                "radial-gradient(circle, rgba(184,207,255,.36), transparent 70%)",
               filter: "blur(32px)",
             }}
           />
@@ -128,7 +128,7 @@ export default function Login() {
         >
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Email</span>
           <input
-            className="input transition-shadow duration-[180ms] ease-out-soft focus:shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
+            className="input transition-shadow duration-[180ms] ease-out-soft focus:shadow-[0_0_0_3px_rgba(15,103,253,0.18)]"
             type="email"
             autoComplete="email"
             {...register("email")}
@@ -143,7 +143,7 @@ export default function Login() {
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Пароль</span>
           <input
             className={clsx(
-              "input transition-shadow duration-[180ms] ease-out-soft focus:shadow-[0_0_0_3px_rgba(99,102,241,0.15)]",
+              "input transition-shadow duration-[180ms] ease-out-soft focus:shadow-[0_0_0_3px_rgba(15,103,253,0.18)]",
               error && "border-rose-300 focus:border-rose-400",
             )}
             type="password"
@@ -183,7 +183,7 @@ export default function Login() {
             style={{
               width: btn === "idle" ? 320 : 38,
               borderRadius: btn === "idle" ? 8 : 9999,
-              backgroundColor: btn === "done" ? "#10b981" : "#4f46e5",
+              backgroundColor: btn === "done" ? "#10b981" : "#0F67FD",
               maxWidth: "100%",
             }}
           >

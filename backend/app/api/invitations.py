@@ -159,7 +159,10 @@ def create_invite(
 
 
 @router.get("/invitations/{token}")
-def get_invitation(token: str, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def get_invitation(request: Request, token: str, db: Session = Depends(get_db)):
+    """Публичный лукап приглашения. Rate-limit 20/min per-IP защищает от перебора
+    токенов (24 байта, но не полагаемся только на длину)."""
     invite = db.query(Invitation).filter(Invitation.token == token).first()
     if not invite or invite.accepted_at is not None or invite.expires_at < _now():
         raise HTTPException(404, "Приглашение недействительно или просрочено")
@@ -181,7 +184,9 @@ def get_invitation(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/invitations/{token}/accept", response_model=TokenResponse)
+@limiter.limit("10/minute")
 def accept_invitation(
+    request: Request,
     response: Response,
     token: str,
     payload: AcceptRequest,

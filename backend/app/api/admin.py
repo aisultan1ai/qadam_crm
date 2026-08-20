@@ -17,7 +17,7 @@ from ..core.plans import PLAN_LIMITS, tenant_usage
 from ..database import get_db
 from ..models import Project, Task, Tenant, TenantMembership, User
 from ..schemas.common import Message
-from .deps import get_current_user
+from .deps import get_current_user, log_action
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -33,6 +33,19 @@ def require_platform_admin(user: User = Depends(get_current_user)) -> User:
     if not user.is_platform_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Доступ только для платформенных админов")
     return user
+
+
+def _audit(db: Session, actor: User, action: str, tenant: Tenant, detail: str | None = None) -> None:
+    """Audit-запись для платформенных действий. tenant_id — целевая компания."""
+    log_action(
+        db,
+        tenant_id=tenant.id,
+        user_id=actor.id,
+        action=f"platform.{action}",
+        entity="tenant",
+        entity_id=tenant.id,
+        detail=detail,
+    )
 
 
 class TenantPatchAdmin(BaseModel):
@@ -99,21 +112,27 @@ def _serialize_tenant(t: Tenant) -> dict:
 def patch_tenant(
     tenant_id: int,
     payload: TenantPatchAdmin,
-    _: User = Depends(require_platform_admin),
+    admin: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(404, "Компания не найдена")
+    changes: list[str] = []
 
     if payload.name is not None:
         val = payload.name.strip()
         if len(val) < 2:
             raise HTTPException(400, "Название: минимум 2 символа")
-        tenant.name = val
+        if val != tenant.name:
+            changes.append(f"name: '{tenant.name}' → '{val}'")
+            tenant.name = val
 
     if payload.company_display_name is not None:
-        tenant.company_display_name = payload.company_display_name.strip() or None
+        new_v = payload.company_display_name.strip() or None
+        if new_v != tenant.company_display_name:
+            changes.append(f"display_name: '{tenant.company_display_name}' → '{new_v}'")
+            tenant.company_display_name = new_v
 
     if payload.slug is not None:
         val = payload.slug.strip().lower()
@@ -123,14 +142,18 @@ def patch_tenant(
             exists = db.query(Tenant.id).filter(Tenant.slug == val, Tenant.id != tenant.id).first()
             if exists:
                 raise HTTPException(400, "Компания с таким slug уже существует")
+            changes.append(f"slug: '{tenant.slug}' → '{val}'")
             tenant.slug = val
 
     if payload.plan is not None:
         if payload.plan not in PLAN_LIMITS:
             raise HTTPException(400, f"Неизвестный план: {payload.plan}")
-        tenant.plan = payload.plan
+        if payload.plan != tenant.plan:
+            changes.append(f"plan: '{tenant.plan}' → '{payload.plan}'")
+            tenant.plan = payload.plan
 
-    if payload.is_active is not None:
+    if payload.is_active is not None and payload.is_active != tenant.is_active:
+        changes.append(f"is_active: {tenant.is_active} → {payload.is_active}")
         tenant.is_active = payload.is_active
 
     if payload.subdomain is not None:
@@ -143,8 +166,12 @@ def patch_tenant(
             exists = db.query(Tenant.id).filter(Tenant.subdomain == val, Tenant.id != tenant.id).first()
             if exists:
                 raise HTTPException(400, "Такой поддомен уже занят")
-        tenant.subdomain = val
+        if val != tenant.subdomain:
+            changes.append(f"subdomain: '{tenant.subdomain}' → '{val}'")
+            tenant.subdomain = val
 
+    if changes:
+        _audit(db, admin, "update_tenant", tenant, detail="; ".join(changes))
     db.commit()
     db.refresh(tenant)
     return _serialize_tenant(tenant)
@@ -153,7 +180,7 @@ def patch_tenant(
 @router.delete("/tenants/{tenant_id}", response_model=Message)
 def delete_tenant(
     tenant_id: int,
-    _: User = Depends(require_platform_admin),
+    admin: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
     """Полное удаление tenant'а вместе со всеми связанными данными.
@@ -164,21 +191,27 @@ def delete_tenant(
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(404, "Компания не найдена")
+    name = tenant.name
+    # Пишем аудит ДО удаления: FK ActivityLog → tenants ON DELETE SET NULL/CASCADE зависит
+    # от миграции; в любом случае detail сохранится с именем + id.
+    _audit(db, admin, "delete_tenant", tenant, detail=f"name='{name}', slug='{tenant.slug}'")
     db.delete(tenant)
     db.commit()
-    return Message(message=f"Компания «{tenant.name}» удалена")
+    return Message(message=f"Компания «{name}» удалена")
 
 
 @router.post("/tenants/{tenant_id}/deactivate", response_model=Message)
 def deactivate_tenant(
     tenant_id: int,
-    _: User = Depends(require_platform_admin),
+    admin: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(404, "Компания не найдена")
-    tenant.is_active = False
+    if tenant.is_active:
+        tenant.is_active = False
+        _audit(db, admin, "deactivate_tenant", tenant)
     db.commit()
     return Message(message="Компания деактивирована")
 

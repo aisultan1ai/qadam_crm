@@ -10,12 +10,14 @@ import { useAuth } from "@/store/auth";
 import { Modal, Avatar, EmptyState, FieldError, FormError } from "@/components/ui";
 import { SkeletonCard } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/Confirm";
 import { projectSchema, type ProjectForm } from "@/lib/validation";
 
 export default function Projects() {
   const { can } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [openNew, setOpenNew] = useState(false);
@@ -74,13 +76,17 @@ export default function Projects() {
       ) : !data || data.length === 0 ? (
         <EmptyState
           icon={<FolderKanban size={32} />}
-          title={q ? "Проектов не найдено" : "Проектов пока нет"}
-          description={q ? "Измените запрос или сбросьте фильтр" : "Создайте первый проект, чтобы начать"}
-          action={canCreate && !q && (
+          title={q ? "По запросу ничего не найдено" : "Проектов пока нет"}
+          description={q ? "Попробуйте другой запрос или сбросьте поиск" : "Создайте первый проект, чтобы начать работу"}
+          action={q ? (
+            <button className="btn-secondary" onClick={() => setQ("")}>
+              Сбросить поиск
+            </button>
+          ) : canCreate ? (
             <button className="btn-primary" onClick={() => setOpenNew(true)}>
               <Plus size={16} /> Новый проект
             </button>
-          )}
+          ) : undefined}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -90,18 +96,36 @@ export default function Projects() {
                 <Link to={`/projects/${p.id}`} className="text-base font-semibold hover:text-brand-600">
                   <span
                     className="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle"
-                    style={{ background: p.color || "#6366f1" }}
+                    style={{ background: p.color || "#0F67FD" }}
                   />
                   {p.name}
                 </Link>
                 <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                   {can("projects.archive") && (
-                    <button className="btn-ghost !p-1.5" title={p.is_archived ? "Вернуть" : "Архивировать"} onClick={() => archive.mutate(p.id)}>
+                    <button
+                      className="btn-ghost !p-1.5"
+                      title={p.is_archived ? "Вернуть" : "Архивировать"}
+                      aria-label={p.is_archived ? `Вернуть проект «${p.name}» из архива` : `Архивировать проект «${p.name}»`}
+                      onClick={() => archive.mutate(p.id)}
+                    >
                       {p.is_archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
                     </button>
                   )}
                   {can("projects.delete") && (
-                    <button className="btn-ghost !p-1.5 text-rose-500" title="Удалить" onClick={() => confirm("Удалить проект?") && del.mutate(p.id)}>
+                    <button
+                      className="btn-ghost !p-1.5 text-rose-500"
+                      title="Удалить"
+                      aria-label={`Удалить проект «${p.name}»`}
+                      onClick={() =>
+                        confirm({
+                          title: "Удалить проект?",
+                          message: `«${p.name}» будет удалён вместе с задачами.`,
+                          danger: true,
+                          confirmLabel: "Удалить",
+                          onConfirm: () => del.mutateAsync(p.id),
+                        })
+                      }
+                    >
                       <Trash2 size={15} />
                     </button>
                   )}
@@ -156,7 +180,7 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
   } = useForm<ProjectForm>({
     resolver: zodResolver(projectSchema),
     mode: "onChange",
-    defaultValues: { name: "", description: "", color: "#6366f1", deadline: "", member_ids: [] },
+    defaultValues: { name: "", description: "", color: "#0F67FD", deadline: "", member_ids: [] },
   });
   const memberIds = watch("member_ids");
 
