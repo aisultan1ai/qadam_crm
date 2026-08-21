@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/store/auth";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
@@ -8,6 +8,7 @@ import Invite from "@/pages/Invite";
 import { Loader } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
+const Landing = lazy(() => import("@/pages/Landing"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
@@ -20,11 +21,21 @@ const Profile = lazy(() => import("@/pages/Profile"));
 const Admin = lazy(() => import("@/pages/Admin"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
-function Protected({ children }: { children: React.ReactNode }) {
+function HomeGate() {
   const { me, ready } = useAuth();
+  const { pathname } = useLocation();
   if (!ready) return <Loader />;
-  if (!me) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  if (!me) {
+    if (pathname === "/") {
+      return (
+        <Suspense fallback={<Loader />}>
+          <Landing />
+        </Suspense>
+      );
+    }
+    return <Navigate to="/login" replace />;
+  }
+  return <Layout />;
 }
 
 export default function App() {
@@ -62,14 +73,7 @@ export default function App() {
           </Suspense>
         }
       />
-      <Route
-        path="/"
-        element={
-          <Protected>
-            <Layout />
-          </Protected>
-        }
-      >
+      <Route path="/" element={<HomeGate />}>
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectDetail />} />

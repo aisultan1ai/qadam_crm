@@ -80,13 +80,18 @@ api.interceptors.response.use(
     const status = err.response?.status;
     const url = original?.url || "";
 
+    // /api/auth/me — это check-эндпоинт: 401 означает «гость», не форсим редирект.
+    // Гость может сидеть на публичном лендинге, вызывающий сам решит, что делать.
+    const isMeCheck = url.includes("/api/auth/me");
+
     // не пытаемся рефрешить сам /auth/refresh или /auth/login
     if (
       status === 401 &&
       original &&
       !original._retry &&
       !url.includes("/api/auth/refresh") &&
-      !url.includes("/api/auth/login")
+      !url.includes("/api/auth/login") &&
+      !isMeCheck
     ) {
       original._retry = true;
       refreshInFlight = refreshInFlight ?? refreshAccessToken();
@@ -100,7 +105,7 @@ api.interceptors.response.use(
       if (!location.pathname.startsWith("/login")) location.replace("/login");
     }
 
-    if (status === 401 && !location.pathname.startsWith("/login")) {
+    if (status === 401 && !isMeCheck && !location.pathname.startsWith("/login")) {
       location.replace("/login");
     }
 
