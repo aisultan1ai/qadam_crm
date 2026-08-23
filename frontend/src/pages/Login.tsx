@@ -115,12 +115,16 @@ export default function Login() {
           error && "animate-shake",
         )}
       >
-        <div className="mb-6 flex flex-col items-center gap-3">
+        <Link
+          to="/"
+          aria-label="На главную"
+          className="mb-6 flex flex-col items-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded-md"
+        >
           <LogoMark size={56} animated className="rounded-[14px]" />
           <div style={{ animation: "rise .52s cubic-bezier(.2,.8,.2,1) both", animationDelay: "240ms" }}>
             <Wordmark />
           </div>
-        </div>
+        </Link>
 
         <label
           className="mb-3 block"

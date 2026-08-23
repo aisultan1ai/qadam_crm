@@ -1,19 +1,18 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { useTheme } from "@/store/theme";
 import "./landing.css";
 
-const LOGO_SVG = (size: number) => (
+const LOGO_SVG = (size: number, ink: string = "var(--ink)") => (
   <svg width={size} height={size} viewBox="0 0 512 512" aria-label="Qadam CRM">
     <path
       d="M256 90 a150 150 0 1 0 0.1 0 Z M256 130 a110 110 0 1 1 -0.1 0 Z"
-      fill="var(--ink)"
+      fill={ink}
       fillRule="evenodd"
     />
-    <path d="M372 300 L409 399 L330 360 Z" fill="var(--ink)" />
+    <path d="M372 300 L409 399 L330 360 Z" fill={ink} />
     <rect x="274" y="176" width="80" height="60" rx="12" fill="var(--logo-1)" />
     <rect x="224" y="228" width="80" height="60" rx="12" fill="var(--logo-2)" />
-    <g fill="var(--ink)">
+    <g fill={ink}>
       <rect x="184" y="278" width="70" height="50" rx="12" />
       <path d="M249 296 L318 340 L199 328 Z" />
     </g>
@@ -24,7 +23,6 @@ const NAV_LINKS = [
   { href: "#product", label: "Продукт" },
   { href: "#how", label: "Как это работает" },
   { href: "#ai", label: "ИИ-помощник" },
-  { href: "#faq", label: "FAQ" },
   { href: "#cta", label: "Демо" },
 ];
 
@@ -37,15 +35,39 @@ type FormState = {
 };
 
 export default function Landing() {
-  const { theme, toggle } = useTheme();
-  const isLight = theme === "light";
-
   useEffect(() => {
     const prev = document.title;
     document.title = "Qadam CRM — Порядок в задачах с первого дня";
     return () => {
       document.title = prev;
     };
+  }, []);
+
+  useEffect(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".qadam-reveal"));
+    if (!nodes.length) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        }
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -80px 0px" },
+    );
+    nodes.forEach((n) => io.observe(n));
+    return () => io.disconnect();
+  }, []);
+
+  // Sticky nav: смена стиля при скролле (dark → light)
+  const [navScrolled, setNavScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setNavScrolled(window.scrollY > 40);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const [form, setForm] = useState<FormState>({
@@ -66,233 +88,187 @@ export default function Landing() {
   const inputStyle: CSSProperties = {
     width: "100%",
     boxSizing: "border-box",
-    padding: "11px 13px",
-    border: "1px solid rgba(var(--line-rgb),.12)",
+    padding: "13px 15px",
+    border: "1px solid rgba(var(--line-rgb),.14)",
     borderRadius: 10,
     background: "var(--card)",
     color: "var(--ink)",
     fontFamily: "inherit",
-    fontSize: 14,
+    fontSize: 15,
     outline: "none",
   };
   const labelCap: CSSProperties = {
     display: "block",
-    fontSize: 10,
-    letterSpacing: ".10em",
+    fontSize: 12,
+    fontWeight: 600,
+    letterSpacing: ".08em",
     textTransform: "uppercase",
-    color: "var(--dim)",
+    color: "var(--muted)",
     marginBottom: 8,
   };
-  const sectionLabel = (text: string, badge?: string) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-      <span style={{ width: 18, height: 1, background: "rgba(var(--line-rgb),.30)" }} />
+  const sectionLabel = (text: string) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+      <span style={{ width: 22, height: 1, background: "rgba(var(--line-rgb),.30)" }} />
       <span
         style={{
-          fontSize: 11,
+          fontSize: 13,
+          fontWeight: 600,
           letterSpacing: ".14em",
           textTransform: "uppercase",
-          color: "var(--dim)",
+          color: "var(--muted)",
         }}
       >
         {text}
       </span>
-      {badge && (
-        <span
-          style={{
-            padding: "3px 9px",
-            border: "1px solid rgba(var(--line-rgb),.14)",
-            borderRadius: 999,
-            fontSize: 10,
-            letterSpacing: ".06em",
-            textTransform: "uppercase",
-            color: "var(--faint)",
-          }}
-        >
-          {badge}
-        </span>
-      )}
     </div>
   );
 
+  const navInk = navScrolled ? "#0d2758" : "#ffffff";
+  const navMuted = navScrolled ? "rgba(13,39,88,.72)" : "rgba(255,255,255,.78)";
+
   return (
-    <div className={`qadam-landing ${isLight ? "light-theme" : ""}`}>
+    <div className="qadam-landing">
+      {/* NAV — fixed сверху, меняет стиль при скролле */}
       <div
-        className="qadam-container"
-        style={{ maxWidth: 1440, margin: "0 auto", overflow: "hidden", padding: "0 56px" }}
+        className={`qadam-nav ${navScrolled ? "qadam-nav-scrolled" : ""}`}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          background: navScrolled ? "rgba(255,255,255,0.92)" : "transparent",
+          backdropFilter: navScrolled ? "saturate(140%) blur(10px)" : "none",
+          WebkitBackdropFilter: navScrolled ? "saturate(140%) blur(10px)" : "none",
+          borderBottom: navScrolled ? "1px solid rgba(13,39,88,.08)" : "1px solid transparent",
+          transition: "background .28s ease, border-color .28s ease, backdrop-filter .28s ease",
+        }}
       >
-        {/* NAV */}
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            height: 80,
-            marginLeft: -56,
-            marginRight: -56,
+            maxWidth: 1440,
+            margin: "0 auto",
             padding: "0 56px",
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "center",
+            height: 72,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {LOGO_SVG(26)}
-            <span style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>Qadam</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, justifySelf: "start" }}>
+            {LOGO_SVG(26, navInk)}
+            <span
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: navInk,
+                transition: "color .28s ease",
+              }}
+            >
+              Qadam
+            </span>
           </div>
           <div
             className="qadam-hide-mobile"
-            style={{ display: "flex", alignItems: "center", gap: 28, margin: "0 auto" }}
+            style={{ display: "flex", alignItems: "center", gap: 28, justifySelf: "center" }}
           >
             {NAV_LINKS.map((l) => (
-              <a key={l.href} href={l.href} style={{ fontSize: 14 }}>
+              <a
+                key={l.href}
+                href={l.href}
+                style={{
+                  fontSize: 15,
+                  color: navMuted,
+                  transition: "color .28s ease",
+                }}
+              >
                 {l.label}
               </a>
             ))}
           </div>
-          <button
-            onClick={toggle}
-            type="button"
-            aria-label="Сменить тему"
-            style={{
-              position: "relative",
-              display: "flex",
-              alignItems: "center",
-              width: 58,
-              height: 28,
-              marginLeft: "auto",
-              marginRight: 14,
-              padding: 3,
-              boxSizing: "border-box",
-              border: "1px solid rgba(var(--line-rgb),.16)",
-              borderRadius: 999,
-              cursor: "pointer",
-              background: "transparent",
-            }}
-          >
-            <span
-              style={{
-                position: "absolute",
-                top: 3,
-                left: 3,
-                width: 26,
-                height: 20,
-                borderRadius: 999,
-                background: "rgba(var(--line-rgb),.10)",
-                transform: "translateX(var(--sw-x))",
-                transition: "transform .24s cubic-bezier(.2,.8,.2,1)",
-              }}
-            />
-            <span
-              style={{
-                position: "relative",
-                width: 26,
-                textAlign: "center",
-                fontSize: 11,
-                color: "var(--sw-moon)",
-              }}
-            >
-              ☾
-            </span>
-            <span
-              style={{
-                position: "relative",
-                width: 26,
-                textAlign: "center",
-                fontSize: 11,
-                color: "var(--sw-sun)",
-              }}
-            >
-              ☀
-            </span>
-          </button>
           <Link
             to="/login"
             style={{
-              padding: "9px 18px",
-              fontSize: 13,
+              justifySelf: "end",
+              padding: "10px 22px",
+              fontSize: 14,
               fontWeight: 500,
-              color: "var(--btn-fg)",
-              background: "var(--btn-bg)",
+              color: navScrolled ? "#ffffff" : "#0d2758",
+              background: navScrolled ? "#0d2758" : "#ffffff",
               borderRadius: 999,
+              transition: "background .28s ease, color .28s ease",
             }}
           >
-            Log in
+            Войти
           </Link>
         </div>
+      </div>
+
+      <div
+        className="qadam-container"
+        style={{ maxWidth: 1440, margin: "0 auto", overflow: "hidden", padding: "0 56px" }}
+      >
 
         {/* HERO */}
         <div
           style={{
             position: "relative",
-            padding: "96px 0 0",
+            padding: "120px 0 0",
             textAlign: "center",
-            overflow: "hidden",
           }}
         >
-          <span
-            className="qadam-anim-beam"
-            aria-hidden
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: 0,
-              width: 520,
-              height: 420,
-              transform: "translateX(-50%)",
-              background: "var(--glow-beam)",
-              filter: "blur(20px)",
-              pointerEvents: "none",
-            }}
-          />
-          <span
-            className="qadam-anim-arc"
-            aria-hidden
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: 300,
-              width: 900,
-              height: 900,
-              transform: "translateX(-50%)",
-              borderRadius: 999,
-              border: "1px solid rgba(var(--line-rgb),.16)",
-              background: "var(--glow-arc)",
-              pointerEvents: "none",
-            }}
-          />
+          {/* Dark navy base — брендовый тёмно-синий */}
           <span
             aria-hidden
             style={{
               position: "absolute",
-              left: "50%",
-              top: 340,
-              width: 640,
-              height: 640,
-              transform: "translateX(-50%)",
-              borderRadius: 999,
-              border: "1px solid rgba(var(--line-rgb),.10)",
+              inset: "0 -56px 0",
+              background: "#0a1f47",
               pointerEvents: "none",
+              zIndex: 0,
             }}
           />
-          {[
-            { c: "qadam-anim-twinkle-a", l: "18%", t: "26%", bg: "var(--spark)" },
-            { c: "qadam-anim-twinkle-b", l: "78%", t: "20%", bg: "var(--spark)" },
-            { c: "qadam-anim-twinkle-c", l: "30%", t: "46%", bg: "var(--spark-2)" },
-            { c: "qadam-anim-twinkle-d", l: "70%", t: "52%", bg: "var(--spark-2)" },
-          ].map((s, i) => (
-            <span
-              key={i}
-              className={s.c}
-              aria-hidden
-              style={{
-                position: "absolute",
-                left: s.l,
-                top: s.t,
-                width: 2,
-                height: 2,
-                borderRadius: 999,
-                background: s.bg,
-              }}
-            />
-          ))}
-
-          <div style={{ position: "relative", maxWidth: 820, margin: "0 auto" }}>
+          {/* Photo layer — атмосферная текстура поверх navy */}
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: "0 -56px 0",
+              backgroundImage: "url(/hero.jpg)",
+              backgroundSize: "cover",
+              backgroundPosition: "center 30%",
+              opacity: 0.3,
+              filter: "saturate(0.35) brightness(0.75)",
+              mixBlendMode: "overlay",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+          {/* Navy overlay — держит контраст под белый текст, снизу → к white */}
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: "0 -56px 0",
+              background:
+                "linear-gradient(180deg, rgba(10,31,71,0.55) 0%, rgba(10,31,71,0.35) 35%, rgba(10,31,71,0.15) 65%, rgba(255,255,255,0.85) 92%, #ffffff 100%)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+          {/* Brand blue glow — акцентное свечение сверху */}
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: "0 -56px 0",
+              background:
+                "radial-gradient(ellipse 55% 40% at 50% 22%, rgba(15,103,253,0.28), transparent 68%)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+          <div style={{ position: "relative", maxWidth: 820, margin: "0 auto", zIndex: 1 }}>
             <h1
               className="qadam-h1"
               style={{
@@ -301,38 +277,67 @@ export default function Landing() {
                 lineHeight: 1.04,
                 fontWeight: 500,
                 letterSpacing: "-0.042em",
-                color: "var(--ink)",
+                color: "#ffffff",
                 textWrap: "balance" as CSSProperties["textWrap"],
               }}
             >
-              Порядок в задачах -<br />с первого дня
+              Порядок в задачах с первого дня.
             </h1>
+            <span
+              aria-hidden
+              style={{
+                display: "inline-block",
+                width: 40,
+                height: 1,
+                margin: "6px 0 22px",
+                background: "rgba(255,255,255,.35)",
+              }}
+            />
             <p
               style={{
                 margin: "0 auto",
-                maxWidth: 470,
-                fontSize: 16,
-                lineHeight: 1.6,
-                color: "var(--muted-2)",
+                maxWidth: 520,
+                fontSize: 19,
+                lineHeight: 1.55,
+                color: "rgba(255,255,255,.78)",
               }}
             >
-              Задачи, роли, отчёты и ИИ-помощник - в одной системе.
+              Задачи, роли, отчёты и ИИ-помощник — в одном спокойном месте.
             </p>
-            <a
-              href="#cta"
+            <div
               style={{
-                display: "inline-block",
-                marginTop: 32,
-                padding: "13px 24px",
-                fontSize: 14,
-                fontWeight: 500,
-                color: "var(--btn-fg)",
-                background: "var(--btn-bg)",
-                borderRadius: 999,
+                marginTop: 36,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 24,
               }}
             >
-              Узнать стоимость
-            </a>
+              <a
+                href="#cta"
+                style={{
+                  display: "inline-block",
+                  padding: "15px 28px",
+                  fontSize: 15,
+                  fontWeight: 500,
+                  color: "#ffffff",
+                  background: "#0f67fd",
+                  borderRadius: 999,
+                }}
+              >
+                Начать →
+              </a>
+              <a
+                href="#how"
+                style={{
+                  fontSize: 15,
+                  color: "#ffffff",
+                  borderBottom: "1px solid rgba(255,255,255,.38)",
+                  paddingBottom: 3,
+                }}
+              >
+                Как это работает
+              </a>
+            </div>
           </div>
 
           {/* app peek */}
@@ -341,15 +346,16 @@ export default function Landing() {
               className="qadam-app-peek"
               style={{
                 position: "relative",
-                margin: "64px auto 0",
+                margin: "88px auto 0",
+                zIndex: 1,
                 width: 1080,
-                border: "1px solid rgba(var(--line-rgb),.12)",
+                border: "1px solid rgba(var(--line-rgb),.10)",
                 borderTopLeftRadius: 16,
                 borderTopRightRadius: 16,
                 background: "var(--surface-2)",
                 overflow: "hidden",
                 textAlign: "left",
-                boxShadow: "var(--glow-peek)",
+                boxShadow: "var(--shadow-card)",
               }}
             >
               <div style={{ display: "flex" }}>
@@ -461,7 +467,6 @@ export default function Landing() {
                         }}
                       />
                       <span
-                        className="qadam-anim-pulse"
                         style={{
                           position: "absolute",
                           right: -5,
@@ -481,18 +486,6 @@ export default function Landing() {
                       >
                         3
                       </span>
-                      <span
-                        className="qadam-anim-ring"
-                        style={{
-                          position: "absolute",
-                          right: -5,
-                          top: -5,
-                          width: 15,
-                          height: 15,
-                          borderRadius: 999,
-                          background: "var(--accent-ring)",
-                        }}
-                      />
                     </span>
                   </div>
                   <div style={{ padding: 20 }}>
@@ -605,11 +598,109 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* SPLIT: KANBAN */}
-        <div id="product" style={{ padding: "120px 0 0" }}>
+        {/* SPLIT: KANBAN — full-width светло-голубая панель */}
+        <div
+          id="product"
+          className="qadam-reveal"
+          style={{ position: "relative", padding: "120px 0 100px", overflow: "hidden" }}
+        >
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: "calc(50% - 50vw)",
+              right: "calc(50% - 50vw)",
+              background: "#f4f7fd",
+              zIndex: 0,
+            }}
+          />
+          {/* Ambient brand blobs — фон «дышит», не выглядит плоско-белым */}
+          <span
+            aria-hidden
+            className="qadam-blob-a"
+            style={{
+              position: "absolute",
+              top: "-8%",
+              left: "-6%",
+              width: 560,
+              height: 560,
+              background: "radial-gradient(circle, rgba(15,103,253,0.10), transparent 70%)",
+              filter: "blur(60px)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+          <span
+            aria-hidden
+            className="qadam-blob-b"
+            style={{
+              position: "absolute",
+              top: "20%",
+              right: "-8%",
+              width: 520,
+              height: 520,
+              background: "radial-gradient(circle, rgba(251,191,36,0.10), transparent 70%)",
+              filter: "blur(60px)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+          {/* Плавающие стикеры — монотонные оттенки бренда */}
+          <span
+            aria-hidden
+            className="qadam-sticker-a"
+            style={{
+              position: "absolute",
+              top: 42,
+              left: "8%",
+              width: 84,
+              height: 84,
+              background: "#dbe6fb",
+              borderRadius: 6,
+              boxShadow: "0 8px 22px -8px rgba(13,39,88,0.16)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+          <span
+            aria-hidden
+            className="qadam-sticker-b"
+            style={{
+              position: "absolute",
+              top: 24,
+              right: "10%",
+              width: 78,
+              height: 78,
+              background: "#c9d9f7",
+              borderRadius: 6,
+              boxShadow: "0 8px 22px -8px rgba(13,39,88,0.16)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+          <span
+            aria-hidden
+            className="qadam-sticker-c"
+            style={{
+              position: "absolute",
+              top: 84,
+              right: "22%",
+              width: 66,
+              height: 66,
+              background: "#e5edfc",
+              borderRadius: 6,
+              boxShadow: "0 8px 22px -8px rgba(13,39,88,0.16)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
           <div
             className="qadam-grid-2"
             style={{
+              position: "relative",
+              zIndex: 1,
               maxWidth: 1080,
               margin: "0 auto",
               display: "grid",
@@ -631,12 +722,12 @@ export default function Landing() {
               {sectionLabel("Задачи")}
               <div
                 style={{
-                  fontSize: 27,
+                  fontSize: 32,
                   fontWeight: 500,
                   lineHeight: 1.14,
                   letterSpacing: "-0.03em",
                   color: "var(--ink)",
-                  marginBottom: 26,
+                  marginBottom: 28,
                 }}
               >
                 Статус меняется мышкой
@@ -650,9 +741,9 @@ export default function Landing() {
                   <div
                     key={r.t}
                     style={{
-                      padding: "12px 0 12px 14px",
+                      padding: "13px 0 13px 16px",
                       borderLeft: `2px solid rgba(var(--line-rgb),${r.active ? ".55" : ".10"})`,
-                      fontSize: 14,
+                      fontSize: 16,
                       color: r.active ? "var(--ink)" : "var(--faint)",
                     }}
                   >
@@ -683,7 +774,6 @@ export default function Landing() {
                   highlighted
                 >
                   <div
-                    className="qadam-anim-slide"
                     style={{
                       border: "1px solid rgba(var(--line-rgb),.22)",
                       borderRadius: 12,
@@ -746,16 +836,145 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* AI */}
-        <div id="ai" style={{ position: "relative", padding: "120px 0 0", overflow: "hidden" }}>
-          <div style={{ position: "relative", maxWidth: 1080, margin: "0 auto" }}>
-            {sectionLabel("ИИ-помощник", "в разработке")}
-            <div style={{ maxWidth: 540, marginBottom: 32 }}>
+        {/* FEATURES — 4 icon-card плитки, как у Slack */}
+        <div className="qadam-reveal" style={{ padding: "110px 0 0" }}>
+          <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+            {sectionLabel("Возможности")}
+            <div style={{ maxWidth: 560, marginBottom: 40 }}>
               <h2
                 className="qadam-h2"
                 style={{
-                  margin: "0 0 12px",
-                  fontSize: 36,
+                  margin: 0,
+                  fontSize: 42,
+                  lineHeight: 1.1,
+                  fontWeight: 500,
+                  letterSpacing: "-0.035em",
+                  color: "var(--ink)",
+                }}
+              >
+                Всё, что нужно команде
+              </h2>
+            </div>
+            <div
+              className="qadam-grid-features"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: 16,
+              }}
+            >
+              {[
+                {
+                  t: "Задачи и канбан",
+                  d: "Kanban, календарь, комментарии, файлы.",
+                  icon: (
+                    <>
+                      <rect x="3" y="4" width="4" height="14" rx="1.5" />
+                      <rect x="10" y="4" width="4" height="9" rx="1.5" />
+                      <rect x="17" y="4" width="4" height="17" rx="1.5" />
+                    </>
+                  ),
+                },
+                {
+                  t: "Роли и права",
+                  d: "Гибкие роли, приглашения, аудит.",
+                  icon: (
+                    <>
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" />
+                    </>
+                  ),
+                },
+                {
+                  t: "Отчёты и аналитика",
+                  d: "SLA, загрузка людей, узкие места.",
+                  icon: (
+                    <>
+                      <path d="M3 3v18h18" />
+                      <path d="M7 15l4-4 3 3 5-6" />
+                    </>
+                  ),
+                },
+                {
+                  t: "ИИ-помощник",
+                  d: "Разбивает задачи, подсказывает срок.",
+                  icon: (
+                    <>
+                      <path d="M12 2l2.4 5.4L20 8.6l-4 3.9.9 5.7L12 15.5 7.1 18.2 8 12.5l-4-3.9 5.6-1.2z" />
+                    </>
+                  ),
+                },
+              ].map((f) => (
+                <div
+                  key={f.t}
+                  className="qadam-feature-card"
+                  style={{
+                    padding: 22,
+                    border: "1px solid rgba(var(--line-rgb),.10)",
+                    borderRadius: 16,
+                    background: "var(--surface)",
+                    transition:
+                      "transform .22s ease, box-shadow .22s ease, border-color .22s ease",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: "#eef4ff",
+                      marginBottom: 16,
+                    }}
+                  >
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#0f67fd"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      {f.icon}
+                    </svg>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 17,
+                      fontWeight: 500,
+                      color: "var(--ink)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {f.t}
+                  </div>
+                  <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: "var(--faint)" }}>
+                    {f.d}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* AI */}
+        <div
+          id="ai"
+          className="qadam-reveal"
+          style={{ position: "relative", padding: "120px 0 0", overflow: "hidden" }}
+        >
+          <div style={{ position: "relative", maxWidth: 1080, margin: "0 auto" }}>
+            {sectionLabel("ИИ-помощник")}
+            <div style={{ maxWidth: 620, marginBottom: 40 }}>
+              <h2
+                className="qadam-h2"
+                style={{
+                  margin: "0 0 14px",
+                  fontSize: 42,
                   lineHeight: 1.1,
                   fontWeight: 500,
                   letterSpacing: "-0.035em",
@@ -764,7 +983,7 @@ export default function Landing() {
               >
                 Помощник, который знает контекст задачи
               </h2>
-              <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: "var(--muted)" }}>
+              <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: "var(--muted)" }}>
                 Разбивает задачу на шаги и подсказывает реальный срок.
               </p>
             </div>
@@ -823,7 +1042,6 @@ export default function Landing() {
                   <AiStep title="Собрать акты за июль" who="Мария К." done />
                   <AiStep title="Сверить суммы со сметой" who="Данияр О." done />
                   <div
-                    className="qadam-anim-float"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -845,37 +1063,6 @@ export default function Landing() {
                     />
                     <span style={{ fontSize: 13, color: "var(--muted)" }}>
                       Сформировать сводку и отправить
-                    </span>
-                    <span
-                      style={{ marginLeft: "auto", display: "inline-flex", gap: 3 }}
-                    >
-                      <span
-                        className="qadam-anim-typing-a"
-                        style={{
-                          width: 4,
-                          height: 4,
-                          borderRadius: 999,
-                          background: "var(--spark-2)",
-                        }}
-                      />
-                      <span
-                        className="qadam-anim-typing-b"
-                        style={{
-                          width: 4,
-                          height: 4,
-                          borderRadius: 999,
-                          background: "var(--spark-2)",
-                        }}
-                      />
-                      <span
-                        className="qadam-anim-typing-c"
-                        style={{
-                          width: 4,
-                          height: 4,
-                          borderRadius: 999,
-                          background: "var(--spark-2)",
-                        }}
-                      />
                     </span>
                   </div>
                 </div>
@@ -1006,31 +1193,32 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* HOW */}
-        <div id="how" style={{ position: "relative", padding: "120px 0 0", overflow: "hidden" }}>
+        {/* HOW — soft warm panel */}
+        <div
+          id="how"
+          className="qadam-reveal"
+          style={{ position: "relative", padding: "120px 0 110px", overflow: "hidden" }}
+        >
           <span
             aria-hidden
-            className="qadam-anim-drift"
             style={{
               position: "absolute",
-              left: "50%",
-              top: "40%",
-              width: 900,
-              height: 400,
-              transform: "translateX(-50%)",
-              background: "var(--glow-soft)",
-              filter: "blur(40px)",
-              pointerEvents: "none",
+              top: 0,
+              bottom: 0,
+              left: "calc(50% - 50vw)",
+              right: "calc(50% - 50vw)",
+              background: "#eaf0fa",
+              zIndex: 0,
             }}
           />
-          <div style={{ position: "relative", maxWidth: 1080, margin: "0 auto" }}>
+          <div style={{ position: "relative", zIndex: 1, maxWidth: 1080, margin: "0 auto" }}>
             {sectionLabel("Внедрение")}
-            <div style={{ maxWidth: 480, marginBottom: 36 }}>
+            <div style={{ maxWidth: 560, marginBottom: 40 }}>
               <h2
                 className="qadam-h2"
                 style={{
-                  margin: "0 0 12px",
-                  fontSize: 36,
+                  margin: "0 0 14px",
+                  fontSize: 42,
                   lineHeight: 1.1,
                   fontWeight: 500,
                   letterSpacing: "-0.035em",
@@ -1039,7 +1227,7 @@ export default function Landing() {
               >
                 Запуск за один день
               </h2>
-              <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: "var(--muted)" }}>
+              <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: "var(--muted)" }}>
                 Без внедренцев и курсов.
               </p>
             </div>
@@ -1057,15 +1245,15 @@ export default function Landing() {
               }}
             >
               {[
-                { n: "01", t: "Регистрируем компанию", d: "Пространство и роли - 10 минут." },
-                { n: "02", t: "Переносим задачи", d: "Импорт из CSV, приглашения по email." },
-                { n: "03", t: "Смотрим, где зависает", d: "Аналитика покажет узкие места." },
+                { t: "Регистрируем компанию", d: "Пространство и роли — 10 минут." },
+                { t: "Переносим задачи", d: "Импорт из CSV, приглашения по email." },
+                { t: "Смотрим, где зависает", d: "Аналитика покажет узкие места." },
               ].map((s, i, arr) => (
                 <div
-                  key={s.n}
+                  key={s.t}
                   className="qadam-how-cell"
                   style={{
-                    padding: "26px 24px",
+                    padding: "30px 28px",
                     borderRight:
                       i < arr.length - 1
                         ? "1px solid rgba(var(--line-rgb),.10)"
@@ -1073,17 +1261,11 @@ export default function Landing() {
                   }}
                 >
                   <div
-                    className="tnum"
-                    style={{ fontSize: 12, color: "var(--dim)", marginBottom: 14 }}
-                  >
-                    {s.n}
-                  </div>
-                  <div
                     style={{
-                      fontSize: 17,
+                      fontSize: 19,
                       fontWeight: 500,
                       color: "var(--ink)",
-                      marginBottom: 6,
+                      marginBottom: 8,
                     }}
                   >
                     {s.t}
@@ -1091,7 +1273,7 @@ export default function Landing() {
                   <p
                     style={{
                       margin: 0,
-                      fontSize: 13,
+                      fontSize: 15,
                       lineHeight: 1.6,
                       color: "var(--faint)",
                     }}
@@ -1104,61 +1286,14 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* FAQ */}
-        <div id="faq" style={{ padding: "96px 0 0" }}>
-          <div
-            className="qadam-grid-2"
-            style={{
-              maxWidth: 1080,
-              margin: "0 auto",
-              display: "grid",
-              gridTemplateColumns: "320px 1fr",
-              gap: 56,
-            }}
-          >
-            <div>
-              {sectionLabel("Вопросы")}
-              <h2
-                className="qadam-h2"
-                style={{
-                  margin: "0 0 10px",
-                  fontSize: 32,
-                  lineHeight: 1.12,
-                  fontWeight: 500,
-                  letterSpacing: "-0.035em",
-                  color: "var(--ink)",
-                }}
-              >
-                Частые вопросы
-              </h2>
-              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--faint)" }}>
-                Ответим текстом, а не звонком.
-              </p>
-            </div>
-            <div>
-              <FaqItem
-                q="Сколько стоит?"
-                a="По числу сотрудников и размещению. Расчёт - в тот же день."
-              />
-              <FaqItem
-                q="Как переехать с таблиц?"
-                a="Импортом из CSV - первый перенос делаем вместе."
-              />
-              <FaqItem
-                q="Можно на свой сервер?"
-                a="Да, Docker Compose в вашей сети."
-              />
-              <FaqItem q="Работает с телефона?" a="Да, интерфейс адаптивный." />
-            </div>
-          </div>
-        </div>
 
-        {/* CTA */}
+        {/* CTA — full-width dark navy panel */}
         <div
           id="cta"
+          className="qadam-reveal"
           style={{
             position: "relative",
-            padding: "140px 0 0",
+            padding: "140px 0 110px",
             textAlign: "center",
             overflow: "hidden",
           }}
@@ -1167,54 +1302,54 @@ export default function Landing() {
             aria-hidden
             style={{
               position: "absolute",
-              left: "50%",
-              top: 60,
-              width: 2,
-              height: 120,
-              transform: "translateX(-50%)",
-              background: "var(--beam-line)",
-              pointerEvents: "none",
+              top: 0,
+              bottom: 0,
+              left: "calc(50% - 50vw)",
+              right: "calc(50% - 50vw)",
+              background: "#0a1f47",
+              zIndex: 0,
             }}
           />
           <span
             aria-hidden
-            className="qadam-anim-arc-9"
             style={{
               position: "absolute",
+              top: -100,
               left: "50%",
-              top: 120,
-              width: 700,
-              height: 420,
               transform: "translateX(-50%)",
-              background: "var(--glow-cta)",
+              width: 720,
+              height: 420,
+              background:
+                "radial-gradient(ellipse 60% 50% at 50% 40%, rgba(15,103,253,0.35), transparent 68%)",
               filter: "blur(40px)",
               pointerEvents: "none",
+              zIndex: 0,
             }}
           />
-          <div style={{ position: "relative", maxWidth: 680, margin: "0 auto" }}>
+          <div style={{ position: "relative", zIndex: 1, maxWidth: 680, margin: "0 auto" }}>
             <h2
               className="qadam-h2"
               style={{
-                margin: "0 0 12px",
-                fontSize: 42,
+                margin: "0 0 14px",
+                fontSize: 48,
                 lineHeight: 1.06,
                 fontWeight: 500,
                 letterSpacing: "-0.04em",
-                color: "var(--ink)",
+                color: "#ffffff",
               }}
             >
               Покажем на ваших задачах
             </h2>
             <p
               style={{
-                margin: "0 auto 32px",
-                maxWidth: 420,
-                fontSize: 15,
+                margin: "0 auto 36px",
+                maxWidth: 480,
+                fontSize: 17,
                 lineHeight: 1.6,
-                color: "var(--muted)",
+                color: "rgba(255,255,255,.78)",
               }}
             >
-              Оставьте заявку - вернёмся в тот же день.
+              Оставьте заявку — вернёмся в тот же день.
             </p>
 
             <form
@@ -1317,13 +1452,13 @@ export default function Landing() {
                   style={{ ...inputStyle, resize: "none", lineHeight: 1.5 }}
                 />
               </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
                 <button
                   type="submit"
                   disabled={sent}
                   style={{
-                    padding: "12px 24px",
-                    fontSize: 14,
+                    padding: "14px 28px",
+                    fontSize: 15,
                     fontWeight: 500,
                     color: "var(--btn-fg)",
                     background: "var(--btn-bg)",
@@ -1336,55 +1471,117 @@ export default function Landing() {
                 >
                   {sent ? "Спасибо, свяжемся!" : "Отправить заявку"}
                 </button>
-                <span style={{ fontSize: 12, color: "var(--dim)" }}>
-                  Или в Telegram - быстрее.
+                <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                  Или в Telegram — быстрее.
                 </span>
               </div>
             </form>
           </div>
         </div>
 
-        {/* FOOTER */}
+        {/* FOOTER — крупный, с soft-панелью */}
         <div
           style={{
-            marginTop: 120,
-            borderTop: "1px solid rgba(var(--line-rgb),.08)",
-            padding: "40px 0 36px",
+            position: "relative",
+            marginTop: 0,
+            padding: "72px 0 32px",
+            overflow: "hidden",
           }}
         >
-          <div
-            className="qadam-grid-2"
+          <span
+            aria-hidden
             style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: "calc(50% - 50vw)",
+              right: "calc(50% - 50vw)",
+              background: "#f4f7fd",
+              zIndex: 0,
+            }}
+          />
+          <div
+            style={{
+              position: "relative",
+              zIndex: 1,
               maxWidth: 1080,
               margin: "0 auto",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 60,
-              flexWrap: "wrap",
             }}
           >
-            <div style={{ maxWidth: 260 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 9,
-                  marginBottom: 10,
-                }}
-              >
-                {LOGO_SVG(22)}
-                <span
-                  style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}
+            <div
+              className="qadam-grid-2"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.3fr 1fr 1fr 1fr",
+                gap: 40,
+                marginBottom: 56,
+              }}
+            >
+              <div style={{ maxWidth: 300 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    marginBottom: 14,
+                  }}
                 >
-                  Qadam CRM
-                </span>
+                  {LOGO_SVG(28)}
+                  <span
+                    style={{ fontSize: 16, fontWeight: 600, color: "var(--ink)" }}
+                  >
+                    Qadam CRM
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: "0 0 20px",
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    color: "var(--muted)",
+                  }}
+                >
+                  Порядок в задачах, ролях и отчётах. Для команд, которые растут.
+                </p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <a
+                    href="mailto:hello@qadam.kz"
+                    aria-label="Email"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 34,
+                      height: 34,
+                      borderRadius: 8,
+                      background: "#ffffff",
+                      border: "1px solid rgba(var(--line-rgb),.10)",
+                      color: "var(--ink-2)",
+                      fontSize: 13,
+                    }}
+                  >
+                    ✉
+                  </a>
+                  <a
+                    href="tel:+77000000000"
+                    aria-label="Phone"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 34,
+                      height: 34,
+                      borderRadius: 8,
+                      background: "#ffffff",
+                      border: "1px solid rgba(var(--line-rgb),.10)",
+                      color: "var(--ink-2)",
+                      fontSize: 13,
+                    }}
+                  >
+                    ☎
+                  </a>
+                </div>
               </div>
-              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: "var(--dim)" }}>
-                Трекинг задач компании.
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: 64, flexWrap: "wrap" }}>
               <FooterCol
                 title="Продукт"
                 items={[
@@ -1397,33 +1594,32 @@ export default function Landing() {
                 title="Компания"
                 items={[
                   { href: "#cta", label: "Оставить заявку" },
-                  { href: "#faq", label: "FAQ" },
+                  { href: "/login", label: "Войти" },
                 ]}
               />
               <FooterCol
                 title="Связь"
                 items={[
                   { href: "mailto:hello@qadam.kz", label: "hello@qadam.kz" },
-                  { href: "#faq", label: "Telegram" },
                   { href: "tel:+77000000000", label: "+7 700 000 00 00" },
                 ]}
               />
             </div>
-          </div>
-          <div
-            style={{
-              maxWidth: 1080,
-              margin: "32px auto 0",
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 12,
-              color: "var(--dim-2)",
-              flexWrap: "wrap",
-              gap: 8,
-            }}
-          >
-            <span>© 2026 Qadam CRM</span>
-            <span>Политика конфиденциальности · Условия</span>
+            <div
+              style={{
+                borderTop: "1px solid rgba(var(--line-rgb),.10)",
+                paddingTop: 24,
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 13,
+                color: "var(--muted)",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              <span>© 2026 Qadam CRM. Все права защищены.</span>
+              <span>Политика конфиденциальности · Условия</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1555,43 +1751,6 @@ function AiStep({ title, who, done }: { title: string; who: string; done?: boole
   );
 }
 
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <details
-      open={open}
-      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
-      style={{
-        borderBottom: "1px solid rgba(var(--line-rgb),.09)",
-        padding: "16px 0",
-      }}
-    >
-      <summary
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 16,
-          fontSize: 15,
-          color: "var(--ink)",
-        }}
-      >
-        {q}
-        <span style={{ color: "var(--faint-2)" }}>{open ? "−" : "+"}</span>
-      </summary>
-      <p
-        style={{
-          margin: "8px 0 0",
-          fontSize: 13,
-          lineHeight: 1.65,
-          color: "var(--faint)",
-        }}
-      >
-        {a}
-      </p>
-    </details>
-  );
-}
-
 function FooterCol({
   title,
   items,
@@ -1600,19 +1759,20 @@ function FooterCol({
   items: { href: string; label: string }[];
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div
         style={{
-          fontSize: 11,
-          letterSpacing: ".06em",
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: ".08em",
           textTransform: "uppercase",
-          color: "var(--dim-2)",
+          color: "var(--muted)",
         }}
       >
         {title}
       </div>
       {items.map((i) => (
-        <a key={i.label} href={i.href} style={{ fontSize: 13 }}>
+        <a key={i.label} href={i.href} style={{ fontSize: 14 }}>
           {i.label}
         </a>
       ))}
