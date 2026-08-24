@@ -8,6 +8,7 @@ import { Loader, Modal } from "@/components/ui";
 import {
   Plus, Copy, Trash2, Save, CreditCard, Palette, UserPlus, Mail, Check,
   Clock, XCircle, RefreshCw, Users, HardDrive, Zap, Sparkles, Shield,
+  GripVertical, Eye,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
@@ -24,6 +25,7 @@ type TabDef = {
 const SETTINGS_TABS: TabDef[] = [
   { to: "roles", label: "Роли и права", icon: Save, perm: "roles.manage" },
   { to: "team", label: "Команда", icon: UserPlus, perm: "users.create" },
+  { to: "forms", label: "Формы захвата", icon: Zap, perm: "leads.manage_forms" },
   { to: "branding", label: "Брендинг", icon: Palette, ownerOnly: true },
   { to: "billing", label: "Тариф", icon: CreditCard, ownerOnly: true },
 ];
@@ -67,6 +69,7 @@ export default function Settings() {
         <Route index element={<Navigate to="roles" replace />} />
         <Route path="roles" element={can("roles.manage") ? <RolesSettings /> : <Forbid />} />
         <Route path="team" element={(can("users.create") || isOwner) ? <TeamSettings /> : <Forbid />} />
+        <Route path="forms" element={can("leads.manage_forms") ? <LeadFormsSettings /> : <Forbid />} />
         <Route path="branding" element={isOwner ? <BrandingSettings /> : <Forbid />} />
         <Route path="billing" element={isOwner ? <BillingSettings /> : <Forbid />} />
       </Routes>
@@ -81,6 +84,7 @@ function Forbid() {
 function RolesSettings() {
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const toast = useToast();
   const { data: roles } = useQuery({
     queryKey: ["roles"],
     queryFn: async () => (await api.get<Role[]>("/api/roles")).data,
@@ -135,7 +139,7 @@ function RolesSettings() {
   const delRole = useMutation({
     mutationFn: (id: number) => api.delete(`/api/roles/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["roles"] }),
-    onError: (e: any) => alert(e?.response?.data?.detail || "Ошибка"),
+    onError: (e) => toast.error("Не удалось удалить роль", extractApiError(e).message),
   });
 
   return (
@@ -314,7 +318,18 @@ type InviteCreated = {
   invite_url: string;
   expires_at: string;
   email_sent: boolean;
+  email_error?: string | null;
 };
+
+const EMAIL_ERROR_MESSAGE: Record<string, string> = {
+  smtp_not_configured: "SMTP не настроен — скопируйте ссылку вручную",
+  celery_unavailable: "Очередь отправки недоступна — скопируйте ссылку вручную",
+};
+
+function emailErrorText(code?: string | null): string {
+  if (!code) return "Письмо не отправлено — скопируйте ссылку вручную";
+  return EMAIL_ERROR_MESSAGE[code] || `Письмо не отправлено (${code}) — скопируйте ссылку вручную`;
+}
 
 function inviteStatus(inv: Invitation): "accepted" | "expired" | "pending" {
   if (inv.accepted_at) return "accepted";
@@ -360,7 +375,7 @@ function TeamSettings() {
       if (data.email_sent) {
         toast.success("Приглашение отправлено", `На ${data.email}`);
       } else {
-        toast.success("Приглашение создано", "SMTP не настроен — скопируйте ссылку вручную");
+        toast.info("Приглашение создано", emailErrorText(data.email_error));
       }
     },
     onError: (e) => toast.error("Не удалось создать", extractApiError(e).message),
@@ -385,7 +400,11 @@ function TeamSettings() {
     onSuccess: (data) => {
       setLastCreated(data);
       qc.invalidateQueries({ queryKey: ["invitations", tenantId] });
-      toast.success("Ссылка обновлена", data.email_sent ? "И письмо отправлено" : "Скопируйте новую ссылку");
+      if (data.email_sent) {
+        toast.success("Ссылка обновлена", "Письмо отправлено повторно");
+      } else {
+        toast.info("Ссылка обновлена", emailErrorText(data.email_error));
+      }
     },
     onError: (e) => toast.error("Ошибка", extractApiError(e).message),
   });
@@ -796,8 +815,48 @@ function BillingSettings() {
     ? Math.max(0, Math.round((new Date(sub.current_period_end).getTime() - Date.now()) / 86400_000))
     : null;
 
+  const usageWarnings = usage
+    ? [
+        {
+          label: "Пользователи",
+          status: getUsageStatus(usage.usage.users, usage.limits.max_users as number | null),
+        },
+        {
+          label: "Проекты",
+          status: getUsageStatus(usage.usage.projects, usage.limits.max_projects as number | null),
+        },
+        {
+          label: "Хранилище",
+          status: getUsageStatus(
+            usage.usage.storage_bytes,
+            usage.limits.max_storage_bytes as number | null,
+          ),
+        },
+      ].filter((x) => x.status !== "ok")
+    : [];
+  const hasCritical = usageWarnings.some((x) => x.status === "critical");
+
   return (
     <div className="space-y-4">
+      {usageWarnings.length > 0 && (
+        <div
+          role="alert"
+          className={clsx(
+            "rounded-xl border px-4 py-3 text-sm",
+            hasCritical
+              ? "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200"
+              : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200",
+          )}
+        >
+          <div className="font-medium">
+            {hasCritical ? "Лимиты тарифа исчерпаны" : "Приближаетесь к лимитам тарифа"}
+          </div>
+          <div className="mt-1">
+            {usageWarnings.map((w) => w.label).join(", ")}. Перейдите на более крупный тариф ниже,
+            чтобы избежать блокировок при создании ресурсов.
+          </div>
+        </div>
+      )}
       <div className="card p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -1021,6 +1080,16 @@ function LimitRow({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
+export type UsageStatus = "ok" | "warning" | "critical";
+
+export function getUsageStatus(used: number, limit: number | null | undefined): UsageStatus {
+  if (!limit) return "ok";
+  const pct = (used / limit) * 100;
+  if (pct >= 100) return "critical";
+  if (pct >= 80) return "warning";
+  return "ok";
+}
+
 function UsageBar({
   icon,
   label,
@@ -1035,31 +1104,501 @@ function UsageBar({
   unit?: string;
 }) {
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const status = getUsageStatus(used, limit);
+  const barColor =
+    status === "critical" ? "bg-rose-500" : status === "warning" ? "bg-amber-500" : "bg-brand-500";
+  const textColor =
+    status === "critical"
+      ? "text-rose-600 dark:text-rose-400"
+      : status === "warning"
+        ? "text-amber-600 dark:text-amber-400"
+        : "";
+  const suffix = unit ? ` ${unit}` : "";
   return (
     <div>
       <div className="flex items-center gap-1.5 text-xs text-neutral-500">
         {icon}
         {label}
       </div>
-      <div className="mt-0.5 text-lg font-medium tabular-nums">
+      <div className={clsx("mt-0.5 text-lg font-medium tabular-nums", textColor)}>
         {used}
-        {unit ? ` ${unit}` : ""}
+        {suffix}
         <span className="ml-1 text-sm font-normal text-neutral-500">
           / {limit ?? "∞"}
           {limit && unit ? ` ${unit}` : ""}
         </span>
       </div>
       {limit && (
-        <div className="mt-1 h-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800">
+        <div
+          className="mt-1 h-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${label}: ${used}${suffix} из ${limit}${suffix}`}
+          title={`${pct}%`}
+        >
           <div
-            className={clsx(
-              "h-full rounded-full transition-all",
-              pct >= 90 ? "bg-rose-500" : pct >= 70 ? "bg-amber-500" : "bg-brand-500",
-            )}
+            className={clsx("h-full rounded-full transition-all", barColor)}
             style={{ width: `${pct}%` }}
           />
         </div>
       )}
+      {status !== "ok" && (
+        <div className={clsx("mt-1 text-xs", textColor)}>
+          {status === "critical"
+            ? "Лимит исчерпан — обновите тариф"
+            : `Осталось ${Math.max(0, (limit ?? 0) - used)}${suffix} до лимита`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ==========================================================================
+// LeadFormsSettings — конструктор форм захвата (LF6)
+// ==========================================================================
+
+type FormFieldT = {
+  key: string;
+  label: string;
+  type: "text" | "email" | "phone" | "textarea" | "select" | "number";
+  required: boolean;
+  placeholder?: string | null;
+  options?: string[] | null;
+};
+
+type LeadFormT = {
+  id: number;
+  name: string;
+  slug: string;
+  title: string;
+  subtitle: string | null;
+  submit_label: string;
+  success_message: string;
+  brand_color: string;
+  fields_config: FormFieldT[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+const FIELD_TYPES: { value: FormFieldT["type"]; label: string }[] = [
+  { value: "text", label: "Текст" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Телефон" },
+  { value: "textarea", label: "Многострочный" },
+  { value: "select", label: "Выпадающий" },
+  { value: "number", label: "Число" },
+];
+
+function LeadFormsSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { me } = useAuth();
+
+  const { data: forms, isPending } = useQuery({
+    queryKey: ["lead-forms"],
+    queryFn: async () => (await api.get<LeadFormT[]>("/api/lead-forms")).data,
+  });
+
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selected = useMemo(() => forms?.find((f) => f.id === selectedId) ?? forms?.[0] ?? null, [forms, selectedId]);
+
+  const create = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<LeadFormT>("/api/lead-forms", {
+          name: "Новая форма",
+          fields_config: [
+            { key: "name", label: "Имя", type: "text", required: true },
+            { key: "phone", label: "Телефон", type: "phone", required: true },
+          ],
+        })
+      ).data,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["lead-forms"] });
+      setSelectedId(data.id);
+    },
+    onError: (e) => toast.error("Не удалось создать", extractApiError(e).message),
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/lead-forms/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lead-forms"] });
+      setSelectedId(null);
+      toast.success("Форма удалена");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  if (isPending) return <Loader />;
+
+  return (
+    <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+      <div className="card p-2">
+        <div className="mb-1 flex items-center justify-between px-2 py-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Формы</span>
+          <button className="btn-ghost !p-1" title="Создать форму" onClick={() => create.mutate()}>
+            <Plus size={14} />
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto">
+          {(forms ?? []).map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setSelectedId(f.id)}
+              className={clsx(
+                "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors",
+                selected?.id === f.id
+                  ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
+                  : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+              )}
+            >
+              <Zap size={14} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{f.name}</div>
+                <div className="truncate text-xs text-neutral-500">/{f.slug}</div>
+              </div>
+              {!f.is_active && <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>}
+            </button>
+          ))}
+          {(!forms || forms.length === 0) && (
+            <div className="p-4 text-center text-sm text-neutral-500">
+              Форм пока нет.<br />
+              <button className="mt-2 text-brand-600" onClick={() => create.mutate()}>Создать первую</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selected ? (
+        <LeadFormEditor
+          form={selected}
+          tenantSlug={me?.current_tenant?.slug ?? ""}
+          onDelete={async () => {
+            if (await confirm({ title: "Удалить форму?", message: "Заявки останутся, но новые перестанут приниматься.", confirmLabel: "Удалить" })) {
+              del.mutate(selected.id);
+            }
+          }}
+        />
+      ) : (
+        <div className="card p-8 text-center text-sm text-neutral-500">Создайте форму слева</div>
+      )}
+    </div>
+  );
+}
+
+function LeadFormEditor({
+  form,
+  tenantSlug,
+  onDelete,
+}: {
+  form: LeadFormT;
+  tenantSlug: string;
+  onDelete: () => void;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [draft, setDraft] = useState<LeadFormT>(form);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setDraft(form);
+    setDirty(false);
+  }, [form.id]);
+
+  const upd = <K extends keyof LeadFormT>(k: K, v: LeadFormT[K]) => {
+    setDraft((d) => ({ ...d, [k]: v }));
+    setDirty(true);
+  };
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.patch(`/api/lead-forms/${form.id}`, {
+        name: draft.name,
+        title: draft.title,
+        subtitle: draft.subtitle,
+        submit_label: draft.submit_label,
+        success_message: draft.success_message,
+        brand_color: draft.brand_color,
+        is_active: draft.is_active,
+        fields_config: draft.fields_config,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lead-forms"] });
+      setDirty(false);
+      toast.success("Сохранено");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const updField = (idx: number, patch: Partial<FormFieldT>) => {
+    setDraft((d) => ({
+      ...d,
+      fields_config: d.fields_config.map((f, i) => (i === idx ? { ...f, ...patch } : f)),
+    }));
+    setDirty(true);
+  };
+
+  const addField = () => {
+    setDraft((d) => ({
+      ...d,
+      fields_config: [
+        ...d.fields_config,
+        { key: `field_${d.fields_config.length + 1}`, label: "Новое поле", type: "text", required: false },
+      ],
+    }));
+    setDirty(true);
+  };
+
+  const removeField = (idx: number) => {
+    setDraft((d) => ({ ...d, fields_config: d.fields_config.filter((_, i) => i !== idx) }));
+    setDirty(true);
+  };
+
+  const moveField = (idx: number, dir: -1 | 1) => {
+    setDraft((d) => {
+      const next = [...d.fields_config];
+      const to = idx + dir;
+      if (to < 0 || to >= next.length) return d;
+      [next[idx], next[to]] = [next[to], next[idx]];
+      return { ...d, fields_config: next };
+    });
+    setDirty(true);
+  };
+
+  const embedCode = `<script src="${window.location.origin}/embed.js" async></script>\n<div data-qadam-form="${tenantSlug}/${form.id}"></div>`;
+  const directLink = `${window.location.origin}/f/${tenantSlug}/${form.id}`;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+      <div className="card space-y-4 p-5">
+        <div className="flex items-center justify-between">
+          <input
+            className="input max-w-sm text-lg font-medium"
+            value={draft.name}
+            onChange={(e) => upd("name", e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.is_active}
+              onChange={(e) => upd("is_active", e.target.checked)}
+            />
+            Активна
+          </label>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Заголовок</span>
+            <input className="input" value={draft.title} onChange={(e) => upd("title", e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Кнопка отправки</span>
+            <input
+              className="input"
+              value={draft.submit_label}
+              onChange={(e) => upd("submit_label", e.target.value)}
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Подзаголовок</span>
+            <input
+              className="input"
+              value={draft.subtitle || ""}
+              onChange={(e) => upd("subtitle", e.target.value)}
+              placeholder="Опционально"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Сообщение после отправки</span>
+            <input
+              className="input"
+              value={draft.success_message}
+              onChange={(e) => upd("success_message", e.target.value)}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Цвет кнопки</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={draft.brand_color}
+                onChange={(e) => upd("brand_color", e.target.value)}
+                className="h-9 w-14 cursor-pointer rounded border"
+              />
+              <input
+                className="input flex-1"
+                value={draft.brand_color}
+                onChange={(e) => upd("brand_color", e.target.value)}
+              />
+            </div>
+          </label>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Поля формы</span>
+            <button className="btn-ghost !py-1 text-xs" onClick={addField}>
+              <Plus size={12} className="mr-1" /> Поле
+            </button>
+          </div>
+          <div className="space-y-2">
+            {draft.fields_config.map((f, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-[auto_1fr_1fr_120px_auto_auto] items-center gap-2 rounded-lg border border-neutral-200 p-2 dark:border-neutral-800"
+              >
+                <div className="flex flex-col text-neutral-400">
+                  <button className="hover:text-neutral-700" title="Вверх" onClick={() => moveField(idx, -1)}>
+                    ▲
+                  </button>
+                  <button className="hover:text-neutral-700" title="Вниз" onClick={() => moveField(idx, 1)}>
+                    ▼
+                  </button>
+                </div>
+                <input
+                  className="input !py-1 text-sm"
+                  value={f.key}
+                  placeholder="ключ (латиница)"
+                  onChange={(e) => updField(idx, { key: e.target.value })}
+                />
+                <input
+                  className="input !py-1 text-sm"
+                  value={f.label}
+                  placeholder="Название"
+                  onChange={(e) => updField(idx, { label: e.target.value })}
+                />
+                <select
+                  className="input !py-1 text-sm"
+                  value={f.type}
+                  onChange={(e) => updField(idx, { type: e.target.value as FormFieldT["type"] })}
+                >
+                  {FIELD_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={f.required}
+                    onChange={(e) => updField(idx, { required: e.target.checked })}
+                  />
+                  обяз.
+                </label>
+                <button
+                  className="rounded p-1 text-neutral-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                  title="Удалить"
+                  onClick={() => removeField(idx)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            {draft.fields_config.length === 0 && (
+              <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-center text-sm text-neutral-500 dark:border-neutral-700">
+                Полей пока нет. Добавьте хотя бы одно.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2">
+          <button
+            className="btn-ghost inline-flex items-center gap-1 text-rose-600 dark:text-rose-400"
+            onClick={onDelete}
+          >
+            <Trash2 size={14} /> Удалить форму
+          </button>
+          <button
+            className="btn-primary"
+            disabled={!dirty || save.isPending}
+            onClick={() => save.mutate()}
+          >
+            <Save size={14} className="mr-1" /> Сохранить
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="card p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Превью</span>
+            <Eye size={14} className="text-neutral-400" />
+          </div>
+          <FormPreview form={draft} />
+        </div>
+
+        <div className="card p-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Прямая ссылка</div>
+          <div className="flex gap-1">
+            <input className="input flex-1 text-xs" readOnly value={directLink} onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <button
+              className="btn-ghost !px-2"
+              title="Скопировать"
+              onClick={() => {
+                navigator.clipboard.writeText(directLink);
+                toast.success("Ссылка скопирована");
+              }}
+            >
+              <Copy size={13} />
+            </button>
+          </div>
+          <div className="mb-2 mt-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">Embed-код</div>
+          <textarea
+            className="input min-h-[80px] font-mono text-[11px]"
+            readOnly
+            value={embedCode}
+            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+          />
+          <button
+            className="btn-ghost mt-1 !py-1 text-xs"
+            onClick={() => {
+              navigator.clipboard.writeText(embedCode);
+              toast.success("Embed-код скопирован");
+            }}
+          >
+            <Copy size={12} className="mr-1" /> Скопировать
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormPreview({ form }: { form: LeadFormT }) {
+  return (
+    <div className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+      <div className="mb-1 text-base font-medium">{form.title}</div>
+      {form.subtitle && <div className="mb-3 text-xs text-neutral-500">{form.subtitle}</div>}
+      <div className="space-y-2">
+        {form.fields_config.map((f) => (
+          <div key={f.key}>
+            <label className="mb-0.5 block text-[11px] font-medium text-neutral-500">
+              {f.label} {f.required && <span className="text-rose-500">*</span>}
+            </label>
+            {f.type === "textarea" ? (
+              <textarea className="input min-h-[60px] text-xs" placeholder={f.placeholder || ""} readOnly />
+            ) : (
+              <input className="input text-xs" placeholder={f.placeholder || ""} readOnly />
+            )}
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="mt-3 w-full rounded-lg py-2 text-xs font-medium text-white"
+        style={{ background: form.brand_color }}
+      >
+        {form.submit_label}
+      </button>
     </div>
   );
 }

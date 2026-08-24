@@ -70,7 +70,7 @@ export default function Login() {
     <div
       className={clsx(
         "relative flex min-h-screen items-center justify-center overflow-hidden p-4",
-        "bg-[#fafaf9] dark:bg-[#1a1a22] transition-opacity duration-500 ease-out-soft",
+        "bg-[#fafaf9] dark:bg-[#0F0F14] transition-opacity duration-500 ease-out-soft",
         bgOut && "opacity-0",
       )}
     >

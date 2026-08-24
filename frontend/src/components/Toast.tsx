@@ -79,7 +79,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
     <div
       role="status"
       className={clsx(
-        "pointer-events-auto relative flex gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 pr-8 shadow-soft transition-all dark:border-zinc-700/50 dark:bg-[#26262e]",
+        "pointer-events-auto relative flex gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 pr-8 shadow-soft transition-all dark:border-zinc-700/50 dark:bg-[#17171F]",
         leaving ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100 animate-slide-up",
       )}
     >
@@ -92,7 +92,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         )}
       </div>
       <button
-        aria-label="close"
+        aria-label="Закрыть уведомление"
         onClick={onClose}
         className="absolute right-2 top-2 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
       >

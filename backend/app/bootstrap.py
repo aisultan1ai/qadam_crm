@@ -130,6 +130,8 @@ def seed_roles(db) -> None:
             "comments.view", "comments.create", "comments.update_own",
             "files.upload", "files.download",
             "analytics.reports", "analytics.employees",
+            "leads.view", "leads.update", "leads.convert", "leads.manage_forms",
+            "messenger.use", "messenger.create_group",
         ],
     )
     ensure_role(
@@ -139,6 +141,7 @@ def seed_roles(db) -> None:
             "tasks.view_own", "tasks.update", "tasks.change_status",
             "comments.view", "comments.create", "comments.update_own",
             "files.upload", "files.download",
+            "messenger.use",
         ],
     )
     db.commit()

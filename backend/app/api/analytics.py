@@ -18,47 +18,50 @@ CACHE_TTL_SECONDS = 300
 @router.get("/dashboard")
 def dashboard(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     tenant_id = ctx.tenant.id
-    key = make_key(tenant_id, "dashboard")
+    # Scope: юзер с tasks.view_own видит только свою статистику. Иначе агрегаты
+    # раскрывают чужую производительность даже без прямого доступа к задачам.
+    view_all = user_has(ctx.user, ["tasks.view_all"])
+    scope_uid = None if view_all else ctx.user.id
+    key = make_key(tenant_id, "dashboard", "all" if view_all else f"u{scope_uid}")
+
+    def _base_task_query():
+        q = db.query(func.count(Task.id)).filter(Task.tenant_id == tenant_id)
+        if scope_uid is not None:
+            q = q.filter(Task.assignee_id == scope_uid)
+        return q
 
     def _compute():
         now = datetime.now(timezone.utc)
-        total = db.query(func.count(Task.id)).filter(Task.tenant_id == tenant_id).scalar() or 0
+        total = _base_task_query().scalar() or 0
         in_progress = (
-            db.query(func.count(Task.id))
-            .filter(Task.tenant_id == tenant_id, Task.status == TaskStatus.in_progress)
-            .scalar() or 0
+            _base_task_query().filter(Task.status == TaskStatus.in_progress).scalar() or 0
         )
-        done = (
-            db.query(func.count(Task.id))
-            .filter(Task.tenant_id == tenant_id, Task.status == TaskStatus.done)
-            .scalar() or 0
-        )
+        done = _base_task_query().filter(Task.status == TaskStatus.done).scalar() or 0
         overdue = (
-            db.query(func.count(Task.id))
+            _base_task_query()
             .filter(
-                Task.tenant_id == tenant_id,
                 Task.deadline.is_not(None),
                 Task.deadline < now,
                 Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]),
             )
-            .scalar() or 0
+            .scalar()
+            or 0
         )
 
-        by_status_rows = (
+        by_status_q = (
             db.query(Task.status, func.count(Task.id))
             .filter(Task.tenant_id == tenant_id)
             .group_by(Task.status)
-            .all()
         )
+        if scope_uid is not None:
+            by_status_q = by_status_q.filter(Task.assignee_id == scope_uid)
+        by_status_rows = by_status_q.all()
         by_status = {s.value: c for s, c in by_status_rows}
 
-        recent = (
-            db.query(ActivityLog)
-            .filter(ActivityLog.tenant_id == tenant_id)
-            .order_by(ActivityLog.created_at.desc())
-            .limit(15)
-            .all()
-        )
+        recent_q = db.query(ActivityLog).filter(ActivityLog.tenant_id == tenant_id)
+        if scope_uid is not None:
+            recent_q = recent_q.filter(ActivityLog.user_id == scope_uid)
+        recent = recent_q.order_by(ActivityLog.created_at.desc()).limit(15).all()
         recent_out = [
             {
                 "id": a.id,

@@ -84,7 +84,36 @@ async def websocket_endpoint(
                         return
                     last_check = now
                 await ws.send_text('{"type":"pong"}')
+            elif msg.startswith("sub:channel:"):
+                # sub:channel:{id} — клиент открыл чат, подписываемся на per-channel events
+                try:
+                    cid = int(msg.split(":", 2)[2])
+                    if _is_channel_member(db, cid, user_id, tenant_id):
+                        await hub.subscribe_channel_ws(tenant_id, cid, ws)
+                except (ValueError, IndexError):
+                    pass
+            elif msg.startswith("unsub:channel:"):
+                try:
+                    cid = int(msg.split(":", 2)[2])
+                    await hub.unsubscribe_channel_ws(tenant_id, cid, ws)
+                except (ValueError, IndexError):
+                    pass
     except WebSocketDisconnect:
         pass
     finally:
         await hub.disconnect(tenant_id, user_id, ws)
+
+
+def _is_channel_member(db: Session, channel_id: int, user_id: int, tenant_id: int) -> bool:
+    from ..models import Channel, ChannelMember
+    return (
+        db.query(ChannelMember.id)
+        .join(Channel, Channel.id == ChannelMember.channel_id)
+        .filter(
+            ChannelMember.channel_id == channel_id,
+            ChannelMember.user_id == user_id,
+            Channel.tenant_id == tenant_id,
+        )
+        .first()
+        is not None
+    )

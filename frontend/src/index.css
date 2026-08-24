@@ -5,7 +5,9 @@
 :root {
   color-scheme: light dark;
   --page-bg: #fafaf9;
-  --page-bg-dark: #1e1e26;
+  --page-bg-dark: #0F0F14;
+  --brand: #7C5CFF;
+  --brand-strong: #6B47F5;
 }
 
 html,
@@ -19,7 +21,7 @@ html, body {
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 dark:bg-[#1e1e26] dark:text-zinc-100;
+  @apply bg-zinc-50 text-zinc-900 dark:bg-[#0F0F14] dark:text-zinc-100;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
   letter-spacing: -0.005em;
   scrollbar-width: thin;
@@ -28,14 +30,14 @@ body {
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium
            transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white
-           dark:focus-visible:ring-offset-[#1e1e26]
+           dark:focus-visible:ring-offset-[#0F0F14]
            disabled:opacity-50 disabled:cursor-not-allowed select-none;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_1px_2px_0_rgba(0,0,0,0.08)]
-           hover:bg-brand-700 active:scale-[0.98] transition-transform;
+    @apply btn bg-brand-500 text-white shadow-[0_1px_0_0_rgba(255,255,255,0.10)_inset,0_6px_18px_-6px_rgba(124,92,255,0.55)]
+           hover:bg-brand-600 active:scale-[0.98] transition-transform;
   }
   .btn-secondary {
     @apply btn bg-zinc-100 text-zinc-900 hover:bg-zinc-200
@@ -49,13 +51,13 @@ body {
     @apply btn bg-rose-600 text-white hover:bg-rose-700 active:scale-[0.98] transition-transform;
   }
   .input {
-    @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm
+    @apply w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm
            placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/15
-           dark:border-zinc-700/60 dark:bg-[#26262e] dark:placeholder:text-zinc-500;
+           dark:border-zinc-700/60 dark:bg-[#17171F] dark:placeholder:text-zinc-500;
   }
   .card {
     @apply rounded-2xl border border-zinc-200/80 bg-white shadow-soft
-           dark:border-zinc-700/50 dark:bg-[#26262e];
+           dark:border-zinc-700/50 dark:bg-[#17171F];
   }
   .card-interactive {
     @apply card transition-all duration-[220ms] ease-out-soft hover:-translate-y-[3px]
@@ -82,7 +84,7 @@ body {
   }
   .surface-blur {
     @apply bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70
-           dark:bg-[#1e1e26]/85 dark:supports-[backdrop-filter]:bg-[#1e1e26]/70;
+           dark:bg-[#0F0F14]/85 dark:supports-[backdrop-filter]:bg-[#0F0F14]/70;
   }
 }
 

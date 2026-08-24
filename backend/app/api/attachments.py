@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..config import settings
+from ..core.file_types import check_magic_bytes
 from ..core.plans import check_storage_limit
 from ..models import Task, Attachment, User
 from ..schemas.task import AttachmentOut
@@ -75,12 +76,19 @@ def _validate_and_save(file: UploadFile, dest: Path, max_bytes: int) -> int:
         raise HTTPException(400, f"MIME-тип {mime} не разрешён")
 
     written = 0
+    magic_checked = False
     try:
         with dest.open("wb") as out:
             while True:
                 chunk = file.file.read(CHUNK_SIZE)
                 if not chunk:
                     break
+                # Проверка сигнатуры на первом чанке — до записи на диск.
+                if not magic_checked:
+                    magic_checked = True
+                    reason = check_magic_bytes(chunk[:32], ext)
+                    if reason:
+                        raise HTTPException(400, reason)
                 written += len(chunk)
                 if written > max_bytes:
                     out.close()
@@ -88,6 +96,7 @@ def _validate_and_save(file: UploadFile, dest: Path, max_bytes: int) -> int:
                     raise HTTPException(413, f"Файл слишком большой (макс {max_bytes // (1024 * 1024)} МБ)")
                 out.write(chunk)
     except HTTPException:
+        dest.unlink(missing_ok=True)
         raise
     except Exception:
         dest.unlink(missing_ok=True)

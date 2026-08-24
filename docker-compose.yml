@@ -4,15 +4,15 @@ services:
     container_name: qadam_crm_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: qadam_crm
-      POSTGRES_PASSWORD: qadam_crm
-      POSTGRES_DB: qadam_crm
+      POSTGRES_USER: ${POSTGRES_USER:-qadam_crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qadam_crm_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-qadam_crm}
     ports:
       - "5432:5432"
     volumes:
       - qadam_crm_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qadam_crm -d qadam_crm"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qadam_crm} -d ${POSTGRES_DB:-qadam_crm}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,13 +21,18 @@ services:
     image: redis:7-alpine
     container_name: qadam_crm_redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: >
+      sh -c "redis-server
+      --appendonly yes
+      --requirepass \"$$REDIS_PASSWORD\""
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-qadam_crm_dev}
     volumes:
       - qadam_crm_redis:/data
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -45,12 +50,13 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+psycopg://qadam_crm:qadam_crm@db:5432/qadam_crm
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-qadam_crm}:${POSTGRES_PASSWORD:-qadam_crm_dev}@db:5432/${POSTGRES_DB:-qadam_crm}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-qadam_crm_dev}@redis:6379/0
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 1440
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      APP_ENV: ${APP_ENV:-development}
       UPLOAD_DIR: /app/uploads
-      REDIS_URL: redis://redis:6379/0
     volumes:
       - ./backend:/app
       - qadam_crm_uploads:/app/uploads

@@ -428,16 +428,20 @@ export default function Tasks() {
           onDragEnd={onDragEnd}
           onDragCancel={onDragCancel}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
+          <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 md:grid-cols-3 xl:grid-cols-5">
             {STATUS_ORDER.map((s) => (
-              <KanbanColumn
+              <div
                 key={s}
-                status={s}
-                tasks={tasks.filter((t) => t.status === s)}
-                onDelete={requestDelete}
-                landedId={landedId}
-                activeDragId={activeDragId}
-              />
+                className="w-[85vw] shrink-0 snap-start sm:w-auto sm:shrink"
+              >
+                <KanbanColumn
+                  status={s}
+                  tasks={tasks.filter((t) => t.status === s)}
+                  onDelete={requestDelete}
+                  landedId={landedId}
+                  activeDragId={activeDragId}
+                />
+              </div>
             ))}
           </div>
           <DragOverlay dropAnimation={null}>
@@ -557,7 +561,7 @@ function KanbanColumn({
         "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border p-2.5 transition-all duration-[180ms] ease-out-soft",
         isOver
           ? "border-brand-400 bg-brand-50/70 dark:border-brand-700 dark:bg-brand-900/10"
-          : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-700/50 dark:bg-[#22222a]",
+          : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-700/50 dark:bg-[#17171F]",
       )}
     >
       <div className="mb-2 flex items-center justify-between px-1.5">
@@ -1517,7 +1521,7 @@ function FilterDrawer({
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Фильтры задач">
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#26262e]">
+      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#17171F]">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold">Фильтры</h3>
           <button className="btn-ghost !p-1.5" onClick={onClose} aria-label="Закрыть фильтры">

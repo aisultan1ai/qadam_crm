@@ -54,7 +54,7 @@ export function SkeletonKanban({ cols = 5, cards = 3 }: { cols?: number; cards?:
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
       {Array.from({ length: cols }).map((_, ci) => (
-        <div key={ci} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-2.5 dark:border-zinc-700/50 dark:bg-[#22222a]">
+        <div key={ci} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-2.5 dark:border-zinc-700/50 dark:bg-[#17171F]">
           <div className="mb-2 flex items-center justify-between px-1.5">
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-3 w-4" />

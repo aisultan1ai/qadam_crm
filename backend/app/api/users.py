@@ -194,13 +194,21 @@ def upload_my_avatar(
     stored = f"{uuid.uuid4().hex}{ext}"
     dest = avatars_dir / stored
 
+    from ..core.file_types import check_magic_bytes
+
     written = 0
+    magic_checked = False
     try:
         with dest.open("wb") as out:
             while True:
                 chunk = file.file.read(AVATAR_CHUNK)
                 if not chunk:
                     break
+                if not magic_checked:
+                    magic_checked = True
+                    reason = check_magic_bytes(chunk[:32], ext)
+                    if reason:
+                        raise HTTPException(400, reason)
                 written += len(chunk)
                 if written > settings.MAX_AVATAR_BYTES:
                     out.close()
@@ -208,6 +216,7 @@ def upload_my_avatar(
                     raise HTTPException(413, f"Файл слишком большой (макс {settings.MAX_AVATAR_BYTES // (1024 * 1024)} МБ)")
                 out.write(chunk)
     except HTTPException:
+        dest.unlink(missing_ok=True)
         raise
     except Exception:
         dest.unlink(missing_ok=True)

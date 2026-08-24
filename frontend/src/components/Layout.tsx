@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, CheckSquare, BarChart3, Users, Settings,
   Sun, Moon, LogOut, Search, Bell, Menu, X, PanelLeftClose, PanelLeftOpen,
-  Shield,
+  Shield, Zap, MessageSquare,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
@@ -17,6 +17,7 @@ import { useOnline } from "@/hooks/useOnline";
 import type { Notification, Page } from "@/types";
 import GlobalSearch from "./GlobalSearch";
 import TenantSwitcher from "./TenantSwitcher";
+import WelcomeModal from "./WelcomeModal";
 import { LogoMark } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useRealtimeUpdates } from "@/lib/ws";
@@ -24,6 +25,7 @@ import { applyBrandColor } from "@/lib/branding";
 import { useToast } from "./Toast";
 import { modKey } from "@/lib/platform";
 import { fromNow } from "@/lib/date";
+import { t } from "@/lib/i18n";
 
 type NavItem = {
   to: string;
@@ -35,13 +37,15 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { to: "/projects", label: "Проекты", icon: FolderKanban, code: "projects.view" },
-  { to: "/tasks", label: "Задачи", icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
-  { to: "/analytics", label: "Аналитика", icon: BarChart3, code: "analytics.reports" },
-  { to: "/users", label: "Пользователи", icon: Users, code: "users.view" },
-  { to: "/settings", label: "Настройки", icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
-  { to: "/admin", label: "Платформа", icon: Shield, platformAdminOnly: true },
+  { to: "/", label: t.nav.dashboard, icon: LayoutDashboard, exact: true },
+  { to: "/projects", label: t.nav.projects, icon: FolderKanban, code: "projects.view" },
+  { to: "/tasks", label: t.nav.tasks, icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
+  { to: "/messenger", label: "Мессенджер", icon: MessageSquare, code: "messenger.use" },
+  { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
+  { to: "/analytics", label: t.nav.analytics, icon: BarChart3, code: "analytics.reports" },
+  { to: "/users", label: t.nav.users, icon: Users, code: "users.view" },
+  { to: "/settings", label: t.nav.settings, icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
+  { to: "/admin", label: t.nav.platform, icon: Shield, platformAdminOnly: true },
 ];
 
 export default function Layout() {
@@ -216,7 +220,7 @@ export default function Layout() {
           </button>
 
           <button
-            className="group flex flex-1 items-center gap-2 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-white dark:border-neutral-700/60 dark:bg-[#26262e] dark:hover:border-neutral-600 dark:hover:bg-[#2b2b34] max-w-md"
+            className="group flex flex-1 items-center gap-2 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-white dark:border-neutral-700/60 dark:bg-[#17171F] dark:hover:border-neutral-600 dark:hover:bg-[#2b2b34] max-w-md"
             onClick={() => setSearchOpen(true)}
           >
             <Search size={15} />
@@ -329,6 +333,8 @@ export default function Layout() {
 
         </header>
 
+        <EmailVerificationBanner />
+
         <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 max-w-7xl flex-1 p-4 sm:p-6 focus:outline-none">
           <ErrorBoundary>
             <Suspense fallback={<div className="min-h-[200px]" />}>
@@ -339,6 +345,7 @@ export default function Layout() {
       </div>
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <WelcomeModal />
     </div>
   );
 }
@@ -365,7 +372,7 @@ function Sidebar({
   return (
     <aside
       className={clsx(
-        "flex shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-700/50 dark:bg-[#22222a]",
+        "flex shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-700/50 dark:bg-[#17171F]",
         desktop
           ? clsx(
               "sticky top-0 hidden h-screen self-start overflow-hidden md:flex",
@@ -434,6 +441,7 @@ function Sidebar({
                   />
                   <Icon size={16} />
                   {showLabels && <span className="transition-opacity duration-150">{n.label}</span>}
+                  {n.to === "/messenger" && <MessengerUnreadBadge collapsed={!showLabels} />}
                 </>
               )}
             </NavLink>
@@ -496,5 +504,86 @@ function Sidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+function MessengerUnreadBadge({ collapsed }: { collapsed: boolean }) {
+  const { can } = useAuth();
+  const enabled = can("messenger.use");
+  const { data } = useQuery({
+    enabled,
+    queryKey: ["messenger", "channels"],
+    queryFn: async () => (await api.get<{ unread_count: number }[]>("/api/messenger/channels")).data,
+    staleTime: 15_000,
+  });
+  const total = (data || []).reduce((sum, c) => sum + (c.unread_count || 0), 0);
+  if (!enabled || total <= 0) return null;
+  const label = total > 99 ? "99+" : String(total);
+  if (collapsed) {
+    return (
+      <span
+        aria-label={`Непрочитано: ${label}`}
+        className="absolute right-1 top-1 min-w-[16px] rounded-full bg-brand-600 px-1 py-0.5 text-center text-[9px] font-medium leading-none text-white"
+      >
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="ml-auto min-w-[18px] rounded-full bg-brand-600 px-1.5 py-0.5 text-center text-[10px] font-medium leading-none text-white">
+      {label}
+    </span>
+  );
+}
+
+function EmailVerificationBanner() {
+  const { me } = useAuth();
+  const toast = useToast();
+  const [sending, setSending] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  if (!me || me.email_verified !== false || dismissed) return null;
+
+  const resend = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      await api.post("/api/auth/resend-verification");
+      toast.success("Письмо отправлено", `Проверьте почту ${me.email}`);
+    } catch (e) {
+      toast.error("Не удалось отправить", extractApiError(e).message || "Попробуйте позже");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div
+      role="alert"
+      className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
+    >
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+        <span>
+          Подтвердите email <b>{me.email}</b> — мы отправили ссылку. Не пришло?{" "}
+          <button
+            type="button"
+            onClick={resend}
+            disabled={sending}
+            className="underline underline-offset-2 disabled:opacity-60"
+          >
+            {sending ? "Отправляем…" : "Отправить ещё раз"}
+          </button>
+        </span>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="rounded p-1 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+          aria-label="Скрыть напоминание"
+          title="Скрыть до перезагрузки"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
   );
 }

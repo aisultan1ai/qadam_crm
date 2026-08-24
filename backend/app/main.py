@@ -19,6 +19,7 @@ from .api import (
     auth, roles, users, projects, tasks, comments, attachments,
     notifications, analytics, search, ws, exports, imports,
     invitations, tenants as tenants_api, admin as admin_api, billing,
+    leads, lead_forms, channels,
 )
 
 
@@ -133,6 +134,9 @@ def create_app() -> FastAPI:
         tenants_api.router,
         admin_api.router,
         billing.router,
+        leads.router,
+        lead_forms.router,
+        channels.router,
     ):
         app.include_router(r)
 

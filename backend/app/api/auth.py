@@ -1,6 +1,9 @@
-from datetime import datetime, timezone
+import logging
+import secrets
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -16,9 +19,11 @@ from ..core.security import (
     is_blacklisted,
     TOKEN_TYPE_REFRESH,
 )
+from ..core.captcha import verify_captcha
 from ..core.permissions import all_permission_codes
+from ..core.redis_client import get_redis
 from ..core.security import hash_password
-from ..core.tenant_setup import create_tenant_with_owner
+from ..core.tenant_setup import create_sample_project, create_tenant_with_owner
 from ..models import User, Tenant, TenantMembership
 from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshRequest
 from ..schemas.user import MeOut
@@ -26,6 +31,83 @@ from ..schemas.common import Message
 from .deps import get_current_user, get_current_token, log_action
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+log = logging.getLogger("qadam.auth")
+
+EMAIL_VERIFICATION_TTL_DAYS = 3
+RESEND_COOLDOWN_SECONDS = 60
+
+LOGIN_FAIL_LIMIT = 5
+LOGIN_LOCK_SECONDS = 15 * 60
+
+
+def _login_fail_key(email: str) -> str:
+    return f"login_fail:{email.lower().strip()}"
+
+
+def _check_login_lock(email: str) -> None:
+    """Проверить, не заблокирован ли email. Если да — 429 с временем разблокировки."""
+    try:
+        r = get_redis()
+        key = _login_fail_key(email)
+        raw = r.get(key)
+        fails = int(raw) if raw else 0
+        if fails >= LOGIN_FAIL_LIMIT:
+            ttl = r.ttl(key)
+            wait = max(1, ttl) if ttl and ttl > 0 else LOGIN_LOCK_SECONDS
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"Слишком много неудачных попыток. Попробуйте через {wait // 60} мин.",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning("Redis unavailable for login lockout check: %s", exc)
+
+
+def _record_login_fail(email: str) -> None:
+    try:
+        r = get_redis()
+        key = _login_fail_key(email)
+        pipe = r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, LOGIN_LOCK_SECONDS)
+        pipe.execute()
+    except Exception as exc:
+        log.warning("Redis unavailable for login fail counter: %s", exc)
+
+
+def _reset_login_fail(email: str) -> None:
+    try:
+        get_redis().delete(_login_fail_key(email))
+    except Exception:
+        pass
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _new_verification_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def _dispatch_verification_email(user: User) -> None:
+    """Отправить письмо верификации через Celery. Ошибки логируем, но не роняем регистрацию."""
+    from ..tasks.email import send_email_verification
+    verify_url = f"{settings.APP_BASE_URL.rstrip('/')}/verify-email?token={user.email_verification_token}"
+    try:
+        send_email_verification.delay(
+            to=user.email,
+            verify_url=verify_url,
+            full_name=user.name or user.email,
+        )
+    except Exception as exc:
+        log.warning("Failed to enqueue email verification for %s: %s", user.email, exc)
 
 
 def _pick_default_tenant(db: Session, user_id: int) -> int | None:
@@ -63,11 +145,18 @@ def login(
     payload: LoginRequest,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == payload.email.lower()).first()
+    email = payload.email.lower().strip()
+    _check_login_lock(email)
+
+    user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(payload.password, user.password_hash):
+        _record_login_fail(email)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
     if not user.is_active:
+        _record_login_fail(email)
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь заблокирован")
+
+    _reset_login_fail(email)
     user.last_login_at = datetime.now(timezone.utc)
     tenant_id = _pick_default_tenant(db, user.id)
     log_action(db, tenant_id=tenant_id, user_id=user.id, action="login", entity="user", entity_id=user.id)
@@ -87,6 +176,10 @@ def register(
     db: Session = Depends(get_db),
 ):
     """Публичная регистрация: создаёт компанию и владельца одним запросом."""
+    client_ip = request.client.host if request.client else None
+    if not verify_captcha(payload.captcha_token, remote_ip=client_ip):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Проверка CAPTCHA не пройдена")
+
     email = payload.email.lower().strip()
     if db.query(User.id).filter(User.email == email).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пользователь с таким email уже существует")
@@ -96,6 +189,9 @@ def register(
         name=payload.full_name.strip(),
         password_hash=hash_password(payload.password),
         is_active=True,
+        email_verified=False,
+        email_verification_token=_new_verification_token(),
+        email_verification_sent_at=_now_utc(),
     )
     db.add(user)
     db.flush()
@@ -106,13 +202,77 @@ def register(
         owner=user,
         plan="free",
     )
+    create_sample_project(db, tenant=tenant, owner=user)
 
     log_action(db, tenant_id=tenant.id, user_id=user.id, action="register", entity="tenant", entity_id=tenant.id, detail=tenant.name)
     db.commit()
 
+    _dispatch_verification_email(user)
+
     access, refresh, ttl = _issue_pair(user.id, tenant.id)
     set_auth_cookies(response, access, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
+
+
+@router.post("/verify-email", response_model=Message)
+@limiter.limit("30/hour")
+def verify_email(
+    request: Request,
+    payload: VerifyEmailRequest,
+    db: Session = Depends(get_db),
+):
+    """Публичный endpoint: юзер приходит по ссылке из письма, токен подтверждается."""
+    token = (payload.token or "").strip()
+    if not token:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Токен не передан")
+
+    user = db.query(User).filter(User.email_verification_token == token).first()
+    if not user:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ссылка недействительна или уже использована")
+
+    if user.email_verified:
+        # Идемпотентно: чистим токен и возвращаем ok.
+        user.email_verification_token = None
+        db.commit()
+        return Message(message="Email уже подтверждён")
+
+    sent_at = user.email_verification_sent_at
+    if sent_at and _now_utc() - sent_at > timedelta(days=EMAIL_VERIFICATION_TTL_DAYS):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Срок действия ссылки истёк. Запросите новую.")
+
+    user.email_verified = True
+    user.email_verification_token = None
+    log_action(db, tenant_id=None, user_id=user.id, action="email_verified", entity="user", entity_id=user.id)
+    db.commit()
+    return Message(message="Email подтверждён")
+
+
+@router.post("/resend-verification", response_model=Message)
+@limiter.limit("5/hour")
+def resend_verification(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Запросить новое письмо подтверждения. Требует логина, ограничено 5/час."""
+    if user.email_verified:
+        return Message(message="Email уже подтверждён")
+
+    if user.email_verification_sent_at:
+        elapsed = (_now_utc() - user.email_verification_sent_at).total_seconds()
+        if elapsed < RESEND_COOLDOWN_SECONDS:
+            wait = int(RESEND_COOLDOWN_SECONDS - elapsed)
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"Повторная отправка возможна через {wait} сек.",
+            )
+
+    user.email_verification_token = _new_verification_token()
+    user.email_verification_sent_at = _now_utc()
+    db.commit()
+
+    _dispatch_verification_email(user)
+    return Message(message="Письмо отправлено. Проверьте почту.")
 
 
 @router.post("/refresh", response_model=TokenResponse)

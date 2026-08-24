@@ -9,6 +9,7 @@ import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers } from "lucide
 import type { User, Role, Department, Page } from "@/types";
 import { Avatar, Loader, Modal, FieldError, FormError } from "@/components/ui";
 import { useConfirm } from "@/components/Confirm";
+import { useToast } from "@/components/Toast";
 import { VirtualList } from "@/components/VirtualList";
 import { departmentSchema, type DepartmentForm, userCreateSchema, userUpdateSchema, type UserCreateForm, type UserUpdateForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
@@ -60,6 +61,7 @@ function UsersList() {
   const { can } = useAuth();
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const toast = useToast();
   const [qLocal, setQLocal] = useState("");
   const [q, setQ] = useState("");
   const [openForm, setOpenForm] = useState<{ mode: "create" } | { mode: "edit"; user: User } | null>(null);
@@ -87,7 +89,7 @@ function UsersList() {
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/api/users/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
-    onError: (e) => alert(extractApiError(e).message || "Не удалось удалить"),
+    onError: (e) => toast.error("Не удалось удалить", extractApiError(e).message),
   });
 
   return (
@@ -246,6 +248,7 @@ function DepartmentsView() {
   const { can } = useAuth();
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const toast = useToast();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openNew, setOpenNew] = useState(false);
 
@@ -265,7 +268,7 @@ function DepartmentsView() {
       qc.invalidateQueries({ queryKey: ["users"] });
       setSelectedId(null);
     },
-    onError: (e: any) => alert(e?.response?.data?.detail || "Ошибка"),
+    onError: (e) => toast.error("Не удалось удалить отдел", extractApiError(e).message),
   });
 
   const counts = useMemo(() => {

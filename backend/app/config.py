@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # В dev может быть None — тогда подпись НЕ проверяется (только warning в логе).
     BILLING_WEBHOOK_SECRET: Optional[str] = None
 
+    # Cloudflare Turnstile — защита /register от ботов. Если secret пуст —
+    # проверка пропускается (dev-режим), фронт тоже пропускает виджет.
+    TURNSTILE_SECRET_KEY: Optional[str] = None
+
     ADMIN_EMAIL: str = "admin@qadam.local"
     ADMIN_PASSWORD: Optional[str] = None
 
@@ -48,8 +52,10 @@ class Settings(BaseSettings):
 
     EXPORT_DIR: str = "/app/exports"
 
-    DB_POOL_SIZE: int = 10
-    DB_MAX_OVERFLOW: int = 20
+    # Считаем на 2 uvicorn workers: 2 * (POOL_SIZE + MAX_OVERFLOW) = 100 макс соединений.
+    # Postgres по умолчанию max_connections=100 — оставляем запас для admin/psql/celery.
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 30
     DB_POOL_RECYCLE: int = 1800
 
     JWT_ACCESS_MINUTES: int = 30
@@ -65,6 +71,10 @@ class Settings(BaseSettings):
     COOKIE_DOMAIN: Optional[str] = None
     # Путь refresh-cookie ограничивается /api/auth — уменьшает поверхность CSRF.
     REFRESH_COOKIE_PATH: str = "/api/auth"
+
+    # Явный opt-out для локального тестирования prod-режима через http://localhost.
+    # В настоящем проде (за HTTPS-реверс-прокси) НИКОГДА не ставить в true.
+    ALLOW_INSECURE_PROD: bool = False
 
     @field_validator("JWT_SECRET")
     @classmethod
@@ -83,15 +93,32 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_prod(self) -> "Settings":
-        if self.is_prod:
-            if not self.cors_origins_list:
-                raise ValueError("CORS_ORIGINS must be set to a non-empty list in production")
+        if not self.is_prod:
+            return self
+
+        if not self.cors_origins_list:
+            raise ValueError("CORS_ORIGINS must be set to a non-empty list in production")
+
+        # В prod-режиме без явного opt-out — жёсткие требования безопасности.
+        if not self.ALLOW_INSECURE_PROD:
             if self.COOKIE_SECURE is False:
-                # Warning-only: не роняем старт, но требует HTTPS для реальной защиты cookies.
-                import logging
-                logging.getLogger("qadam.config").warning(
-                    "COOKIE_SECURE=False in production — cookies WILL be sent over HTTP. Set COOKIE_SECURE=True."
+                raise ValueError(
+                    "COOKIE_SECURE=false in production. Ставь COOKIE_SECURE=true (нужен HTTPS) "
+                    "или ALLOW_INSECURE_PROD=true для локального тестирования prod-режима."
                 )
+            if not self.BILLING_WEBHOOK_SECRET:
+                raise ValueError(
+                    "BILLING_WEBHOOK_SECRET не задан в production. Сгенерируй: "
+                    "python -c \"import secrets; print(secrets.token_urlsafe(32))\" "
+                    "или ALLOW_INSECURE_PROD=true если billing-webhook не используется."
+                )
+        else:
+            import logging
+            log = logging.getLogger("qadam.config")
+            if self.COOKIE_SECURE is False:
+                log.warning("ALLOW_INSECURE_PROD=true — COOKIE_SECURE=false в prod допущен, но НЕБЕЗОПАСНО.")
+            if not self.BILLING_WEBHOOK_SECRET:
+                log.warning("ALLOW_INSECURE_PROD=true — BILLING_WEBHOOK_SECRET не задан, webhook отклонит запросы.")
         return self
 
 

@@ -4,16 +4,27 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { Project, TaskListItem, Page, User } from "@/types";
 import { Loader, Avatar, StatusChip, PriorityChip } from "@/components/ui";
-import { ArrowLeft, Calendar, Plus, ListTodo, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Calendar, Plus, ListTodo, CheckCircle2, AlertTriangle, MessageSquare } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/store/auth";
 import { TaskFormModal } from "./Tasks";
+
+type ProjectChannelInfo = { id: number; kind: string; project_id: number | null };
 
 export default function ProjectDetail() {
   const { id } = useParams();
   const projectId = Number(id);
   const { can } = useAuth();
+  const nav = useNavigate();
   const [openNew, setOpenNew] = useState(false);
   const canCreate = can("tasks.create");
+
+  const { data: channels } = useQuery({
+    enabled: can("messenger.use"),
+    queryKey: ["messenger", "channels"],
+    queryFn: async () => (await api.get<ProjectChannelInfo[]>("/api/messenger/channels")).data,
+  });
+  const projectChannel = (channels || []).find((c) => c.kind === "project" && c.project_id === projectId);
 
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
@@ -71,7 +82,17 @@ export default function ProjectDetail() {
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500">{project.description || "Без описания"}</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {projectChannel && (
+            <button
+              type="button"
+              onClick={() => nav(`/messenger/${projectChannel.id}`)}
+              className="btn-ghost inline-flex items-center gap-1.5"
+              title="Открыть чат проекта"
+            >
+              <MessageSquare size={14} /> Чат
+            </button>
+          )}
           {project.deadline && (
             <div className="flex items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-300">
               <Calendar size={14} /> {new Date(project.deadline).toLocaleDateString("ru-RU")}

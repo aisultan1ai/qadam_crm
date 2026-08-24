@@ -64,6 +64,20 @@ def send_invitation_email(to: str, tenant_name: str, invite_url: str, inviter_na
     return send_email.run(to=to, subject=subject, html=html)
 
 
+@celery_app.task(name="email.verification")
+def send_email_verification(to: str, verify_url: str, full_name: str) -> str:
+    subject = "Подтвердите ваш email — Qadam CRM"
+    html = f"""
+      <p>Здравствуйте, {full_name}!</p>
+      <p>Спасибо за регистрацию в Qadam CRM. Пожалуйста, подтвердите email,
+      чтобы разблокировать все возможности:</p>
+      <p><a href="{verify_url}">Подтвердить email</a></p>
+      <p>Если ссылка не открывается, скопируйте её вручную:<br>{verify_url}</p>
+      <p>Ссылка действует 3 дня. Если вы не регистрировались — просто проигнорируйте это письмо.</p>
+    """
+    return send_email.run(to=to, subject=subject, html=html)
+
+
 @celery_app.task(name="email.password_reset")
 def send_password_reset_email(to: str, reset_url: str) -> str:
     subject = "Сброс пароля — Qadam CRM"

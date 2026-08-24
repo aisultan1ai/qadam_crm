@@ -5,6 +5,27 @@ import { useAuth } from "@/store/auth";
 import { useTenants } from "@/store/tenant";
 import { useConfirm } from "@/components/Confirm";
 
+function hasUnsavedInput(): boolean {
+  // Ищем видимые поля ввода с непустым значением — кроме поиска.
+  const inputs = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+    'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]), textarea',
+  );
+  for (const el of Array.from(inputs)) {
+    const type = (el as HTMLInputElement).type?.toLowerCase();
+    if (type === "search") continue;
+    const name = (el.name || "").toLowerCase();
+    const placeholder = (el.getAttribute("placeholder") || "").toLowerCase();
+    if (name.includes("search") || name === "q" || placeholder.includes("поиск")) continue;
+    if ((el.value ?? "").trim().length > 0) return true;
+  }
+  // Также — contentEditable-редакторы (комментарии/описания)
+  const editors = document.querySelectorAll<HTMLElement>('[contenteditable="true"]');
+  for (const el of Array.from(editors)) {
+    if ((el.innerText || "").trim().length > 0) return true;
+  }
+  return false;
+}
+
 export default function TenantSwitcher() {
   const me = useAuth((s) => s.me);
   const { tenants, fetchTenants, switchTenant } = useTenants();
@@ -14,10 +35,11 @@ export default function TenantSwitcher() {
 
   const handleSwitch = async (targetId: number, targetName: string) => {
     // switchTenant делает window.location.assign("/") — весь несохранённый
-    // ввод в формах пропадёт. Спрашиваем подтверждение, если есть незакрытые
-    // модалки/формы (грубая эвристика: dialog/aria-modal в DOM).
+    // ввод в формах пропадёт. Спрашиваем подтверждение, если есть открытая
+    // модалка либо непустое поле ввода вне поиска.
     const hasOpenModal = document.querySelector('[role="dialog"], [aria-modal="true"]');
-    if (hasOpenModal) {
+    const hasDirtyForm = hasUnsavedInput();
+    if (hasOpenModal || hasDirtyForm) {
       const ok = await confirm({
         title: "Переключить компанию?",
         message: `Приложение перезагрузится и переключится на «${targetName}». Несохранённые данные в открытых формах будут утеряны.`,
@@ -68,7 +90,7 @@ export default function TenantSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-700 hover:border-neutral-300 dark:border-neutral-700/60 dark:bg-[#26262e] dark:text-neutral-300 dark:hover:border-neutral-600"
+        className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-700 hover:border-neutral-300 dark:border-neutral-700/60 dark:bg-[#17171F] dark:text-neutral-300 dark:hover:border-neutral-600"
         aria-expanded={open}
         aria-haspopup="listbox"
       >

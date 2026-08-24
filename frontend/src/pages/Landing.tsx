@@ -1,29 +1,149 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import "./landing.css";
+import {
+  ArrowRight, Check, CheckCircle2, Circle, KanbanSquare, LineChart, MessageSquare,
+  ShieldCheck, Sparkles, Users, Zap,
+} from "lucide-react";
 
-const LOGO_SVG = (size: number, ink: string = "var(--ink)") => (
-  <svg width={size} height={size} viewBox="0 0 512 512" aria-label="Qadam CRM">
-    <path
-      d="M256 90 a150 150 0 1 0 0.1 0 Z M256 130 a110 110 0 1 1 -0.1 0 Z"
-      fill={ink}
-      fillRule="evenodd"
-    />
-    <path d="M372 300 L409 399 L330 360 Z" fill={ink} />
-    <rect x="274" y="176" width="80" height="60" rx="12" fill="var(--logo-1)" />
-    <rect x="224" y="228" width="80" height="60" rx="12" fill="var(--logo-2)" />
-    <g fill={ink}>
-      <rect x="184" y="278" width="70" height="50" rx="12" />
-      <path d="M249 296 L318 340 L199 328 Z" />
-    </g>
-  </svg>
-);
+import { api, extractApiError } from "../api/client";
+import { trackEvent } from "@/lib/analytics";
+import { LogoMark } from "@/components/Logo";
+import "./landing.css";
 
 const NAV_LINKS = [
   { href: "#product", label: "Продукт" },
   { href: "#how", label: "Как это работает" },
-  { href: "#ai", label: "ИИ-помощник" },
-  { href: "#cta", label: "Демо" },
+  { href: "#pricing", label: "Тарифы" },
+  { href: "#faq", label: "Вопросы" },
+];
+
+const FEATURES = [
+  {
+    icon: KanbanSquare,
+    title: "Задачи и Kanban",
+    text: "Проекты, задачи, статусы. Drag-and-drop доска, приоритеты, дедлайны и приложения к задачам.",
+  },
+  {
+    icon: MessageSquare,
+    title: "Мессенджер команды",
+    text: "Каналы проектов, личные и групповые чаты, опросы, реакции — обсуждайте без прыжков между приложениями.",
+  },
+  {
+    icon: LineChart,
+    title: "Аналитика и лиды",
+    text: "Отчёты по сотрудникам, воронка лидов из форм захвата, экспорт в Excel, интеграции с сайтом.",
+  },
+];
+
+const HOW_STEPS = [
+  { n: 1, title: "Создайте компанию", text: "Регистрация занимает минуту. Приглашайте команду по email." },
+  { n: 2, title: "Настройте проект", text: "Заведите первый проект, добавьте задачи, распределите роли." },
+  { n: 3, title: "Работайте в потоке", text: "Kanban, чат, уведомления и аналитика — всё в одном месте." },
+];
+
+const SUCCESS_WITH = [
+  "Один инструмент — задачи, чат, лиды, аналитика",
+  "Мгновенные обновления через WebSocket — без F5",
+  "Автоматические напоминания и дайджест-письма",
+];
+
+const SUCCESS_WITHOUT = [
+  "Задачи теряются в Excel, WhatsApp и почте",
+  "Никто не знает, что сделано и что горит",
+  "Ручная сборка отчётов и потерянные лиды",
+];
+
+const TESTIMONIALS = [
+  {
+    quote:
+      "За неделю перенесли из чатов и Excel всё в Qadam. Kanban с реал-таймом убрал хаос — теперь видно кто что делает.",
+    name: "Айгерим Нурланова",
+    role: "Product Manager, ACME",
+  },
+  {
+    quote:
+      "Формы захвата с сайта падают прямо в CRM — менеджеры не пропускают ни одной заявки. Конверсия выросла на 30%.",
+    name: "Данияр Абаев",
+    role: "Founder, Startup KZ",
+  },
+  {
+    quote:
+      "Ролевая модель и изоляция данных — то что искали для нашего SaaS. Внедрили за 3 дня без разработчиков.",
+    name: "Мария Ким",
+    role: "Head of Ops, Digital Studio",
+  },
+];
+
+const FAQ_ITEMS = [
+  {
+    q: "Сколько стоит Qadam CRM?",
+    a: "Free — 0 KZT (5 пользователей, 3 проекта, 1 ГБ). Pro — 9 990 KZT/мес (50 пользователей, 50 проектов, 20 ГБ). Enterprise — по договорённости.",
+  },
+  {
+    q: "Где хранятся данные?",
+    a: "На серверах в Казахстане. Ежедневные резервные копии, шифрование при передаче (TLS) и в покое. Данные каждой компании полностью изолированы.",
+  },
+  {
+    q: "Можно ли отменить подписку?",
+    a: "Да, в любой момент из раздела «Настройки → Тариф». Доступ сохраняется до конца оплаченного периода, затем аккаунт переводится на Free.",
+  },
+  {
+    q: "Есть ли API и интеграции?",
+    a: "REST API покрывает все основные сущности. Формы захвата через embed-скрипт для любого сайта. Webhook'и и интеграции со Slack/Telegram — в разработке.",
+  },
+];
+
+const PLANS = [
+  {
+    key: "free",
+    name: "Free",
+    price: "0",
+    priceLabel: "KZT",
+    period: "навсегда",
+    tagline: "Для команд до 5 человек — попробовать всё бесплатно",
+    features: [
+      "До 5 пользователей",
+      "До 3 проектов",
+      "1 ГБ хранилища",
+      "Kanban, задачи, комментарии",
+      "Мессенджер и опросы",
+    ],
+    cta: "Начать бесплатно",
+    highlighted: false,
+  },
+  {
+    key: "pro",
+    name: "Pro",
+    price: "9 990",
+    priceLabel: "KZT",
+    period: "в месяц",
+    tagline: "Для растущих команд с реальной нагрузкой",
+    features: [
+      "До 50 пользователей",
+      "До 50 проектов",
+      "20 ГБ хранилища",
+      "Формы захвата лидов + embed",
+      "Экспорт в Excel, приоритетная поддержка",
+    ],
+    cta: "Перейти на Pro",
+    highlighted: true,
+  },
+  {
+    key: "enterprise",
+    name: "Enterprise",
+    price: "По запросу",
+    priceLabel: "",
+    period: "",
+    tagline: "Кастомные лимиты, SSO, on-premise",
+    features: [
+      "Без лимитов пользователей и проектов",
+      "Кастомный домен, брендирование",
+      "SSO, кастомная интеграция",
+      "SLA 99.9%, персональный менеджер",
+    ],
+    cta: "Связаться",
+    highlighted: false,
+  },
 ];
 
 type FormState = {
@@ -37,7 +157,7 @@ type FormState = {
 export default function Landing() {
   useEffect(() => {
     const prev = document.title;
-    document.title = "Qadam CRM — Порядок в задачах с первого дня";
+    document.title = "Qadam CRM — порядок в задачах с первого дня";
     return () => {
       document.title = prev;
     };
@@ -61,15 +181,708 @@ export default function Landing() {
     return () => io.disconnect();
   }, []);
 
-  // Sticky nav: смена стиля при скролле (dark → light)
-  const [navScrolled, setNavScrolled] = useState(false);
+  return (
+    <div className="qadam-landing">
+      <NavBar />
+      <Hero />
+      <Benefits />
+      <HowItWorks />
+      <SuccessStories />
+      <Testimonials />
+      <Pricing />
+      <FAQ />
+      <CTASection />
+      <Footer />
+    </div>
+  );
+}
+
+// =========================================================================
+// Navigation (sticky, transparent над hero)
+// =========================================================================
+
+function NavBar() {
+  const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
-    const onScroll = () => setNavScrolled(window.scrollY > 40);
+    const onScroll = () => setScrolled(window.scrollY > 40);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  return (
+    <div
+      className="fixed inset-x-0 z-50 flex justify-center transition-all duration-300 ease-out"
+      style={{
+        top: scrolled ? 14 : 12,
+        paddingLeft: 16,
+        paddingRight: 16,
+      }}
+    >
+      <nav
+        className="flex items-center justify-between transition-all duration-300 ease-out"
+        style={{
+          width: "100%",
+          maxWidth: scrolled ? 1000 : 1140,
+          height: scrolled ? 58 : 64,
+          padding: scrolled ? "0 8px 0 22px" : "0 12px 0 26px",
+          // Тёмный pill всегда — читается и на светлых, и на тёмных секциях.
+          background: "rgba(15,15,20,0.72)",
+          backdropFilter: "saturate(180%) blur(18px)",
+          WebkitBackdropFilter: "saturate(180%) blur(18px)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 999,
+          boxShadow: scrolled
+            ? "0 14px 34px -14px rgba(10,10,18,0.45), 0 2px 6px -2px rgba(10,10,18,0.20)"
+            : "0 6px 20px -10px rgba(10,10,18,0.30)",
+        }}
+      >
+        <Link to="/" className="flex items-center gap-2">
+          <LogoMark size={26} className="!text-white" />
+          <span className="text-[17px] font-bold tracking-tight text-white">
+            Qadam<span style={{ color: "#CBB8FF" }}>.</span>
+          </span>
+        </Link>
+        <div className="qadam-hide-mobile flex items-center gap-7">
+          {NAV_LINKS.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              className="text-sm font-medium text-white/75 transition-colors hover:text-white"
+            >
+              {l.label}
+            </a>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          <Link
+            to="/login"
+            className="hidden rounded-full px-4 py-1.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/10 hover:text-white sm:inline-flex"
+          >
+            Войти
+          </Link>
+          <Link
+            to="/register"
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white transition-transform hover:scale-[1.03]"
+            style={{
+              background: "#7C5CFF",
+              boxShadow: "0 8px 20px -8px rgba(124,92,255,0.6)",
+            }}
+          >
+            Начать <ArrowRight size={13} />
+          </Link>
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+// =========================================================================
+// Hero — dark, крупный h1 по центру
+// =========================================================================
+
+function Hero() {
+  return (
+    <section
+      className="qadam-section-dark relative overflow-hidden pt-[140px] pb-[100px] text-center"
+      style={{ background: "#0F0F14" }}
+    >
+      {/* Ambient blobs */}
+      <div
+        className="qadam-blob qadam-blob-drift"
+        style={{
+          top: "-100px",
+          left: "-100px",
+          width: 400,
+          height: 400,
+          background: "#7C5CFF",
+        }}
+      />
+      <div
+        className="qadam-blob qadam-blob-drift"
+        style={{
+          top: 100,
+          right: "-120px",
+          width: 340,
+          height: 340,
+          background: "#6B47F5",
+          animationDelay: "-8s",
+        }}
+      />
+
+      <div className="qadam-container relative">
+        <h1
+          className="mx-auto max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl lg:text-[72px]"
+          style={{ textWrap: "balance" as CSSProperties["textWrap"], letterSpacing: "-0.03em" }}
+        >
+          Порядок в задачах <br />
+          <span style={{ color: "#CBB8FF" }}>с первого дня.</span>
+        </h1>
+        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/70 sm:text-lg">
+          CRM для команд, которые устали от Excel и десяти вкладок. Задачи, мессенджер, лиды и
+          аналитика — в одном спокойном месте.
+        </p>
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/register"
+            className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-medium text-white transition-transform hover:scale-[1.02]"
+            style={{
+              background: "#7C5CFF",
+              boxShadow: "0 14px 34px -12px rgba(124,92,255,0.65)",
+            }}
+          >
+            Начать бесплатно <ArrowRight size={16} />
+          </Link>
+          <a
+            href="#pricing"
+            className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+            style={{ border: "1px solid rgba(255,255,255,0.2)" }}
+          >
+            Смотреть цены
+          </a>
+        </div>
+
+        {/* App peek */}
+        <div className="qadam-reveal mx-auto mt-16 max-w-5xl">
+          <div
+            className="overflow-hidden rounded-t-2xl border border-white/10 shadow-2xl"
+            style={{ background: "#17171F" }}
+          >
+            <DashboardPeek />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DashboardPeek() {
+  return (
+    <div style={{ padding: "18px 20px 0" }}>
+      <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+        <div className="flex gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
+        </div>
+        <div className="ml-4 flex items-center gap-2 text-xs text-white/50">
+          <LogoMark size={16} className="!text-white" />
+          <span>Qadam CRM</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-[220px_1fr] gap-4 pt-4 text-left">
+        <aside className="rounded-lg bg-white/[0.03] p-3 text-xs">
+          <div className="mb-3 text-[10px] uppercase tracking-wide text-white/40">Меню</div>
+          {["Панель", "Проекты", "Задачи", "Мессенджер", "Лиды", "Аналитика"].map((l, i) => (
+            <div
+              key={l}
+              className={
+                "mb-1 flex items-center gap-2 rounded px-2 py-1.5 " +
+                (i === 0 ? "bg-[#7C5CFF]/20 text-white" : "text-white/60")
+              }
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-[#7C5CFF]" />
+              {l}
+            </div>
+          ))}
+        </aside>
+        <div className="grid grid-cols-3 gap-3 pb-5">
+          {[
+            { label: "Активных задач", val: "128", delta: "+12%" },
+            { label: "В работе", val: "42", delta: "" },
+            { label: "Просрочено", val: "3", delta: "" },
+          ].map((s) => (
+            <div key={s.label} className="rounded-lg bg-white/[0.03] p-3">
+              <div className="text-[11px] text-white/50">{s.label}</div>
+              <div className="mt-1 text-xl font-semibold text-white">{s.val}</div>
+              {s.delta && <div className="mt-1 text-[10px] text-[#10B981]">{s.delta}</div>}
+            </div>
+          ))}
+          <div className="col-span-3 rounded-lg bg-white/[0.03] p-3">
+            <div className="mb-2 text-[11px] text-white/50">Динамика за неделю</div>
+            <ChartPeek />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChartPeek() {
+  const bars = [40, 62, 54, 88, 76, 92, 70];
+  return (
+    <div className="flex h-24 items-end gap-2">
+      {bars.map((h, i) => (
+        <div
+          key={i}
+          className="flex-1 rounded-t"
+          style={{ height: `${h}%`, background: i === 3 ? "#7C5CFF" : "#7C5CFF80" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// =========================================================================
+// Benefits — light bg, 3 карточки фич
+// =========================================================================
+
+function Benefits() {
+  return (
+    <section id="product" className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
+      <div className="qadam-container">
+        <div className="mb-14 grid gap-6 md:grid-cols-[1fr_1fr] md:items-end">
+          <div>
+            <div className="qadam-eyebrow mb-3">Почему Qadam</div>
+            <h2
+              className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
+              style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
+            >
+              Просто, быстро, без лишнего.
+            </h2>
+          </div>
+          <p className="text-base leading-relaxed text-[#52596E] md:pl-8">
+            Мы собрали в одном приложении задачи, чат и лиды — чтобы вы перестали переключаться
+            между Trello, Slack и Excel. Никаких лишних кнопок и мастеров-настройщиков.
+          </p>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-3">
+          {FEATURES.map((f) => (
+            <div
+              key={f.title}
+              className="rounded-2xl p-7 transition-all hover:-translate-y-1"
+              style={{
+                background: "#F7F7FA",
+                border: "1px solid rgba(10,10,18,0.06)",
+              }}
+            >
+              <div
+                className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl text-white"
+                style={{ background: "#7C5CFF" }}
+              >
+                <f.icon size={20} />
+              </div>
+              <div className="mb-2 text-lg font-semibold" style={{ color: "#0A0A12" }}>
+                {f.title}
+              </div>
+              <p className="text-sm leading-relaxed text-[#52596E]">{f.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// =========================================================================
+// How it works — 3 нумерованных шага
+// =========================================================================
+
+function HowItWorks() {
+  return (
+    <section
+      id="how"
+      className="qadam-reveal py-[110px]"
+      style={{ background: "#F7F7FA" }}
+    >
+      <div className="qadam-container">
+        <div className="mb-14 text-center">
+          <div className="qadam-eyebrow mb-3">Как это работает</div>
+          <h2
+            className="mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
+            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
+          >
+            Несколько простых шагов и готово
+          </h2>
+          <p className="mx-auto mt-4 max-w-lg text-base text-[#52596E]">
+            От регистрации до первого проекта — пять минут. Вся команда на одной волне.
+          </p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          {HOW_STEPS.map((s) => (
+            <div
+              key={s.n}
+              className="rounded-2xl bg-white p-8 text-center"
+              style={{
+                border: "1px solid rgba(10,10,18,0.06)",
+                boxShadow: "0 4px 14px -8px rgba(10,10,18,0.08)",
+              }}
+            >
+              <div
+                className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold text-white"
+                style={{ background: "#7C5CFF" }}
+              >
+                {s.n}
+              </div>
+              <div className="mb-2 text-lg font-semibold" style={{ color: "#0A0A12" }}>
+                {s.title}
+              </div>
+              <p className="text-sm leading-relaxed text-[#52596E]">{s.text}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/register"
+            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-transform hover:scale-[1.02]"
+            style={{
+              background: "#7C5CFF",
+              boxShadow: "0 12px 30px -12px rgba(124,92,255,0.55)",
+            }}
+          >
+            Начать бесплатно <ArrowRight size={14} />
+          </Link>
+          <a
+            href="#pricing"
+            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium"
+            style={{
+              color: "#0A0A12",
+              border: "1px solid rgba(10,10,18,0.15)",
+            }}
+          >
+            Смотреть цены
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// =========================================================================
+// Success stories — dark, tab-switcher, буллеты + fake chart
+// =========================================================================
+
+function SuccessStories() {
+  const [tab, setTab] = useState<"with" | "without">("with");
+  const items = tab === "with" ? SUCCESS_WITH : SUCCESS_WITHOUT;
+  const chartColor = tab === "with" ? "#10B981" : "#EF4444";
+  const value = tab === "with" ? "+45,6%" : "−45,6%";
+  return (
+    <section
+      className="qadam-section-dark qadam-reveal py-[120px]"
+      style={{ background: "#0F0F14" }}
+    >
+      <div className="qadam-container">
+        <div className="mb-10 max-w-2xl">
+          <div className="qadam-eyebrow mb-3">Продуктивность команды</div>
+          <h2
+            className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl md:text-[42px]"
+            style={{ letterSpacing: "-0.025em" }}
+          >
+            Меньше рутины — больше результата
+          </h2>
+        </div>
+
+        <div className="mb-8 inline-flex gap-1 rounded-full p-1" style={{ background: "rgba(255,255,255,0.06)" }}>
+          <button
+            className={
+              "rounded-full px-5 py-2 text-sm font-medium transition-colors " +
+              (tab === "with" ? "text-[#0F0F14]" : "text-white/70 hover:text-white")
+            }
+            style={tab === "with" ? { background: "#CBB8FF" } : {}}
+            onClick={() => setTab("with")}
+          >
+            С Qadam CRM
+          </button>
+          <button
+            className={
+              "rounded-full px-5 py-2 text-sm font-medium transition-colors " +
+              (tab === "without" ? "text-[#0F0F14]" : "text-white/70 hover:text-white")
+            }
+            style={tab === "without" ? { background: "#CBB8FF" } : {}}
+            onClick={() => setTab("without")}
+          >
+            Без Qadam CRM
+          </button>
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-start">
+          <ul className="space-y-4">
+            {items.map((t) => (
+              <li key={t} className="flex items-start gap-3 text-white/85">
+                <span
+                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                  style={{ background: tab === "with" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)" }}
+                >
+                  {tab === "with" ? (
+                    <Check size={13} className="text-[#10B981]" />
+                  ) : (
+                    <Circle size={7} className="fill-current text-[#EF4444]" />
+                  )}
+                </span>
+                <span className="text-[15px] leading-relaxed">{t}</span>
+              </li>
+            ))}
+          </ul>
+          <div
+            className="rounded-2xl p-6"
+            style={{ background: "#17171F", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="text-white/50">Продуктивность команды</span>
+              <span style={{ color: chartColor }}>{value}</span>
+            </div>
+            <div className="mb-3 text-2xl font-semibold text-white">
+              {tab === "with" ? "85 211" : "25 780"}
+            </div>
+            <FakeChart color={chartColor} up={tab === "with"} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FakeChart({ color, up }: { color: string; up: boolean }) {
+  const points = up
+    ? [30, 42, 38, 55, 48, 65, 60, 80, 78, 92]
+    : [80, 72, 78, 60, 68, 45, 52, 30, 35, 20];
+  const path = points
+    .map((y, i) => {
+      const x = (i / (points.length - 1)) * 100;
+      return `${i === 0 ? "M" : "L"} ${x},${100 - y}`;
+    })
+    .join(" ");
+  return (
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-32 w-full">
+      <defs>
+        <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.4" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`${path} L 100,100 L 0,100 Z`} fill={`url(#grad-${color})`} />
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+// =========================================================================
+// Testimonials — dark, 3 карточки отзывов
+// =========================================================================
+
+function Testimonials() {
+  return (
+    <section
+      className="qadam-section-dark qadam-reveal py-[120px]"
+      style={{ background: "#0F0F14" }}
+    >
+      <div className="qadam-container">
+        <div className="mb-14 text-center">
+          <div className="qadam-eyebrow mb-3">Отзывы</div>
+          <h2
+            className="mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl md:text-[42px]"
+            style={{ letterSpacing: "-0.025em" }}
+          >
+            Что говорят пользователи
+          </h2>
+          <p className="mx-auto mt-4 max-w-lg text-base text-white/60">
+            Команды разных размеров — от 5 до 200 человек — уже упорядочили работу.
+          </p>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-3">
+          {TESTIMONIALS.map((t, i) => (
+            <div
+              key={i}
+              className="rounded-2xl p-6"
+              style={{ background: "#17171F", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <p className="text-[15px] leading-relaxed text-white/85">"{t.quote}"</p>
+              <div className="mt-6 flex items-center gap-3 border-t border-white/5 pt-4">
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white"
+                  style={{ background: `hsl(${(i * 60) % 360}, 60%, 55%)` }}
+                >
+                  {t.name.split(" ").map((s) => s[0]).slice(0, 2).join("")}
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white">{t.name}</div>
+                  <div className="text-xs text-white/50">{t.role}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// =========================================================================
+// Pricing — light, 3 плана + Popular + toggle Monthly/Yearly
+// =========================================================================
+
+function Pricing() {
+  const [yearly, setYearly] = useState(false);
+  return (
+    <section id="pricing" className="qadam-reveal py-[120px]" style={{ background: "#F7F7FA" }}>
+      <div className="qadam-container">
+        <div className="mb-8 text-center">
+          <div className="qadam-eyebrow mb-3">Тарифы</div>
+          <h2
+            className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
+            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
+          >
+            Тариф, который вам подходит
+          </h2>
+          <p className="mx-auto mt-4 max-w-lg text-base text-[#52596E]">
+            Начните с Free — переходите на Pro когда команда вырастет.
+          </p>
+        </div>
+
+        <div className="mb-10 flex items-center justify-center gap-3">
+          <div
+            className="inline-flex items-center gap-1 rounded-full p-1"
+            style={{ background: "rgba(10,10,18,0.06)" }}
+          >
+            <button
+              className={
+                "rounded-full px-5 py-2 text-sm font-medium transition-colors " +
+                (!yearly ? "bg-white text-[#0A0A12] shadow" : "text-[#52596E]")
+              }
+              onClick={() => setYearly(false)}
+            >
+              Помесячно
+            </button>
+            <button
+              className={
+                "inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition-colors " +
+                (yearly ? "bg-white text-[#0A0A12] shadow" : "text-[#52596E]")
+              }
+              onClick={() => setYearly(true)}
+            >
+              Годовая
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                style={{ background: "#7C5CFF" }}
+              >
+                −20%
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-3">
+          {PLANS.map((p) => (
+            <div
+              key={p.key}
+              className="relative rounded-2xl p-8 transition-transform hover:-translate-y-1"
+              style={{
+                background: "#ffffff",
+                border: p.highlighted ? "2px solid #7C5CFF" : "1px solid rgba(10,10,18,0.08)",
+                boxShadow: p.highlighted
+                  ? "0 20px 40px -18px rgba(124,92,255,0.35)"
+                  : "0 4px 14px -8px rgba(10,10,18,0.08)",
+              }}
+            >
+              {p.highlighted && (
+                <div
+                  className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-white"
+                  style={{ background: "#7C5CFF" }}
+                >
+                  Популярный
+                </div>
+              )}
+              <div className="mb-1 text-sm font-semibold" style={{ color: "#7C5CFF" }}>
+                {p.name}
+              </div>
+              <div className="mb-1 flex items-baseline gap-1">
+                <span className="text-4xl font-bold" style={{ color: "#0A0A12" }}>
+                  {p.key === "pro" && yearly ? "7 990" : p.price}
+                </span>
+                {p.priceLabel && (
+                  <span className="text-sm text-[#52596E]">
+                    {p.priceLabel}
+                    {p.period && ` / ${p.period}`}
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 min-h-[40px] text-sm text-[#52596E]">{p.tagline}</p>
+
+              <ul className="mt-6 space-y-2.5">
+                {p.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-[#3F4457]">
+                    <CheckCircle2 size={16} className="mt-0.5 shrink-0" style={{ color: "#7C5CFF" }} />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                to={p.key === "enterprise" ? "#cta" : "/register"}
+                className={
+                  "mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium transition-transform hover:scale-[1.02] " +
+                  (p.highlighted ? "text-white" : "")
+                }
+                style={
+                  p.highlighted
+                    ? {
+                        background: "#7C5CFF",
+                        boxShadow: "0 10px 24px -10px rgba(124,92,255,0.55)",
+                      }
+                    : { border: "1px solid rgba(10,10,18,0.15)", color: "#0A0A12" }
+                }
+              >
+                {p.cta}
+              </Link>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// =========================================================================
+// FAQ
+// =========================================================================
+
+function FAQ() {
+  return (
+    <section id="faq" className="qadam-reveal py-[100px]" style={{ background: "#ffffff" }}>
+      <div className="qadam-container max-w-3xl">
+        <div className="mb-10 text-center">
+          <div className="qadam-eyebrow mb-3">Вопросы и ответы</div>
+          <h2
+            className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
+            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
+          >
+            Часто спрашивают
+          </h2>
+        </div>
+        <div className="grid gap-3">
+          {FAQ_ITEMS.map((item) => (
+            <details
+              key={item.q}
+              className="group rounded-2xl bg-[#F7F7FA] p-6 transition-colors hover:bg-[#EFEFF5]"
+            >
+              <summary className="flex items-center justify-between gap-4 text-base font-medium" style={{ color: "#0A0A12" }}>
+                <span>{item.q}</span>
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-transform group-open:rotate-45"
+                  style={{ background: "#ffffff", color: "#7C5CFF", border: "1px solid rgba(10,10,18,0.06)" }}
+                >
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 text-sm leading-relaxed text-[#52596E]">{item.a}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// =========================================================================
+// CTA — dark панель с формой лидов
+// =========================================================================
+
+function CTASection() {
   const [form, setForm] = useState<FormState>({
     name: "",
     company: "",
@@ -78,1704 +891,268 @@ export default function Landing() {
     note: "",
   });
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Пока эндпоинта нет — показываем локальное состояние успеха.
-    setSent(true);
+    if (sending || sent) return;
+    setError(null);
+    const name = form.name.trim();
+    const contact = form.contact.trim();
+    if (name.length < 2) return setError("Укажите имя (минимум 2 символа).");
+    if (contact.length < 3) return setError("Укажите телефон или email для связи.");
+    setSending(true);
+    try {
+      await api.post("/api/leads", {
+        name,
+        company: form.company.trim() || null,
+        contact,
+        team_size: form.team,
+        note: form.note.trim() || null,
+      });
+      trackEvent("lead_submitted", { team_size: form.team });
+      setSent(true);
+    } catch (err) {
+      setError(extractApiError(err).message || "Не удалось отправить заявку.");
+    } finally {
+      setSending(false);
+    }
   };
-
-  const inputStyle: CSSProperties = {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "13px 15px",
-    border: "1px solid rgba(var(--line-rgb),.14)",
-    borderRadius: 10,
-    background: "var(--card)",
-    color: "var(--ink)",
-    fontFamily: "inherit",
-    fontSize: 15,
-    outline: "none",
-  };
-  const labelCap: CSSProperties = {
-    display: "block",
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: ".08em",
-    textTransform: "uppercase",
-    color: "var(--muted)",
-    marginBottom: 8,
-  };
-  const sectionLabel = (text: string) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
-      <span style={{ width: 22, height: 1, background: "rgba(var(--line-rgb),.30)" }} />
-      <span
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
-          color: "var(--muted)",
-        }}
-      >
-        {text}
-      </span>
-    </div>
-  );
-
-  const navInk = navScrolled ? "#0d2758" : "#ffffff";
-  const navMuted = navScrolled ? "rgba(13,39,88,.72)" : "rgba(255,255,255,.78)";
 
   return (
-    <div className="qadam-landing">
-      {/* NAV — fixed сверху, меняет стиль при скролле */}
-      <div
-        className={`qadam-nav ${navScrolled ? "qadam-nav-scrolled" : ""}`}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 50,
-          background: navScrolled ? "rgba(255,255,255,0.92)" : "transparent",
-          backdropFilter: navScrolled ? "saturate(140%) blur(10px)" : "none",
-          WebkitBackdropFilter: navScrolled ? "saturate(140%) blur(10px)" : "none",
-          borderBottom: navScrolled ? "1px solid rgba(13,39,88,.08)" : "1px solid transparent",
-          transition: "background .28s ease, border-color .28s ease, backdrop-filter .28s ease",
-        }}
-      >
+    <section id="cta" className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
+      <div className="qadam-container">
         <div
-          style={{
-            maxWidth: 1440,
-            margin: "0 auto",
-            padding: "0 56px",
-            display: "grid",
-            gridTemplateColumns: "1fr auto 1fr",
-            alignItems: "center",
-            height: 72,
-          }}
+          className="qadam-section-dark relative overflow-hidden rounded-3xl p-10 md:p-14"
+          style={{ background: "#0F0F14" }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, justifySelf: "start" }}>
-            {LOGO_SVG(26, navInk)}
-            <span
-              style={{
-                fontSize: 15,
-                fontWeight: 600,
-                color: navInk,
-                transition: "color .28s ease",
-              }}
-            >
-              Qadam
-            </span>
-          </div>
           <div
-            className="qadam-hide-mobile"
-            style={{ display: "flex", alignItems: "center", gap: 28, justifySelf: "center" }}
-          >
-            {NAV_LINKS.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                style={{
-                  fontSize: 15,
-                  color: navMuted,
-                  transition: "color .28s ease",
-                }}
-              >
-                {l.label}
-              </a>
-            ))}
-          </div>
-          <Link
-            to="/login"
+            className="qadam-blob qadam-blob-drift"
             style={{
-              justifySelf: "end",
-              padding: "10px 22px",
-              fontSize: 14,
-              fontWeight: 500,
-              color: navScrolled ? "#ffffff" : "#0d2758",
-              background: navScrolled ? "#0d2758" : "#ffffff",
-              borderRadius: 999,
-              transition: "background .28s ease, color .28s ease",
-            }}
-          >
-            Войти
-          </Link>
-        </div>
-      </div>
-
-      <div
-        className="qadam-container"
-        style={{ maxWidth: 1440, margin: "0 auto", overflow: "hidden", padding: "0 56px" }}
-      >
-
-        {/* HERO */}
-        <div
-          style={{
-            position: "relative",
-            padding: "120px 0 0",
-            textAlign: "center",
-          }}
-        >
-          {/* Dark navy base — брендовый тёмно-синий */}
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: "0 -56px 0",
-              background: "#0a1f47",
-              pointerEvents: "none",
-              zIndex: 0,
+              top: "-100px",
+              right: "-80px",
+              width: 320,
+              height: 320,
+              background: "#7C5CFF",
+              opacity: 0.35,
             }}
           />
-          {/* Photo layer — атмосферная текстура поверх navy */}
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: "0 -56px 0",
-              backgroundImage: "url(/hero.jpg)",
-              backgroundSize: "cover",
-              backgroundPosition: "center 30%",
-              opacity: 0.3,
-              filter: "saturate(0.35) brightness(0.75)",
-              mixBlendMode: "overlay",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          {/* Navy overlay — держит контраст под белый текст, снизу → к white */}
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: "0 -56px 0",
-              background:
-                "linear-gradient(180deg, rgba(10,31,71,0.55) 0%, rgba(10,31,71,0.35) 35%, rgba(10,31,71,0.15) 65%, rgba(255,255,255,0.85) 92%, #ffffff 100%)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          {/* Brand blue glow — акцентное свечение сверху */}
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: "0 -56px 0",
-              background:
-                "radial-gradient(ellipse 55% 40% at 50% 22%, rgba(15,103,253,0.28), transparent 68%)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          <div style={{ position: "relative", maxWidth: 820, margin: "0 auto", zIndex: 1 }}>
-            <h1
-              className="qadam-h1"
-              style={{
-                margin: "0 0 20px",
-                fontSize: 62,
-                lineHeight: 1.04,
-                fontWeight: 500,
-                letterSpacing: "-0.042em",
-                color: "#ffffff",
-                textWrap: "balance" as CSSProperties["textWrap"],
-              }}
-            >
-              Порядок в задачах с первого дня.
-            </h1>
-            <span
-              aria-hidden
-              style={{
-                display: "inline-block",
-                width: 40,
-                height: 1,
-                margin: "6px 0 22px",
-                background: "rgba(255,255,255,.35)",
-              }}
-            />
-            <p
-              style={{
-                margin: "0 auto",
-                maxWidth: 520,
-                fontSize: 19,
-                lineHeight: 1.55,
-                color: "rgba(255,255,255,.78)",
-              }}
-            >
-              Задачи, роли, отчёты и ИИ-помощник — в одном спокойном месте.
-            </p>
-            <div
-              style={{
-                marginTop: 36,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 24,
-              }}
-            >
-              <a
-                href="#cta"
-                style={{
-                  display: "inline-block",
-                  padding: "15px 28px",
-                  fontSize: 15,
-                  fontWeight: 500,
-                  color: "#ffffff",
-                  background: "#0f67fd",
-                  borderRadius: 999,
-                }}
-              >
-                Начать →
-              </a>
-              <a
-                href="#how"
-                style={{
-                  fontSize: 15,
-                  color: "#ffffff",
-                  borderBottom: "1px solid rgba(255,255,255,.38)",
-                  paddingBottom: 3,
-                }}
-              >
-                Как это работает
-              </a>
-            </div>
-          </div>
-
-          {/* app peek */}
-          <div className="qadam-app-peek-wrap">
-            <div
-              className="qadam-app-peek"
-              style={{
-                position: "relative",
-                margin: "88px auto 0",
-                zIndex: 1,
-                width: 1080,
-                border: "1px solid rgba(var(--line-rgb),.10)",
-                borderTopLeftRadius: 16,
-                borderTopRightRadius: 16,
-                background: "var(--surface-2)",
-                overflow: "hidden",
-                textAlign: "left",
-                boxShadow: "var(--shadow-card)",
-              }}
-            >
-              <div style={{ display: "flex" }}>
-                <div
-                  style={{
-                    width: 210,
-                    flexShrink: 0,
-                    borderRight: "1px solid rgba(var(--line-rgb),.08)",
-                    background: "var(--surface-2)",
-                    padding: "14px 10px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "0 8px 16px",
-                    }}
-                  >
-                    {LOGO_SVG(20)}
-                    <span
-                      style={{ fontSize: 13, fontWeight: 500, color: "var(--ink-2)" }}
-                    >
-                      Qadam
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      padding: "7px 10px",
-                      borderRadius: 8,
-                      background: "var(--accent-soft)",
-                      color: "var(--accent-ink)",
-                      fontSize: 13,
-                    }}
-                  >
-                    Dashboard
-                  </div>
-                  {["Проекты", "Задачи", "Аналитика", "Пользователи", "Настройки"].map((l) => (
-                    <div
-                      key={l}
-                      style={{ padding: "7px 10px", fontSize: 13, color: "var(--faint)" }}
-                    >
-                      {l}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      height: 52,
-                      padding: "0 16px",
-                      borderBottom: "1px solid rgba(var(--line-rgb),.08)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flex: 1,
-                        maxWidth: 360,
-                        padding: "7px 10px",
-                        border: "1px solid rgba(var(--line-rgb),.10)",
-                        borderRadius: 8,
-                        fontSize: 12,
-                        color: "var(--faint-2)",
-                      }}
-                    >
-                      Поиск по всему CRM…
-                      <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-                        {["⌘", "K"].map((k) => (
-                          <span
-                            key={k}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              height: 18,
-                              padding: "0 5px",
-                              border: "1px solid rgba(var(--line-rgb),.12)",
-                              borderRadius: 4,
-                              fontFamily: "ui-monospace,monospace",
-                              fontSize: 9,
-                            }}
-                          >
-                            {k}
-                          </span>
-                        ))}
-                      </span>
-                    </div>
-                    <span
-                      style={{
-                        marginLeft: "auto",
-                        position: "relative",
-                        display: "inline-flex",
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: "inline-block",
-                          width: 15,
-                          height: 15,
-                          borderRadius: 4,
-                          border: "2px solid var(--faint-2)",
-                          borderTopColor: "transparent",
-                        }}
-                      />
-                      <span
-                        style={{
-                          position: "absolute",
-                          right: -5,
-                          top: -5,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          height: 15,
-                          minWidth: 15,
-                          padding: "0 4px",
-                          borderRadius: 999,
-                          background: "var(--accent)",
-                          color: "#fff",
-                          fontSize: 9,
-                          fontWeight: 600,
-                        }}
-                      >
-                        3
-                      </span>
-                    </span>
-                  </div>
-                  <div style={{ padding: 20 }}>
-                    <div
-                      style={{
-                        fontSize: 20,
-                        fontWeight: 500,
-                        color: "var(--ink)",
-                        marginBottom: 4,
-                      }}
-                    >
-                      Dashboard
-                    </div>
-                    <div
-                      style={{ fontSize: 13, color: "var(--faint-2)", marginBottom: 18 }}
-                    >
-                      Обзор задач и активности
-                    </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(4,1fr)",
-                        gap: 10,
-                        marginBottom: 12,
-                      }}
-                    >
-                      {[
-                        { l: "Всего задач", v: "248", c: "var(--ink)" },
-                        { l: "В работе", v: "63", c: "var(--info)" },
-                        { l: "Завершены", v: "154", c: "var(--ok)" },
-                        { l: "Просрочены", v: "9", c: "var(--danger)" },
-                      ].map((m) => (
-                        <div
-                          key={m.l}
-                          style={{
-                            border: "1px solid rgba(var(--line-rgb),.09)",
-                            borderRadius: 16,
-                            background: "var(--card-2)",
-                            padding: 14,
-                            boxShadow: "var(--soft)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: 11,
-                              color: "var(--faint-2)",
-                              marginBottom: 6,
-                            }}
-                          >
-                            {m.l}
-                          </div>
-                          <div
-                            className="tnum"
-                            style={{ fontSize: 22, fontWeight: 500, color: m.c }}
-                          >
-                            {m.v}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div
-                      style={{
-                        border: "1px solid rgba(var(--line-rgb),.09)",
-                        borderRadius: 16,
-                        background: "var(--card-2)",
-                        padding: 16,
-                        boxShadow: "var(--soft)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}
-                        >
-                          Задачи по статусам
-                        </span>
-                        <span style={{ fontSize: 11, color: "var(--faint-2)" }}>
-                          Всего 248
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          height: 10,
-                          borderRadius: 999,
-                          overflow: "hidden",
-                          background: "rgba(var(--line-rgb),.08)",
-                        }}
-                      >
-                        {[
-                          { w: "16%", b: "var(--faint)" },
-                          { w: "25%", b: "#0ea5e9" },
-                          { w: "9%", b: "#f59e0b" },
-                          { w: "44%", b: "#10b981" },
-                          { w: "6%", b: "#f43f5e" },
-                        ].map((s, i) => (
-                          <div key={i} style={{ width: s.w, background: s.b }} />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          <div className="relative grid gap-10 md:grid-cols-[1.05fr_1fr] md:items-center">
+            <div>
+              <div className="qadam-eyebrow mb-3" style={{ color: "#CBB8FF" }}>
+                Начать сегодня
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SPLIT: KANBAN — full-width светло-голубая панель */}
-        <div
-          id="product"
-          className="qadam-reveal"
-          style={{ position: "relative", padding: "120px 0 100px", overflow: "hidden" }}
-        >
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: "calc(50% - 50vw)",
-              right: "calc(50% - 50vw)",
-              background: "#f4f7fd",
-              zIndex: 0,
-            }}
-          />
-          {/* Ambient brand blobs — фон «дышит», не выглядит плоско-белым */}
-          <span
-            aria-hidden
-            className="qadam-blob-a"
-            style={{
-              position: "absolute",
-              top: "-8%",
-              left: "-6%",
-              width: 560,
-              height: 560,
-              background: "radial-gradient(circle, rgba(15,103,253,0.10), transparent 70%)",
-              filter: "blur(60px)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          <span
-            aria-hidden
-            className="qadam-blob-b"
-            style={{
-              position: "absolute",
-              top: "20%",
-              right: "-8%",
-              width: 520,
-              height: 520,
-              background: "radial-gradient(circle, rgba(251,191,36,0.10), transparent 70%)",
-              filter: "blur(60px)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          {/* Плавающие стикеры — монотонные оттенки бренда */}
-          <span
-            aria-hidden
-            className="qadam-sticker-a"
-            style={{
-              position: "absolute",
-              top: 42,
-              left: "8%",
-              width: 84,
-              height: 84,
-              background: "#dbe6fb",
-              borderRadius: 6,
-              boxShadow: "0 8px 22px -8px rgba(13,39,88,0.16)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          <span
-            aria-hidden
-            className="qadam-sticker-b"
-            style={{
-              position: "absolute",
-              top: 24,
-              right: "10%",
-              width: 78,
-              height: 78,
-              background: "#c9d9f7",
-              borderRadius: 6,
-              boxShadow: "0 8px 22px -8px rgba(13,39,88,0.16)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          <span
-            aria-hidden
-            className="qadam-sticker-c"
-            style={{
-              position: "absolute",
-              top: 84,
-              right: "22%",
-              width: 66,
-              height: 66,
-              background: "#e5edfc",
-              borderRadius: 6,
-              boxShadow: "0 8px 22px -8px rgba(13,39,88,0.16)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          <div
-            className="qadam-grid-2"
-            style={{
-              position: "relative",
-              zIndex: 1,
-              maxWidth: 1080,
-              margin: "0 auto",
-              display: "grid",
-              gridTemplateColumns: "340px 1fr",
-              border: "1px solid rgba(var(--line-rgb),.10)",
-              borderRadius: 16,
-              overflow: "hidden",
-              background: "var(--surface)",
-              boxShadow: "var(--soft)",
-            }}
-          >
-            <div
-              className="qadam-split-left"
-              style={{
-                padding: "34px 32px",
-                borderRight: "1px solid rgba(var(--line-rgb),.10)",
-              }}
-            >
-              {sectionLabel("Задачи")}
-              <div
-                style={{
-                  fontSize: 32,
-                  fontWeight: 500,
-                  lineHeight: 1.14,
-                  letterSpacing: "-0.03em",
-                  color: "var(--ink)",
-                  marginBottom: 28,
-                }}
-              >
-                Статус меняется мышкой
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                {[
-                  { t: "Kanban и календарь", active: true },
-                  { t: "Комментарии и файлы" },
-                  { t: "Уведомления сразу" },
-                ].map((r) => (
-                  <div
-                    key={r.t}
-                    style={{
-                      padding: "13px 0 13px 16px",
-                      borderLeft: `2px solid rgba(var(--line-rgb),${r.active ? ".55" : ".10"})`,
-                      fontSize: 16,
-                      color: r.active ? "var(--ink)" : "var(--faint)",
-                    }}
-                  >
-                    {r.t}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div
-              className="qadam-kanban"
-              style={{
-                padding: "24px 0 24px 24px",
-                overflow: "hidden",
-                background: "var(--surface)",
-              }}
-            >
-              <div style={{ display: "flex", gap: 10 }}>
-                {/* Новая */}
-                <KanbanColumn title="Новая" count={3} dot="var(--faint)">
-                  <KanbanCard title="Согласовать смету" chip="Средний" />
-                  <KanbanCard title="Документы к тендеру" />
-                </KanbanColumn>
-                {/* В работе (highlighted) */}
-                <KanbanColumn
-                  title="В работе"
-                  count={4}
-                  dot="var(--spark)"
-                  highlighted
-                >
-                  <div
-                    style={{
-                      border: "1px solid rgba(var(--line-rgb),.22)",
-                      borderRadius: 12,
-                      background: "var(--card-4)",
-                      padding: 11,
-                      boxShadow: "var(--shadow-card)",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "var(--ink-2)", marginBottom: 8 }}>
-                      Отчёт для заказчика
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span
-                        style={{
-                          padding: "2px 7px",
-                          borderRadius: 999,
-                          background: "rgba(var(--line-rgb),.08)",
-                          color: "var(--text-2)",
-                          fontSize: 10,
-                        }}
-                      >
-                        Высокий
-                      </span>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          width: 20,
-                          height: 20,
-                          borderRadius: 999,
-                          background: "rgba(var(--line-rgb),.14)",
-                          color: "var(--ink-3)",
-                          fontSize: 8,
-                          fontWeight: 600,
-                        }}
-                      >
-                        АС
-                      </span>
-                    </div>
-                  </div>
-                </KanbanColumn>
-                {/* На проверке */}
-                <KanbanColumn title="На проверке" count={2} dot="var(--spark-2)">
-                  <KanbanCard title="Договор с поставщиком" />
-                  <KanbanCard title="Правки по логотипу" />
-                </KanbanColumn>
-                {/* Завершена */}
-                <KanbanColumn title="Завершена" count={9} dot="var(--spark-2)">
-                  <KanbanCard title="Заявка «Тау Строй»" />
-                </KanbanColumn>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* FEATURES — 4 icon-card плитки, как у Slack */}
-        <div className="qadam-reveal" style={{ padding: "110px 0 0" }}>
-          <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-            {sectionLabel("Возможности")}
-            <div style={{ maxWidth: 560, marginBottom: 40 }}>
               <h2
-                className="qadam-h2"
-                style={{
-                  margin: 0,
-                  fontSize: 42,
-                  lineHeight: 1.1,
-                  fontWeight: 500,
-                  letterSpacing: "-0.035em",
-                  color: "var(--ink)",
-                }}
+                className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl md:text-[44px]"
+                style={{ letterSpacing: "-0.025em" }}
               >
-                Всё, что нужно команде
+                Соберите команду в одном месте
               </h2>
-            </div>
-            <div
-              className="qadam-grid-features"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: 16,
-              }}
-            >
-              {[
-                {
-                  t: "Задачи и канбан",
-                  d: "Kanban, календарь, комментарии, файлы.",
-                  icon: (
-                    <>
-                      <rect x="3" y="4" width="4" height="14" rx="1.5" />
-                      <rect x="10" y="4" width="4" height="9" rx="1.5" />
-                      <rect x="17" y="4" width="4" height="17" rx="1.5" />
-                    </>
-                  ),
-                },
-                {
-                  t: "Роли и права",
-                  d: "Гибкие роли, приглашения, аудит.",
-                  icon: (
-                    <>
-                      <circle cx="12" cy="8" r="4" />
-                      <path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" />
-                    </>
-                  ),
-                },
-                {
-                  t: "Отчёты и аналитика",
-                  d: "SLA, загрузка людей, узкие места.",
-                  icon: (
-                    <>
-                      <path d="M3 3v18h18" />
-                      <path d="M7 15l4-4 3 3 5-6" />
-                    </>
-                  ),
-                },
-                {
-                  t: "ИИ-помощник",
-                  d: "Разбивает задачи, подсказывает срок.",
-                  icon: (
-                    <>
-                      <path d="M12 2l2.4 5.4L20 8.6l-4 3.9.9 5.7L12 15.5 7.1 18.2 8 12.5l-4-3.9 5.6-1.2z" />
-                    </>
-                  ),
-                },
-              ].map((f) => (
-                <div
-                  key={f.t}
-                  className="qadam-feature-card"
-                  style={{
-                    padding: 22,
-                    border: "1px solid rgba(var(--line-rgb),.10)",
-                    borderRadius: 16,
-                    background: "var(--surface)",
-                    transition:
-                      "transform .22s ease, box-shadow .22s ease, border-color .22s ease",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 44,
-                      height: 44,
-                      borderRadius: 12,
-                      background: "#eef4ff",
-                      marginBottom: 16,
-                    }}
-                  >
-                    <svg
-                      width="22"
-                      height="22"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#0f67fd"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      {f.icon}
-                    </svg>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 17,
-                      fontWeight: 500,
-                      color: "var(--ink)",
-                      marginBottom: 6,
-                    }}
-                  >
-                    {f.t}
-                  </div>
-                  <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: "var(--faint)" }}>
-                    {f.d}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* AI */}
-        <div
-          id="ai"
-          className="qadam-reveal"
-          style={{ position: "relative", padding: "120px 0 0", overflow: "hidden" }}
-        >
-          <div style={{ position: "relative", maxWidth: 1080, margin: "0 auto" }}>
-            {sectionLabel("ИИ-помощник")}
-            <div style={{ maxWidth: 620, marginBottom: 40 }}>
-              <h2
-                className="qadam-h2"
-                style={{
-                  margin: "0 0 14px",
-                  fontSize: 42,
-                  lineHeight: 1.1,
-                  fontWeight: 500,
-                  letterSpacing: "-0.035em",
-                  color: "var(--ink)",
-                }}
-              >
-                Помощник, который знает контекст задачи
-              </h2>
-              <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: "var(--muted)" }}>
-                Разбивает задачу на шаги и подсказывает реальный срок.
+              <p className="mt-4 max-w-md text-base text-white/70">
+                Оставьте заявку — наш менеджер перезвонит, поможет с настройкой и подберёт тариф.
+                Или зарегистрируйтесь сами прямо сейчас.
               </p>
-            </div>
-
-            <div
-              className="qadam-grid-2"
-              style={{
-                border: "1px solid rgba(var(--line-rgb),.10)",
-                borderRadius: 16,
-                background: "var(--surface)",
-                overflow: "hidden",
-                display: "grid",
-                gridTemplateColumns: "1fr 380px",
-                boxShadow: "var(--soft)",
-              }}
-            >
-              <div
-                style={{
-                  padding: 24,
-                  borderRight: "1px solid rgba(var(--line-rgb),.08)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 12 }}>
-                  Задача · Qadam / Объекты
-                </div>
-                <div
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link
+                  to="/register"
+                  className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-transform hover:scale-[1.02]"
                   style={{
-                    fontSize: 19,
-                    fontWeight: 500,
-                    color: "var(--ink)",
-                    marginBottom: 8,
+                    background: "#7C5CFF",
+                    boxShadow: "0 12px 30px -12px rgba(124,92,255,0.55)",
                   }}
                 >
-                  Подготовить отчёт для заказчика
-                </div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                  {["В работе", "Высокий", "до 24.08"].map((c) => (
-                    <span
-                      key={c}
-                      style={{
-                        padding: "3px 9px",
-                        borderRadius: 999,
-                        background: "rgba(var(--line-rgb),.07)",
-                        fontSize: 11,
-                        color: "var(--text-2)",
-                      }}
-                    >
-                      {c}
-                    </span>
-                  ))}
-                </div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 10 }}>
-                  Шаги от ИИ
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <AiStep title="Собрать акты за июль" who="Мария К." done />
-                  <AiStep title="Сверить суммы со сметой" who="Данияр О." done />
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "11px 12px",
-                      border: "1px dashed rgba(var(--line-rgb),.18)",
-                      borderRadius: 12,
-                      background: "rgba(var(--line-rgb),.02)",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: 4,
-                        border: "1.5px solid rgba(var(--line-rgb),.25)",
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span style={{ fontSize: 13, color: "var(--muted)" }}>
-                      Сформировать сводку и отправить
-                    </span>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    marginTop: 16,
-                    height: 5,
-                    borderRadius: 999,
-                    background: "rgba(var(--line-rgb),.08)",
-                    overflow: "hidden",
-                  }}
+                  Начать бесплатно <ArrowRight size={14} />
+                </Link>
+                <a
+                  href="mailto:hello@qadam.kz"
+                  className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                  style={{ border: "1px solid rgba(255,255,255,0.2)" }}
                 >
-                  <span
-                    style={{
-                      display: "block",
-                      height: "100%",
-                      width: "62%",
-                      background: "rgba(var(--line-rgb),.45)",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 20,
-                  background: "var(--surface-2)",
-                  borderLeft: "1px solid rgba(var(--line-rgb),.08)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 26,
-                      height: 26,
-                      borderRadius: 8,
-                      background: "rgba(var(--line-rgb),.08)",
-                      fontSize: 12,
-                      color: "var(--ink-2)",
-                    }}
-                  >
-                    ✦
-                  </span>
-                  <span
-                    style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}
-                  >
-                    Помощник Qadam
-                  </span>
-                  <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--dim)" }}>
-                    в задаче
-                  </span>
-                </div>
-                <div
-                  style={{
-                    padding: "11px 12px",
-                    borderRadius: "12px 12px 12px 4px",
-                    background: "rgba(var(--line-rgb),.05)",
-                    fontSize: 12,
-                    lineHeight: 1.55,
-                    color: "var(--text)",
-                  }}
-                >
-                  Разбил на 3 шага. Похожая задача в июне заняла 4 дня - советую срок
-                  26.08.
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 6,
-                    marginTop: 2,
-                  }}
-                >
-                  {["Разбить на шаги", "Оценить срок", "Итоги недели"].map((c) => (
-                    <span
-                      key={c}
-                      style={{
-                        padding: "6px 10px",
-                        border: "1px solid rgba(var(--line-rgb),.12)",
-                        borderRadius: 999,
-                        fontSize: 11,
-                        color: "var(--text-2)",
-                      }}
-                    >
-                      {c}
-                    </span>
-                  ))}
-                </div>
-                <div
-                  style={{
-                    marginTop: "auto",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "9px 12px",
-                    border: "1px solid rgba(var(--line-rgb),.10)",
-                    borderRadius: 10,
-                    fontSize: 12,
-                    color: "var(--dim)",
-                  }}
-                >
-                  Спросить о задаче…
-                  <span
-                    style={{
-                      marginLeft: "auto",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 20,
-                      height: 20,
-                      borderRadius: 6,
-                      background: "rgba(var(--line-rgb),.12)",
-                      fontSize: 11,
-                      color: "var(--ink-2)",
-                    }}
-                  >
-                    ↑
-                  </span>
-                </div>
+                  hello@qadam.kz
+                </a>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* HOW — soft warm panel */}
-        <div
-          id="how"
-          className="qadam-reveal"
-          style={{ position: "relative", padding: "120px 0 110px", overflow: "hidden" }}
-        >
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: "calc(50% - 50vw)",
-              right: "calc(50% - 50vw)",
-              background: "#eaf0fa",
-              zIndex: 0,
-            }}
-          />
-          <div style={{ position: "relative", zIndex: 1, maxWidth: 1080, margin: "0 auto" }}>
-            {sectionLabel("Внедрение")}
-            <div style={{ maxWidth: 560, marginBottom: 40 }}>
-              <h2
-                className="qadam-h2"
-                style={{
-                  margin: "0 0 14px",
-                  fontSize: 42,
-                  lineHeight: 1.1,
-                  fontWeight: 500,
-                  letterSpacing: "-0.035em",
-                  color: "var(--ink)",
-                }}
-              >
-                Запуск за один день
-              </h2>
-              <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: "var(--muted)" }}>
-                Без внедренцев и курсов.
-              </p>
-            </div>
-            <div
-              className="qadam-grid-3"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3,1fr)",
-                gap: 0,
-                border: "1px solid rgba(var(--line-rgb),.10)",
-                borderRadius: 16,
-                overflow: "hidden",
-                background: "var(--surface)",
-                boxShadow: "var(--soft)",
-              }}
-            >
-              {[
-                { t: "Регистрируем компанию", d: "Пространство и роли — 10 минут." },
-                { t: "Переносим задачи", d: "Импорт из CSV, приглашения по email." },
-                { t: "Смотрим, где зависает", d: "Аналитика покажет узкие места." },
-              ].map((s, i, arr) => (
-                <div
-                  key={s.t}
-                  className="qadam-how-cell"
-                  style={{
-                    padding: "30px 28px",
-                    borderRight:
-                      i < arr.length - 1
-                        ? "1px solid rgba(var(--line-rgb),.10)"
-                        : undefined,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 19,
-                      fontWeight: 500,
-                      color: "var(--ink)",
-                      marginBottom: 8,
-                    }}
-                  >
-                    {s.t}
-                  </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 15,
-                      lineHeight: 1.6,
-                      color: "var(--faint)",
-                    }}
-                  >
-                    {s.d}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-
-        {/* CTA — full-width dark navy panel */}
-        <div
-          id="cta"
-          className="qadam-reveal"
-          style={{
-            position: "relative",
-            padding: "140px 0 110px",
-            textAlign: "center",
-            overflow: "hidden",
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: "calc(50% - 50vw)",
-              right: "calc(50% - 50vw)",
-              background: "#0a1f47",
-              zIndex: 0,
-            }}
-          />
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: -100,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 720,
-              height: 420,
-              background:
-                "radial-gradient(ellipse 60% 50% at 50% 40%, rgba(15,103,253,0.35), transparent 68%)",
-              filter: "blur(40px)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          <div style={{ position: "relative", zIndex: 1, maxWidth: 680, margin: "0 auto" }}>
-            <h2
-              className="qadam-h2"
-              style={{
-                margin: "0 0 14px",
-                fontSize: 48,
-                lineHeight: 1.06,
-                fontWeight: 500,
-                letterSpacing: "-0.04em",
-                color: "#ffffff",
-              }}
-            >
-              Покажем на ваших задачах
-            </h2>
-            <p
-              style={{
-                margin: "0 auto 36px",
-                maxWidth: 480,
-                fontSize: 17,
-                lineHeight: 1.6,
-                color: "rgba(255,255,255,.78)",
-              }}
-            >
-              Оставьте заявку — вернёмся в тот же день.
-            </p>
 
             <form
               onSubmit={submit}
-              style={{
-                border: "1px solid rgba(var(--line-rgb),.12)",
-                borderRadius: 18,
-                background: "var(--surface)",
-                padding: 28,
-                textAlign: "left",
-                boxShadow: "var(--soft)",
-              }}
+              className="relative rounded-2xl p-6"
+              style={{ background: "#17171F", border: "1px solid rgba(255,255,255,0.08)" }}
             >
-              <div
-                className="qadam-grid-2-form"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 14,
-                  marginBottom: 14,
-                }}
-              >
-                <label style={{ display: "block" }}>
-                  <span style={labelCap}>Имя</span>
-                  <input
-                    type="text"
-                    placeholder="Айгерим"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={{ display: "block" }}>
-                  <span style={labelCap}>Компания</span>
-                  <input
-                    type="text"
-                    placeholder="Qadam"
-                    value={form.company}
-                    onChange={(e) => setForm({ ...form, company: e.target.value })}
-                    style={inputStyle}
-                  />
-                </label>
-              </div>
-              <div
-                className="qadam-grid-2-form"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 14,
-                  marginBottom: 14,
-                }}
-              >
-                <label style={{ display: "block" }}>
-                  <span style={labelCap}>Телефон или email</span>
-                  <input
-                    type="text"
-                    placeholder="+7 700 000 00 00"
-                    value={form.contact}
-                    onChange={(e) => setForm({ ...form, contact: e.target.value })}
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={{ display: "block" }}>
-                  <span style={labelCap}>Сколько сотрудников</span>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {(["5-20", "20-50", "50+"] as const).map((v) => {
-                      const active = form.team === v;
-                      return (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => setForm({ ...form, team: v })}
-                          style={{
-                            flex: 1,
-                            textAlign: "center",
-                            padding: "11px 0",
-                            border: `1px solid rgba(var(--line-rgb),${active ? ".45" : ".12"})`,
-                            borderRadius: 10,
-                            background: active ? "rgba(var(--line-rgb),.06)" : "transparent",
-                            fontSize: 13,
-                            color: active ? "var(--ink)" : "var(--muted)",
-                            fontFamily: "inherit",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {v}
-                        </button>
-                      );
-                    })}
+              {sent ? (
+                <div className="py-8 text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                    <Check size={22} />
                   </div>
-                </label>
-              </div>
-              <label style={{ display: "block", marginBottom: 18 }}>
-                <span style={labelCap}>Задача</span>
-                <textarea
-                  rows={2}
-                  placeholder="Задачи теряются в чатах…"
-                  value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
-                  style={{ ...inputStyle, resize: "none", lineHeight: 1.5 }}
-                />
-              </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-                <button
-                  type="submit"
-                  disabled={sent}
-                  style={{
-                    padding: "14px 28px",
-                    fontSize: 15,
-                    fontWeight: 500,
-                    color: "var(--btn-fg)",
-                    background: "var(--btn-bg)",
-                    borderRadius: 999,
-                    border: "none",
-                    cursor: sent ? "default" : "pointer",
-                    fontFamily: "inherit",
-                    opacity: sent ? 0.75 : 1,
-                  }}
-                >
-                  {sent ? "Спасибо, свяжемся!" : "Отправить заявку"}
-                </button>
-                <span style={{ fontSize: 13, color: "var(--muted)" }}>
-                  Или в Telegram — быстрее.
-                </span>
-              </div>
+                  <div className="text-lg font-semibold text-white">Спасибо! Мы на связи.</div>
+                  <p className="mt-1 text-sm text-white/60">Свяжемся в течение рабочего дня.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-2 text-sm font-medium text-white/80">Оставить заявку</div>
+                  <div className="grid gap-2.5">
+                    <input
+                      className="w-full rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      placeholder="Имя"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      placeholder="Компания"
+                      value={form.company}
+                      onChange={(e) => setForm({ ...form, company: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      placeholder="Email или телефон"
+                      value={form.contact}
+                      onChange={(e) => setForm({ ...form, contact: e.target.value })}
+                    />
+                    <div className="flex gap-1.5">
+                      {(["5-20", "20-50", "50+"] as const).map((v) => {
+                        const active = form.team === v;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            className={
+                              "flex-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors " +
+                              (active
+                                ? "text-white"
+                                : "text-white/60 hover:text-white hover:bg-white/[0.03]")
+                            }
+                            style={active ? { background: "#7C5CFF" } : { background: "rgba(255,255,255,0.05)" }}
+                            onClick={() => setForm({ ...form, team: v })}
+                          >
+                            {v}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <textarea
+                      rows={2}
+                      className="w-full resize-none rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      placeholder="Задача или комментарий"
+                      value={form.note}
+                      onChange={(e) => setForm({ ...form, note: e.target.value })}
+                    />
+                    {error && (
+                      <div className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                        {error}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={sending}
+                      className="mt-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white transition-transform hover:scale-[1.02] disabled:opacity-60"
+                      style={{
+                        background: "#7C5CFF",
+                        boxShadow: "0 10px 24px -10px rgba(124,92,255,0.55)",
+                      }}
+                    >
+                      {sending ? "Отправляем…" : "Отправить заявку"}
+                    </button>
+                  </div>
+                </>
+              )}
             </form>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
 
-        {/* FOOTER — крупный, с soft-панелью */}
-        <div
-          style={{
-            position: "relative",
-            marginTop: 0,
-            padding: "72px 0 32px",
-            overflow: "hidden",
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: "calc(50% - 50vw)",
-              right: "calc(50% - 50vw)",
-              background: "#f4f7fd",
-              zIndex: 0,
-            }}
-          />
-          <div
-            style={{
-              position: "relative",
-              zIndex: 1,
-              maxWidth: 1080,
-              margin: "0 auto",
-            }}
-          >
-            <div
-              className="qadam-grid-2"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.3fr 1fr 1fr 1fr",
-                gap: 40,
-                marginBottom: 56,
-              }}
-            >
-              <div style={{ maxWidth: 300 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    marginBottom: 14,
-                  }}
-                >
-                  {LOGO_SVG(28)}
-                  <span
-                    style={{ fontSize: 16, fontWeight: 600, color: "var(--ink)" }}
-                  >
-                    Qadam CRM
-                  </span>
-                </div>
-                <p
-                  style={{
-                    margin: "0 0 20px",
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    color: "var(--muted)",
-                  }}
-                >
-                  Порядок в задачах, ролях и отчётах. Для команд, которые растут.
-                </p>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <a
-                    href="mailto:hello@qadam.kz"
-                    aria-label="Email"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 34,
-                      height: 34,
-                      borderRadius: 8,
-                      background: "#ffffff",
-                      border: "1px solid rgba(var(--line-rgb),.10)",
-                      color: "var(--ink-2)",
-                      fontSize: 13,
-                    }}
-                  >
-                    ✉
-                  </a>
-                  <a
-                    href="tel:+77000000000"
-                    aria-label="Phone"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 34,
-                      height: 34,
-                      borderRadius: 8,
-                      background: "#ffffff",
-                      border: "1px solid rgba(var(--line-rgb),.10)",
-                      color: "var(--ink-2)",
-                      fontSize: 13,
-                    }}
-                  >
-                    ☎
-                  </a>
-                </div>
-              </div>
-              <FooterCol
-                title="Продукт"
-                items={[
-                  { href: "#product", label: "Возможности" },
-                  { href: "#how", label: "Как это работает" },
-                  { href: "#ai", label: "ИИ-помощник" },
-                ]}
-              />
-              <FooterCol
-                title="Компания"
-                items={[
-                  { href: "#cta", label: "Оставить заявку" },
-                  { href: "/login", label: "Войти" },
-                ]}
-              />
-              <FooterCol
-                title="Связь"
-                items={[
-                  { href: "mailto:hello@qadam.kz", label: "hello@qadam.kz" },
-                  { href: "tel:+77000000000", label: "+7 700 000 00 00" },
-                ]}
-              />
+// =========================================================================
+// Footer — light, 4 колонки
+// =========================================================================
+
+function Footer() {
+  return (
+    <footer className="pb-10 pt-16" style={{ background: "#ffffff" }}>
+      <div className="qadam-container">
+        <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <LogoMark size={26} className="!text-[#0A0A12]" />
+              <span className="text-lg font-bold" style={{ color: "#0A0A12" }}>
+                Qadam<span style={{ color: "#7C5CFF" }}>.</span>
+              </span>
             </div>
-            <div
-              style={{
-                borderTop: "1px solid rgba(var(--line-rgb),.10)",
-                paddingTop: 24,
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 13,
-                color: "var(--muted)",
-                flexWrap: "wrap",
-                gap: 12,
-              }}
-            >
-              <span>© 2026 Qadam CRM. Все права защищены.</span>
-              <span>Политика конфиденциальности · Условия</span>
-            </div>
+            <p className="max-w-xs text-sm text-[#52596E]">
+              CRM с задачами, чатом и лидами — для команд, которым важен порядок и скорость.
+            </p>
           </div>
+          <FooterCol
+            title="Продукт"
+            items={[
+              { label: "Задачи и Kanban", href: "#product" },
+              { label: "Мессенджер", href: "#product" },
+              { label: "Формы лидов", href: "#product" },
+              { label: "Аналитика", href: "#product" },
+            ]}
+          />
+          <FooterCol
+            title="Компания"
+            items={[
+              { label: "О проекте", href: "#" },
+              { label: "Контакты", href: "mailto:hello@qadam.kz" },
+              { label: "Партнёры", href: "#" },
+              { label: "Карьера", href: "#" },
+            ]}
+          />
+          <FooterCol
+            title="Ресурсы"
+            items={[
+              { label: "Тарифы", href: "#pricing" },
+              { label: "Вопросы", href: "#faq" },
+              { label: "Документация", href: "#" },
+              { label: "Блог", href: "#" },
+            ]}
+          />
+          <FooterCol
+            title="Соцсети"
+            items={[
+              { label: "Telegram", href: "#" },
+              { label: "Instagram", href: "#" },
+              { label: "LinkedIn", href: "#" },
+              { label: "YouTube", href: "#" },
+            ]}
+          />
+        </div>
+
+        <div
+          className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t pt-6 text-xs text-[#6B7280]"
+          style={{ borderColor: "rgba(10,10,18,0.08)" }}
+        >
+          <span>© {new Date().getFullYear()} Qadam CRM. Все права защищены.</span>
+          <span className="flex flex-wrap gap-4">
+            <Link to="/privacy" className="hover:text-[#0A0A12]">Политика конфиденциальности</Link>
+            <Link to="/terms" className="hover:text-[#0A0A12]">Условия</Link>
+            <a href="mailto:hello@qadam.kz" className="hover:text-[#0A0A12]">hello@qadam.kz</a>
+          </span>
         </div>
       </div>
-    </div>
+    </footer>
   );
 }
 
-function KanbanColumn({
-  title,
-  count,
-  dot,
-  highlighted,
-  children,
-}: {
-  title: string;
-  count: number;
-  dot: string;
-  highlighted?: boolean;
-  children: React.ReactNode;
-}) {
+function FooterCol({ title, items }: { title: string; items: { label: string; href: string }[] }) {
   return (
-    <div
-      style={{
-        width: 190,
-        flexShrink: 0,
-        border: `1px solid rgba(var(--line-rgb),${highlighted ? ".14" : ".09"})`,
-        borderRadius: 16,
-        background: highlighted ? "rgba(var(--line-rgb),.03)" : "var(--surface-2)",
-        padding: 10,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "0 4px 4px" }}>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "3px 9px",
-            borderRadius: 999,
-            background: `rgba(var(--line-rgb),${highlighted ? ".10" : ".07"})`,
-            fontSize: 11,
-            color: highlighted ? "var(--ink-3)" : "var(--text)",
-          }}
-        >
-          <span
-            style={{ width: 5, height: 5, borderRadius: 999, background: dot }}
-          />
-          {title}
-        </span>
-        <span
-          className="tnum"
-          style={{ fontSize: 11, color: "var(--faint-2)" }}
-        >
-          {count}
-        </span>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function KanbanCard({ title, chip }: { title: string; chip?: string }) {
-  return (
-    <div
-      style={{
-        border: "1px solid rgba(var(--line-rgb),.09)",
-        borderRadius: 12,
-        background: "var(--card-3)",
-        padding: 11,
-        boxShadow: "var(--soft)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 12,
-          color: "var(--ink-2)",
-          marginBottom: chip ? 8 : 0,
-        }}
-      >
+    <div>
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "#0A0A12" }}>
         {title}
       </div>
-      {chip && (
-        <span
-          style={{
-            padding: "2px 7px",
-            borderRadius: 999,
-            background: "rgba(var(--line-rgb),.08)",
-            color: "var(--text-2)",
-            fontSize: 10,
-          }}
-        >
-          {chip}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function AiStep({ title, who, done }: { title: string; who: string; done?: boolean }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "11px 12px",
-        border: "1px solid rgba(var(--line-rgb),.09)",
-        borderRadius: 12,
-        background: "var(--card-3)",
-        boxShadow: "var(--soft)",
-      }}
-    >
-      <span
-        style={{
-          width: 14,
-          height: 14,
-          borderRadius: 4,
-          background: done ? "rgba(var(--line-rgb),.55)" : "transparent",
-          border: done ? "none" : "1.5px solid rgba(var(--line-rgb),.25)",
-          flexShrink: 0,
-        }}
-      />
-      <span style={{ fontSize: 13, color: "var(--text)" }}>{title}</span>
-      <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--dim)" }}>{who}</span>
-    </div>
-  );
-}
-
-function FooterCol({
-  title,
-  items,
-}: {
-  title: string;
-  items: { href: string; label: string }[];
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "var(--muted)",
-        }}
-      >
-        {title}
-      </div>
-      {items.map((i) => (
-        <a key={i.label} href={i.href} style={{ fontSize: 14 }}>
-          {i.label}
-        </a>
-      ))}
+      <ul className="space-y-2">
+        {items.map((i) => (
+          <li key={i.label}>
+            <a href={i.href} className="text-sm text-[#52596E] transition-colors hover:text-[#0A0A12]">
+              {i.label}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

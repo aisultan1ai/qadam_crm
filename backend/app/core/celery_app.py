@@ -57,6 +57,10 @@ celery_app.conf.beat_schedule = {
         "task": "scheduled.check_expired_subscriptions",
         "schedule": crontab(minute=0),
     },
+    "messenger-offline-digest-every-5min": {
+        "task": "scheduled.messenger_offline_digest",
+        "schedule": crontab(minute="*/5"),
+    },
 }
 
 # Делаем этот app дефолтным, чтобы shared_task резолвился на него

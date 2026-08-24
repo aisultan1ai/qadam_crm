@@ -20,6 +20,7 @@ export type User = {
   is_active: boolean;
   is_superuser: boolean;
   is_platform_admin?: boolean;
+  email_verified?: boolean;
   avatar_url?: string | null;
   department?: Department | null;
   department_id?: number | null;

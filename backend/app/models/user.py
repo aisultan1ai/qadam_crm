@@ -36,6 +36,10 @@ class User(Base):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    email_verification_token: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, unique=True, index=True)
+    email_verification_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     roles: Mapped[List["Role"]] = relationship(  # type: ignore  # noqa: F821
         "Role", secondary=user_roles, back_populates="users", lazy="selectin"
     )

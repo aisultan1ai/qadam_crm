@@ -43,6 +43,7 @@ class InviteResponse(BaseModel):
     invite_url: str
     expires_at: str
     email_sent: bool
+    email_error: Optional[str] = None
 
 
 class InviteCreate(BaseModel):
@@ -134,18 +135,26 @@ def create_invite(
 
     invite_url = f"{settings.APP_BASE_URL.rstrip('/')}/invite/{token}"
     email_sent = False
-    try:
-        send_invitation_email.delay(
-            to=email,
-            tenant_name=ctx.tenant.name,
-            invite_url=invite_url,
-            inviter_name=ctx.user.name,
-        )
-        email_sent = True
-    except Exception:
-        # Не роняем запрос из-за Celery/SMTP — приглашение уже создано,
-        # админ увидит ссылку в UI и сможет её скопировать вручную.
-        pass
+    email_error: Optional[str] = None
+    if not settings.SMTP_HOST:
+        email_error = "smtp_not_configured"
+    else:
+        try:
+            send_invitation_email.delay(
+                to=email,
+                tenant_name=ctx.tenant.name,
+                invite_url=invite_url,
+                inviter_name=ctx.user.name,
+            )
+            email_sent = True
+        except Exception as exc:
+            # Не роняем запрос из-за Celery/SMTP — приглашение уже создано,
+            # админ увидит ссылку в UI и сможет её скопировать вручную.
+            import logging
+            logging.getLogger("qadam.invitations").warning(
+                "Failed to enqueue invitation email to %s: %s", email, exc
+            )
+            email_error = "celery_unavailable"
 
     return InviteResponse(
         id=invite.id,
@@ -155,6 +164,7 @@ def create_invite(
         invite_url=invite_url,
         expires_at=expires_at.isoformat(),
         email_sent=email_sent,
+        email_error=email_error,
     )
 
 

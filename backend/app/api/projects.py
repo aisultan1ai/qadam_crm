@@ -127,10 +127,75 @@ def create_project(payload: ProjectCreate, ctx: TenantContext = Depends(require(
             project.members = db.query(User).filter(User.id.in_(allowed_ids)).all()
     db.add(project)
     db.flush()
+
+    _create_project_channel(db, project, owner_id, actor.id)
+
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="create", entity="project", entity_id=project.id, detail=project.name)
     db.commit()
     db.refresh(project)
     return _out(db, ctx.tenant.id, project)
+
+
+def _create_project_channel(db: Session, project: Project, owner_id: int, actor_id: int) -> None:
+    """Автоматически создаёт канал мессенджера для проекта и добавляет владельца/членов."""
+    from ..models import Channel, ChannelMember
+
+    existing = db.query(Channel).filter(
+        Channel.tenant_id == project.tenant_id, Channel.project_id == project.id,
+    ).first()
+    if existing:
+        return
+
+    ch = Channel(
+        tenant_id=project.tenant_id,
+        kind="project",
+        project_id=project.id,
+        name=f"#{project.name}",
+        created_by=actor_id,
+    )
+    db.add(ch)
+    db.flush()
+
+    seen: set[int] = set()
+    def add(uid: int, role: str = "member") -> None:
+        if uid in seen:
+            return
+        seen.add(uid)
+        db.add(ChannelMember(channel_id=ch.id, user_id=uid, role=role))
+
+    add(owner_id, "owner")
+    add(actor_id)
+    for u in (project.members or []):
+        add(u.id)
+
+
+def _sync_project_channel_members(db: Session, project: Project) -> None:
+    """Синхронизирует channel_members с participants проекта. Owner всегда в канале."""
+    from ..models import Channel, ChannelMember
+
+    ch = db.query(Channel).filter(
+        Channel.tenant_id == project.tenant_id, Channel.project_id == project.id,
+    ).first()
+    if not ch:
+        return
+
+    should_be = {u.id for u in (project.members or [])}
+    if project.owner_id:
+        should_be.add(project.owner_id)
+
+    current_rows = db.query(ChannelMember).filter(ChannelMember.channel_id == ch.id).all()
+    current_ids = {m.user_id for m in current_rows}
+
+    for uid in should_be - current_ids:
+        role = "owner" if uid == project.owner_id else "member"
+        db.add(ChannelMember(channel_id=ch.id, user_id=uid, role=role))
+
+    to_remove = current_ids - should_be
+    if to_remove:
+        db.query(ChannelMember).filter(
+            ChannelMember.channel_id == ch.id,
+            ChannelMember.user_id.in_(to_remove),
+        ).delete(synchronize_session=False)
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
@@ -151,6 +216,7 @@ def update_project(project_id: int, payload: ProjectUpdate, ctx: TenantContext =
         project.members = db.query(User).filter(User.id.in_(allowed_ids)).all() if allowed_ids else []
     if payload.is_archived is not None:
         project.is_archived = payload.is_archived
+    _sync_project_channel_members(db, project)
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="update", entity="project", entity_id=project.id)
     db.commit()
     db.refresh(project)

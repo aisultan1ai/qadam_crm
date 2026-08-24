@@ -8,7 +8,8 @@ from __future__ import annotations
 from slugify import slugify
 from sqlalchemy.orm import Session
 
-from ..models import Role, Tenant, TenantMembership, User
+from ..models import Project, Role, Task, Tenant, TenantMembership, User
+from ..models.task import TaskPriority, TaskStatus
 
 RESERVED_SLUGS = {
     "www", "api", "admin", "app", "mail", "static", "media",
@@ -91,3 +92,71 @@ def create_tenant_with_owner(
 
     db.flush()
     return tenant
+
+
+SAMPLE_PROJECT_NAME = "Пример проекта"
+SAMPLE_TASKS: list[dict] = [
+    {
+        "title": "Пригласите первых сотрудников",
+        "status": TaskStatus.new,
+        "priority": TaskPriority.high,
+        "description": "Настройки → Команда → отправьте инвайт по email. Каждому можно выдать роль (Администратор/Менеджер/Сотрудник).",
+    },
+    {
+        "title": "Создайте свой первый настоящий проект",
+        "status": TaskStatus.new,
+        "priority": TaskPriority.medium,
+        "description": "Проекты объединяют задачи и участников. Раздел «Проекты» → «Новый проект».",
+    },
+    {
+        "title": "Перетащите эту задачу в колонку «В работе»",
+        "status": TaskStatus.new,
+        "priority": TaskPriority.low,
+        "description": "На доске Kanban можно менять статусы drag-and-drop. Попробуйте прямо сейчас.",
+    },
+    {
+        "title": "Готово — можно удалять пример",
+        "status": TaskStatus.done,
+        "priority": TaskPriority.low,
+        "description": "Когда разберётесь с интерфейсом — удалите этот проект (Проекты → «...» → Удалить).",
+    },
+]
+
+
+def create_sample_project(db: Session, *, tenant: Tenant, owner: User) -> Project:
+    """Создать образцовый проект с 4 задачами для нового tenant'а.
+
+    Идемпотентно: если проект с таким именем уже есть в tenant — возвращает его.
+    """
+    existing = (
+        db.query(Project)
+        .filter(Project.tenant_id == tenant.id, Project.name == SAMPLE_PROJECT_NAME)
+        .first()
+    )
+    if existing:
+        return existing
+
+    project = Project(
+        tenant_id=tenant.id,
+        name=SAMPLE_PROJECT_NAME,
+        description="Проект-пример. Разберитесь с задачами и удалите — или используйте как шаблон.",
+        color="#0f67fd",
+        owner_id=owner.id,
+    )
+    db.add(project)
+    db.flush()
+
+    for i, t in enumerate(SAMPLE_TASKS):
+        db.add(Task(
+            tenant_id=tenant.id,
+            project_id=project.id,
+            title=t["title"],
+            description=t["description"],
+            status=t["status"],
+            priority=t["priority"],
+            author_id=owner.id,
+            assignee_id=owner.id,
+            order_index=i,
+        ))
+    db.flush()
+    return project

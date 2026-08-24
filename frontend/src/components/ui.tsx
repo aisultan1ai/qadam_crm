@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useId, useRef, useState } from "react";
 import clsx from "clsx";
 import { X, Circle, Loader2, CheckCircle2, XCircle, Eye, ArrowUp, ArrowDown, Flame, Minus } from "lucide-react";
 import type { TaskPriority, TaskStatus } from "@/types";
@@ -169,6 +169,8 @@ export function Modal({
   size?: "sm" | "md" | "lg" | "xl";
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleId = useId();
+  const contentId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -245,20 +247,22 @@ export function Modal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : "Диалог"}
+        aria-describedby={contentId}
         tabIndex={-1}
         className={clsx("card w-full animate-slide-up p-0 outline-none", width)}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
           <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3.5 dark:border-neutral-800">
-            <h3 className="text-base font-semibold">{title}</h3>
-            <button className="btn-ghost !p-1.5" onClick={onClose} aria-label="close">
+            <h3 id={titleId} className="text-base font-semibold">{title}</h3>
+            <button className="btn-ghost !p-1.5" onClick={onClose} aria-label="Закрыть">
               <X size={18} />
             </button>
           </div>
         )}
-        <div className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
+        <div id={contentId} className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
       </div>
     </div>
   );

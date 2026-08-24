@@ -1,73 +1,48 @@
-/* Qadam landing — брендовая палитра: белый фон + синие акценты.
-   Согласована с логотипом: #0d2758 (тёмно-синий), #0f67fd (акцент),
-   #5fa0fe / #a2cafd (светлые оттенки). */
+/* Qadam landing — Pickolab-inspired палитра: dark hero + violet accent + light content. */
 
 .qadam-landing {
-  /* Поверхности */
   --bg: #ffffff;
+  --bg-dark: #0F0F14;
+  --bg-dark-2: #17171F;
   --surface: #ffffff;
-  --surface-2: #f6f8fc;
+  --surface-2: #F7F7FA;
   --card: #ffffff;
-  --card-2: #ffffff;
-  --card-3: #ffffff;
-  --card-4: #eef3fb;
 
-  /* Текст */
-  --ink: #0d2758;
-  --ink-2: #16223d;
-  --ink-3: #1f2b45;
-  --text: #3f455a;
-  --text-2: #52596e;
-  --muted: #6b7391;
-  --muted-2: #52596e;
-  --faint: #7c8398;
-  --faint-2: #8f96a9;
-  --dim: #a1a7b8;
-  --dim-2: #b3b9c8;
+  --ink: #0A0A12;
+  --ink-2: #1A1A24;
+  --text: #3F4457;
+  --text-2: #52596E;
+  --muted: #6B7280;
+  --muted-invert: #9CA3AF;
+  --faint: #9AA0B0;
+  --dim: #C4C7D2;
 
-  /* Линии — тёмно-синий rgb для rgba() */
-  --line-rgb: 13, 39, 88;
+  --line: rgba(10, 10, 18, 0.10);
+  --line-dark: rgba(255, 255, 255, 0.08);
 
-  /* Лого */
-  --logo-1: #a2cafd;
-  --logo-2: #5fa0fe;
+  --brand: #7C5CFF;
+  --brand-2: #6B47F5;
+  --brand-soft: rgba(124, 92, 255, 0.12);
+  --brand-tint: #F3EFFF;
 
-  /* Акцент — брендовый синий */
-  --accent: #0f67fd;
-  --accent-ink: #0c52cc;
-  --accent-soft: rgba(15, 103, 253, 0.1);
+  --ok: #10B981;
+  --danger: #EF4444;
 
-  /* Функциональные — стандартные, но приглушённые */
-  --info: #0284c7;
-  --ok: #059669;
-  --danger: #e11d48;
-
-  /* Микро-акценты */
-  --spark: #a2cafd;
-  --spark-2: #5fa0fe;
-
-  /* Основная кнопка — тёмно-синий как в лого */
-  --btn-bg: #0d2758;
-  --btn-fg: #ffffff;
-
-  /* Тени */
-  --shadow-card: 0 10px 24px -14px rgba(13, 39, 88, 0.18);
-  --soft: 0 1px 2px 0 rgba(13, 39, 88, 0.04), 0 6px 16px -8px rgba(13, 39, 88, 0.08);
+  --shadow-card: 0 10px 30px -14px rgba(10, 10, 18, 0.15);
+  --shadow-violet: 0 12px 30px -12px rgba(124, 92, 255, 0.45);
+  --soft: 0 1px 2px 0 rgba(10, 10, 18, 0.04), 0 8px 22px -12px rgba(10, 10, 18, 0.08);
 
   background: var(--bg);
-  color: var(--ink-2);
+  color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.011em;
   min-height: 100vh;
 }
 
 .qadam-landing a {
-  color: var(--text);
+  color: inherit;
   text-decoration: none;
-  transition: color 0.15s ease-out;
-}
-.qadam-landing a:hover {
-  color: var(--accent);
+  transition: color 0.15s ease-out, opacity 0.15s ease-out;
 }
 .qadam-landing details > summary {
   list-style: none;
@@ -79,44 +54,12 @@
 .qadam-landing .tnum {
   font-variant-numeric: tabular-nums;
 }
-.qadam-landing ::placeholder {
-  color: var(--dim);
-}
 .qadam-landing ::selection {
-  background: rgba(15, 103, 253, 0.16);
-}
-.qadam-landing input,
-.qadam-landing textarea {
-  transition: border-color 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.qadam-landing input:focus,
-.qadam-landing textarea:focus {
-  border-color: rgba(15, 103, 253, 0.5) !important;
+  background: var(--brand-soft);
+  color: var(--ink);
 }
 
-/* Скромный fade-up при появлении секций */
-@keyframes qadamFadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.qadam-fade-up {
-  animation: qadamFadeUp 0.6s ease-out both;
-}
-
-/* Feature card hover */
-.qadam-feature-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(15, 103, 253, 0.28) !important;
-  box-shadow: 0 12px 28px -12px rgba(13, 39, 88, 0.18);
-}
-
-/* Scroll reveal — fade-up при попадании в вьюпорт */
+/* Scroll-reveal — fade-up при попадании в вьюпорт */
 .qadam-reveal {
   opacity: 0;
   transform: translateY(24px);
@@ -129,34 +72,47 @@
   transform: translateY(0);
 }
 
-/* Ambient blob-дрейф для перехода hero → product (чтобы белое пространство «дышало») */
-@keyframes qadamBlobA {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(40px, -30px) scale(1.06); }
+/* Секция с тёмным фоном */
+.qadam-section-dark {
+  background: var(--bg-dark);
+  color: #ffffff;
 }
-@keyframes qadamBlobB {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-36px, 26px) scale(1.05); }
+.qadam-section-dark .muted {
+  color: rgba(255, 255, 255, 0.65);
 }
-.qadam-blob-a { animation: qadamBlobA 18s ease-in-out infinite; }
-.qadam-blob-b { animation: qadamBlobB 22s ease-in-out infinite; }
 
-/* Плавающие стикеры (в стиле post-it с kanban-фото) */
-@keyframes qadamStickerA {
-  0%, 100% { transform: rotate(-7deg) translate(0, 0); }
-  50% { transform: rotate(-4deg) translate(0, -10px); }
+/* Общий контейнер */
+.qadam-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px;
 }
-@keyframes qadamStickerB {
-  0%, 100% { transform: rotate(5deg) translate(0, 0); }
-  50% { transform: rotate(8deg) translate(0, -8px); }
+
+/* Тонкая линия акцент */
+.qadam-eyebrow {
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
-@keyframes qadamStickerC {
-  0%, 100% { transform: rotate(-3deg) translate(0, 0); }
-  50% { transform: rotate(-6deg) translate(0, -12px); }
+
+/* Hero blob decor */
+.qadam-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.5;
 }
-.qadam-sticker-a { animation: qadamStickerA 7s ease-in-out infinite; }
-.qadam-sticker-b { animation: qadamStickerB 9s ease-in-out infinite; }
-.qadam-sticker-c { animation: qadamStickerC 8s ease-in-out infinite; }
+
+@keyframes qadamBlobDrift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(20px, -18px) scale(1.06); }
+}
+.qadam-blob-drift {
+  animation: qadamBlobDrift 22s ease-in-out infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .qadam-landing *,
@@ -168,65 +124,16 @@
   }
 }
 
-/* Адаптив: до 1280px — контент уплотняется, до 768 — колонки в одну */
-@media (max-width: 1279px) {
-  .qadam-landing .qadam-container {
-    padding-left: 32px !important;
-    padding-right: 32px !important;
-  }
-  .qadam-landing .qadam-grid-features {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-  .qadam-landing footer,
-  .qadam-landing .qadam-container > div:last-child .qadam-grid-2 {
-    grid-template-columns: 1fr 1fr !important;
+@media (max-width: 1024px) {
+  .qadam-container {
+    padding: 0 24px;
   }
 }
-@media (max-width: 767px) {
-  .qadam-landing .qadam-container {
-    padding-left: 20px !important;
-    padding-right: 20px !important;
+@media (max-width: 640px) {
+  .qadam-container {
+    padding: 0 18px;
   }
-  .qadam-landing .qadam-hide-mobile {
+  .qadam-hide-mobile {
     display: none !important;
-  }
-  .qadam-landing .qadam-h1 {
-    font-size: 40px !important;
-  }
-  .qadam-landing .qadam-h2 {
-    font-size: 28px !important;
-  }
-  .qadam-landing .qadam-grid-2 {
-    grid-template-columns: 1fr !important;
-  }
-  .qadam-landing .qadam-grid-3 {
-    grid-template-columns: 1fr !important;
-  }
-  .qadam-landing .qadam-grid-features {
-    grid-template-columns: 1fr !important;
-  }
-  .qadam-landing .qadam-grid-2-form {
-    grid-template-columns: 1fr !important;
-  }
-  .qadam-landing .qadam-app-peek {
-    width: 100% !important;
-    min-width: 720px;
-  }
-  .qadam-landing .qadam-app-peek-wrap {
-    overflow-x: auto;
-  }
-  .qadam-landing .qadam-kanban {
-    overflow-x: auto;
-  }
-  .qadam-landing .qadam-split-left {
-    border-right: none !important;
-    border-bottom: 1px solid rgba(var(--line-rgb), 0.1);
-  }
-  .qadam-landing .qadam-how-cell {
-    border-right: none !important;
-    border-bottom: 1px solid rgba(var(--line-rgb), 0.1);
-  }
-  .qadam-landing .qadam-how-cell:last-child {
-    border-bottom: none;
   }
 }

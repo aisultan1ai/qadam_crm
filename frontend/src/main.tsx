@@ -5,8 +5,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/Confirm";
+import { initAnalytics } from "./lib/analytics";
 import "./index.css";
 
+initAnalytics();
+
+// staleTime 30s — уменьшает refetch при WS-инвалидациях в hot-paths (мессенджер).
+// gcTime 5min — ограничивает рост in-memory cache: неактивные query автоматически
+// удаляются, предотвращая memory-leak в long-running сессиях (8+ часов).
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

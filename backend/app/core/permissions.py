@@ -50,6 +50,18 @@ PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("settings.notifications", "Управление уведомлениями"),
         ("settings.system", "Системные настройки"),
     ],
+    "Лиды": [
+        ("leads.view", "Просмотр лидов"),
+        ("leads.update", "Изменение статуса и заметок"),
+        ("leads.delete", "Удаление лидов"),
+        ("leads.convert", "Конвертация в задачу"),
+        ("leads.manage_forms", "Управление формами захвата"),
+    ],
+    "Мессенджер": [
+        ("messenger.use", "Доступ к мессенджеру"),
+        ("messenger.create_group", "Создание групповых чатов"),
+        ("messenger.manage_any", "Модерация чужих сообщений"),
+    ],
 }
 
 

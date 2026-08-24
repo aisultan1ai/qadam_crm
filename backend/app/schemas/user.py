@@ -89,6 +89,7 @@ class UserOut(UserBase):
     id: int
     is_superuser: bool
     is_platform_admin: bool = False
+    email_verified: bool = True
     roles: List[RoleOut] = []
     department: Optional[DepartmentOut] = None
     last_login_at: Optional[datetime] = None

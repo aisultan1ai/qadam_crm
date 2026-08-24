@@ -10,6 +10,12 @@ from .activity import ActivityLog
 from .reaction import CommentReaction
 from .invitation import Invitation
 from .subscription import Subscription, SubscriptionStatus
+from .lead import Lead
+from .lead_form import LeadForm, TenantLead
+from .channel import (
+    Channel, ChannelMember, Message, MessageAttachment, MessageReaction,
+    Poll, PollOption, PollVote,
+)
 
 __all__ = [
     "Tenant",
@@ -34,4 +40,15 @@ __all__ = [
     "Invitation",
     "Subscription",
     "SubscriptionStatus",
+    "Lead",
+    "LeadForm",
+    "TenantLead",
+    "Channel",
+    "ChannelMember",
+    "Message",
+    "MessageAttachment",
+    "MessageReaction",
+    "Poll",
+    "PollOption",
+    "PollVote",
 ]

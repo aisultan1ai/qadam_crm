@@ -1,14 +1,18 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/store/auth";
+import { trackPageview } from "@/lib/analytics";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Invite from "@/pages/Invite";
+import VerifyEmail from "@/pages/VerifyEmail";
 import { Loader } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const Landing = lazy(() => import("@/pages/Landing"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
+const Terms = lazy(() => import("@/pages/Terms"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
@@ -19,6 +23,9 @@ const Users = lazy(() => import("@/pages/Users"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const Admin = lazy(() => import("@/pages/Admin"));
+const Leads = lazy(() => import("@/pages/Leads"));
+const Messenger = lazy(() => import("@/pages/Messenger"));
+const PublicForm = lazy(() => import("@/pages/PublicForm"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function HomeGate() {
@@ -40,9 +47,14 @@ function HomeGate() {
 
 export default function App() {
   const { fetchMe, ready } = useAuth();
+  const location = useLocation();
   useEffect(() => {
     fetchMe();
   }, []);
+
+  useEffect(() => {
+    trackPageview(location.pathname + location.search, document.title);
+  }, [location.pathname, location.search]);
 
   if (!ready) return <Loader />;
 
@@ -73,6 +85,31 @@ export default function App() {
           </Suspense>
         }
       />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route
+        path="/f/:slug/:formId"
+        element={
+          <Suspense fallback={<Loader />}>
+            <PublicForm />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/privacy"
+        element={
+          <Suspense fallback={<Loader />}>
+            <Privacy />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/terms"
+        element={
+          <Suspense fallback={<Loader />}>
+            <Terms />
+          </Suspense>
+        }
+      />
       <Route path="/" element={<HomeGate />}>
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
@@ -84,6 +121,9 @@ export default function App() {
         <Route path="settings/*" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="leads" element={<Leads />} />
+        <Route path="messenger" element={<Messenger />} />
+        <Route path="messenger/:channelId" element={<Messenger />} />
         {/* 404 внутри Layout — авторизованный юзер видит sidebar/header */}
         <Route path="*" element={<NotFound />} />
       </Route>
