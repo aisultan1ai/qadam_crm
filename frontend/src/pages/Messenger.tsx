@@ -337,7 +337,7 @@ function ChatWindow({ channelId, onBack }: { channelId: number; onBack: () => vo
       </header>
 
       {search !== null && (
-        <SearchPanel channelId={channelId} q={search} setQ={setSearch} />
+        <SearchPanel channelId={channelId} q={search} setQ={setSearch} onClose={() => setSearch(null)} />
       )}
 
       <div ref={scrollerRef} className="flex-1 overflow-y-auto px-3 py-3">
@@ -1056,7 +1056,7 @@ function NewGroupModal({ onClose }: { onClose: () => void }) {
 // Search
 // =========================================================================
 
-function SearchPanel({ channelId, q, setQ }: { channelId: number; q: string; setQ: (s: string) => void }) {
+function SearchPanel({ channelId, q, setQ, onClose }: { channelId: number; q: string; setQ: (s: string) => void; onClose: () => void }) {
   const { data } = useQuery({
     queryKey: ["messenger", "search", channelId, q],
     queryFn: async () =>
@@ -1075,7 +1075,7 @@ function SearchPanel({ channelId, q, setQ }: { channelId: number; q: string; set
           onChange={(e) => setQ(e.target.value)}
           autoFocus
         />
-        <button className="btn-ghost !p-1.5" onClick={() => setQ("")}><X size={14} /></button>
+        <button className="btn-ghost !p-1.5" onClick={onClose} title="Закрыть поиск" aria-label="Закрыть поиск"><X size={14} /></button>
       </div>
       {q.trim().length >= 2 && data && (
         <div className="max-h-40 overflow-y-auto text-xs">

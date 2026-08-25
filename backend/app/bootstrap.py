@@ -104,16 +104,34 @@ def seed_roles(db) -> None:
     """Создать системные роли-шаблоны (tenant_id=NULL, is_system=True).
 
     При создании нового tenant'а эти шаблоны копируются в per-tenant роли.
+    Для существующих ролей (в т.ч. per-tenant с тем же именем) добавляем
+    новые permissions из шаблона, чтобы фичи, добавленные после провижининга,
+    становились доступны без ручной правки ролей.
     """
     all_perms = {p.code: p for p in db.query(Permission).all()}
 
     def ensure_role(name: str, description: str, codes: list[str]) -> Role:
         role = db.query(Role).filter(Role.name == name, Role.tenant_id.is_(None)).first()
+        target_perms = [all_perms[c] for c in codes if c in all_perms]
         if not role:
             role = Role(name=name, description=description, tenant_id=None, is_system=True)
-            role.permissions = [all_perms[c] for c in codes if c in all_perms]
+            role.permissions = target_perms
             db.add(role)
             db.flush()
+        else:
+            # Добавляем недостающие permissions — не убирая уже назначенные.
+            existing = {p.code for p in role.permissions}
+            missing = [p for p in target_perms if p.code not in existing]
+            if missing:
+                role.permissions = list(role.permissions) + missing
+
+        # Также синхронизируем per-tenant копии с тем же именем.
+        tenant_roles = db.query(Role).filter(Role.tenant_id.is_not(None), Role.name == name).all()
+        for tr in tenant_roles:
+            existing = {p.code for p in tr.permissions}
+            missing = [p for p in target_perms if p.code not in existing]
+            if missing:
+                tr.permissions = list(tr.permissions) + missing
         return role
 
     ensure_role(
@@ -130,7 +148,7 @@ def seed_roles(db) -> None:
             "comments.view", "comments.create", "comments.update_own",
             "files.upload", "files.download",
             "analytics.reports", "analytics.employees",
-            "leads.view", "leads.update", "leads.convert", "leads.manage_forms",
+            "leads.view", "leads.create", "leads.update", "leads.convert", "leads.manage_forms",
             "messenger.use", "messenger.create_group",
         ],
     )

@@ -62,11 +62,15 @@ export default function Register() {
         onSubmit={handleSubmit(submit)}
         className={clsx("card relative w-full max-w-sm p-8", error && "animate-shake")}
       >
-        <div className="mb-6 flex flex-col items-center gap-3">
+        <Link
+          to="/"
+          aria-label="На главную"
+          className="mb-6 flex flex-col items-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded-md"
+        >
           <LogoMark size={56} className="rounded-[14px]" />
           <Wordmark />
           <div className="text-sm text-neutral-500">Регистрация компании</div>
-        </div>
+        </Link>
 
         <label className="mb-3 block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">

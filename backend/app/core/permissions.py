@@ -52,6 +52,7 @@ PERMISSIONS: dict[str, list[tuple[str, str]]] = {
     ],
     "Лиды": [
         ("leads.view", "Просмотр лидов"),
+        ("leads.create", "Создание лидов вручную и импорт"),
         ("leads.update", "Изменение статуса и заметок"),
         ("leads.delete", "Удаление лидов"),
         ("leads.convert", "Конвертация в задачу"),

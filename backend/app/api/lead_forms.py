@@ -165,6 +165,24 @@ class LeadUpdate(BaseModel):
         return v
 
 
+class LeadCreate(BaseModel):
+    """Ручное создание лида менеджером."""
+    name: str = Field(min_length=1, max_length=200)
+    contact: str = Field(min_length=1, max_length=255)
+    note: Optional[str] = Field(default=None, max_length=5000)
+    status: str = "new"
+    source: str = Field(default="manual", max_length=50)
+    assignee_id: Optional[int] = None
+    custom_fields: Optional[dict[str, Any]] = None
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, v: str) -> str:
+        if v not in ALLOWED_LEAD_STATUSES:
+            raise ValueError(f"status must be one of {sorted(ALLOWED_LEAD_STATUSES)}")
+        return v
+
+
 class ConvertRequest(BaseModel):
     project_id: Optional[int] = None
     title: Optional[str] = None
@@ -451,6 +469,53 @@ def list_leads(
         "per_page": per_page,
         "pages": (total + per_page - 1) // per_page if per_page else 1,
     }
+
+
+@router.post("/tenant-leads", response_model=TenantLeadOut, status_code=201)
+def create_lead(
+    payload: LeadCreate,
+    ctx: TenantContext = Depends(require("leads.create")),
+    db: Session = Depends(get_db),
+):
+    """Ручное создание лида менеджером (без формы)."""
+    # Валидируем assignee_id — должен состоять в этом tenant'е
+    if payload.assignee_id is not None:
+        from ..models import TenantMembership
+        active = (
+            db.query(TenantMembership.id)
+            .join(User, User.id == TenantMembership.user_id)
+            .filter(
+                TenantMembership.tenant_id == ctx.tenant.id,
+                TenantMembership.user_id == payload.assignee_id,
+                User.is_active.is_(True),
+            )
+            .first()
+        )
+        if not active:
+            raise HTTPException(400, "Исполнитель не найден в этой компании")
+
+    lead = TenantLead(
+        tenant_id=ctx.tenant.id,
+        form_id=None,
+        name=payload.name.strip()[:200],
+        contact=payload.contact.strip()[:255],
+        custom_fields=payload.custom_fields or {},
+        note=(payload.note or "").strip() or None,
+        status=payload.status,
+        source=(payload.source or "manual").strip()[:50],
+        assignee_id=payload.assignee_id,
+    )
+    db.add(lead)
+    log_action(
+        db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
+        action="create", entity="lead", detail=lead.name,
+    )
+    db.commit()
+    db.refresh(lead)
+    publish_to_tenant(ctx.tenant.id, "lead.new", {
+        "id": lead.id, "name": lead.name, "contact": lead.contact, "form_id": None,
+    })
+    return _serialize_lead(lead)
 
 
 @router.get("/tenant-leads/{lead_id}", response_model=TenantLeadOut)

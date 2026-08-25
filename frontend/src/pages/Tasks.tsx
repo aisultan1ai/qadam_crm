@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, API_URL, extractApiError } from "@/api/client";
+import { api, extractApiError } from "@/api/client";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -293,8 +293,8 @@ export default function Tasks() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[180px] max-w-md">
+      <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
+        <div className="relative min-w-[180px] flex-1 md:max-w-xs">
           <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
           <input
             className="input pl-8"
@@ -305,10 +305,10 @@ export default function Tasks() {
           />
         </div>
 
-        {/* Десктоп: селекты в строке */}
-        <div className="hidden flex-wrap items-center gap-2 md:flex">
+        {/* Десктоп: селекты в одну строку */}
+        <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
           <select
-            className="input max-w-[180px]"
+            className="input min-w-0 flex-1"
             value={projectId}
             onChange={(e) => updateParam("project", e.target.value)}
             aria-label="Проект"
@@ -317,7 +317,7 @@ export default function Tasks() {
             {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <select
-            className="input max-w-[180px]"
+            className="input min-w-0 flex-1"
             value={assigneeId}
             onChange={(e) => updateParam("assignee", e.target.value)}
             aria-label="Исполнитель"
@@ -326,7 +326,7 @@ export default function Tasks() {
             {users?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           <select
-            className="input max-w-[160px]"
+            className="input min-w-0 flex-1"
             value={status}
             onChange={(e) => updateParam("status", e.target.value)}
             aria-label="Статус"
@@ -335,7 +335,7 @@ export default function Tasks() {
             {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
           <select
-            className="input max-w-[160px]"
+            className="input min-w-0 flex-1"
             value={priority}
             onChange={(e) => updateParam("priority", e.target.value)}
             aria-label="Приоритет"
@@ -1274,22 +1274,31 @@ function ExportExcelModal({ filters, onClose }: { filters: TaskFilters; onClose:
   const done = status?.state === "SUCCESS";
   const failed = status?.state === "FAILURE";
 
-  const download = () => {
+  const download = async () => {
     if (!status?.download_url) return;
-    const url = `${API_URL}${status.download_url}`;
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = status.filename || "tasks.xlsx";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setDownloaded(true);
+    try {
+      // Тянем через axios (withCredentials=true) — иначе кросс-ориджин
+      // `<a download>` игнорирует атрибут и уводит верхний фрейм на файл.
+      const res = await api.get(status.download_url, { responseType: "blob" });
+      const blobUrl = URL.createObjectURL(res.data as Blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = status.filename || "tasks.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5_000);
+      setDownloaded(true);
+    } catch (e) {
+      toast.error("Не удалось скачать файл", extractApiError(e).message);
+    }
   };
 
   useEffect(() => {
     if (done && status?.download_url && !downloaded) {
       download();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done, status?.download_url, downloaded]);
 
   const activeFilters = [

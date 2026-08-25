@@ -200,7 +200,7 @@ export default function Layout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 px-3 sm:gap-3 sm:px-4 dark:border-neutral-700/50 surface-blur">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-white/95 px-3 text-neutral-900 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:gap-3 sm:px-4 dark:border-neutral-200 dark:bg-white/95 dark:text-neutral-900 dark:supports-[backdrop-filter]:bg-white/80">
           <button
             className="btn-ghost !p-2 md:hidden"
             onClick={() => setMobileNavOpen(true)}
@@ -372,7 +372,7 @@ function Sidebar({
   return (
     <aside
       className={clsx(
-        "flex shrink-0 flex-col border-r border-neutral-200 bg-white/60 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-700/50 dark:bg-[#17171F]",
+        "flex shrink-0 flex-col border-r border-neutral-200 bg-white text-neutral-900 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-200 dark:bg-white dark:text-neutral-900",
         desktop
           ? clsx(
               "sticky top-0 hidden h-screen self-start overflow-hidden md:flex",
@@ -425,8 +425,8 @@ function Sidebar({
                   "relative flex items-center rounded-lg text-sm transition-all duration-[180ms] ease-out-soft",
                   showLabels ? "gap-2.5 px-3 py-2" : "justify-center px-2 py-2",
                   isActive
-                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/25 dark:text-brand-300"
-                    : "text-neutral-600 hover:translate-x-0.5 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
+                    ? "bg-brand-50 font-medium text-brand-700"
+                    : "text-neutral-700 hover:translate-x-0.5 hover:bg-neutral-100 hover:text-neutral-900",
                 )
               }
             >
@@ -451,7 +451,7 @@ function Sidebar({
 
       <div
         className={clsx(
-          "border-t border-neutral-200 dark:border-neutral-800",
+          "border-t border-neutral-200",
           showLabels ? "p-3" : "p-2",
         )}
       >
@@ -462,10 +462,8 @@ function Sidebar({
               onClick={onLinkClick}
               className={({ isActive }) =>
                 clsx(
-                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors",
-                  isActive
-                    ? "bg-neutral-100 dark:bg-neutral-800"
-                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors text-neutral-900",
+                  isActive ? "bg-neutral-100" : "hover:bg-neutral-100",
                 )
               }
               title="Открыть профиль"
@@ -476,7 +474,7 @@ function Sidebar({
                 <div className="truncate text-xs text-neutral-500">{me?.email}</div>
               </div>
             </NavLink>
-            <button className="btn-ghost !p-1.5" onClick={logout} title="Выйти">
+            <button className="btn-ghost !p-1.5 text-neutral-700 hover:text-neutral-900" onClick={logout} title="Выйти">
               <LogOut size={16} />
             </button>
           </div>
@@ -487,10 +485,8 @@ function Sidebar({
               onClick={onLinkClick}
               className={({ isActive }) =>
                 clsx(
-                  "flex items-center justify-center rounded-lg p-1 transition-colors",
-                  isActive
-                    ? "bg-neutral-100 dark:bg-neutral-800"
-                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                  "flex items-center justify-center rounded-lg p-1 transition-colors text-neutral-900",
+                  isActive ? "bg-neutral-100" : "hover:bg-neutral-100",
                 )
               }
               title={me?.name ? `${me.name} — открыть профиль` : "Открыть профиль"}

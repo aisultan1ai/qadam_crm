@@ -26,6 +26,7 @@ celery_app = Celery(
         "app.tasks.email",
         "app.tasks.reports",
         "app.tasks.imports",
+        "app.tasks.leads_import",
         "app.tasks.scheduled",
     ],
 )

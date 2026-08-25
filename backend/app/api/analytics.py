@@ -4,7 +4,7 @@ from sqlalchemy import func, case
 from datetime import datetime, timedelta, timezone
 
 from ..database import get_db
-from ..models import Task, User, ActivityLog, TenantMembership
+from ..models import Task, User, ActivityLog, TenantMembership, TenantLead
 from ..models.task import TaskStatus
 from ..core.cache import make_key, get_or_set_json
 from ..core.permissions import user_has
@@ -137,5 +137,105 @@ def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: 
                 "efficiency": efficiency,
             })
         return {"since": since.isoformat(), "employees": result}
+
+    return get_or_set_json(key, CACHE_TTL_SECONDS, _compute)
+
+
+@router.get("/leads")
+def leads_by_manager(ctx: TenantContext = Depends(require("analytics.reports")), db: Session = Depends(get_db)):
+    """Метрики по лидам в разрезе менеджеров за последние 30 дней.
+
+    Для каждого сотрудника tenant'а показываем сколько лидов на нём висит и
+    сколько по каким статусам. Конверсия = converted / total.
+
+    Лиды без assignee_id учитываются отдельной «виртуальной» записью
+    user_id=None, name='Не назначен' — чтобы owner видел объём неразобранного.
+    """
+    tenant_id = ctx.tenant.id
+    view_all = user_has(ctx.user, ["tasks.view_all"])
+    scope_uid = None if view_all else ctx.user.id
+    key = make_key(tenant_id, "leads_by_manager", "all" if view_all else f"u{scope_uid}")
+
+    def _compute():
+        now = datetime.now(timezone.utc)
+        since = now - timedelta(days=30)
+
+        base = db.query(TenantLead).filter(
+            TenantLead.tenant_id == tenant_id,
+            TenantLead.created_at >= since,
+        )
+        if scope_uid is not None:
+            base = base.filter(TenantLead.assignee_id == scope_uid)
+
+        # Все члены tenant'а — чтобы вывести даже тех, у кого 0 лидов.
+        members = (
+            db.query(User.id, User.name, User.email)
+            .join(TenantMembership, TenantMembership.user_id == User.id)
+            .filter(TenantMembership.tenant_id == tenant_id)
+        )
+        if scope_uid is not None:
+            members = members.filter(User.id == scope_uid)
+        members_rows = members.all()
+
+        # Aggregate: assignee_id → {status → count}
+        rows = (
+            base.with_entities(
+                TenantLead.assignee_id,
+                TenantLead.status,
+                func.count(TenantLead.id).label("cnt"),
+            )
+            .group_by(TenantLead.assignee_id, TenantLead.status)
+            .all()
+        )
+        by_user: dict[int | None, dict[str, int]] = {}
+        for assignee_id, status_, cnt in rows:
+            bucket = by_user.setdefault(assignee_id, {})
+            bucket[status_] = int(cnt)
+
+        def _pack(user_id, name, email):
+            b = by_user.get(user_id, {})
+            new_ = int(b.get("new", 0))
+            contacted = int(b.get("contacted", 0))
+            qualified = int(b.get("qualified", 0))
+            converted = int(b.get("converted", 0))
+            rejected = int(b.get("rejected", 0))
+            total = new_ + contacted + qualified + converted + rejected
+            # «Работали с»: любой шаг после new — уже касание.
+            worked = contacted + qualified + converted + rejected
+            conversion = round((converted / total) * 100) if total else 0
+            return {
+                "user_id": user_id,
+                "name": name,
+                "email": email,
+                "total": total,
+                "new": new_,
+                "contacted": contacted,
+                "qualified": qualified,
+                "converted": converted,
+                "rejected": rejected,
+                "worked": worked,
+                "conversion": conversion,
+            }
+
+        result = [_pack(u.id, u.name, u.email) for u in members_rows]
+
+        # «Неразобранные» лиды (assignee_id is null) — только для view_all,
+        # т.к. в scope=own их всё равно не будет.
+        if scope_uid is None and by_user.get(None):
+            result.append(_pack(None, "Не назначен", None))
+
+        # Общий summary для карточек-KPI сверху.
+        totals = {
+            "total": sum(r["total"] for r in result),
+            "new": sum(r["new"] for r in result),
+            "contacted": sum(r["contacted"] for r in result),
+            "qualified": sum(r["qualified"] for r in result),
+            "converted": sum(r["converted"] for r in result),
+            "rejected": sum(r["rejected"] for r in result),
+        }
+        totals["conversion"] = (
+            round((totals["converted"] / totals["total"]) * 100) if totals["total"] else 0
+        )
+        return {"since": since.isoformat(), "totals": totals, "managers": result}
 
     return get_or_set_json(key, CACHE_TTL_SECONDS, _compute)

@@ -1,4 +1,4 @@
-"""API запуска фонового импорта CSV и опроса статуса."""
+"""API запуска фонового импорта CSV/XLSX и опроса статуса."""
 from __future__ import annotations
 
 from celery.result import AsyncResult
@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from ..core.celery_app import celery_app
 from ..core.redis_client import get_redis
 from ..tasks.imports import import_tasks_csv
-from .deps import TenantContext, require
+from ..tasks.leads_import import import_leads
+from .deps import TenantContext, get_current_context, require
 
 router = APIRouter(prefix="/api/imports", tags=["imports"])
 
 
-MAX_CSV_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+LEADS_ALLOWED_EXT = {"csv", "xlsx"}
 
 
 @router.post("/tasks")
@@ -21,7 +23,7 @@ async def start_tasks_import(
     ctx: TenantContext = Depends(require("tasks.create")),
 ):
     raw = await file.read()
-    if len(raw) > MAX_CSV_BYTES:
+    if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "CSV слишком большой")
 
     try:
@@ -40,11 +42,37 @@ async def start_tasks_import(
     return {"job_id": async_result.id, "state": async_result.state}
 
 
+@router.post("/leads")
+async def start_leads_import(
+    file: UploadFile = File(...),
+    ctx: TenantContext = Depends(require("leads.create")),
+):
+    """Импорт лидов из CSV или XLSX."""
+    name = (file.filename or "").lower()
+    ext = name.rsplit(".", 1)[-1] if "." in name else ""
+    if ext not in LEADS_ALLOWED_EXT:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Поддерживаются файлы .csv и .xlsx")
+
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Файл слишком большой (макс 5 МБ)")
+
+    async_result = import_leads.delay(
+        tenant_id=ctx.tenant.id,
+        filename=file.filename or "leads.xlsx",
+        raw=raw,
+        user_id=ctx.user.id,
+    )
+    return {"job_id": async_result.id, "state": async_result.state}
+
+
 @router.get("/{job_id}")
 def get_import_status(
     job_id: str,
-    ctx: TenantContext = Depends(require("tasks.create")),
+    ctx: TenantContext = Depends(get_current_context),
 ):
+    """Опрос статуса импорта. Доступен любому авторизованному юзеру
+    с активным tenant'ом; результат отдаём только владельцу tenant'а."""
     res = AsyncResult(job_id, app=celery_app)
     payload: dict = {"job_id": job_id, "state": res.state}
 

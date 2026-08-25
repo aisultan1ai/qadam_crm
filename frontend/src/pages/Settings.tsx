@@ -8,7 +8,7 @@ import { Loader, Modal } from "@/components/ui";
 import {
   Plus, Copy, Trash2, Save, CreditCard, Palette, UserPlus, Mail, Check,
   Clock, XCircle, RefreshCw, Users, HardDrive, Zap, Sparkles, Shield,
-  GripVertical, Eye,
+  GripVertical, Eye, Phone, Hash, AlignLeft, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
@@ -1305,6 +1305,7 @@ function LeadFormEditor({
   const toast = useToast();
   const [draft, setDraft] = useState<LeadFormT>(form);
   const [dirty, setDirty] = useState(false);
+  const [addFieldOpen, setAddFieldOpen] = useState(false);
 
   useEffect(() => {
     setDraft(form);
@@ -1344,12 +1345,20 @@ function LeadFormEditor({
     setDirty(true);
   };
 
-  const addField = () => {
+  const addField = (spec: { label: string; key: string; type: FormFieldT["type"]; required: boolean }) => {
+    // Гарантируем уникальность ключа.
+    const existing = new Set(draft.fields_config.map((f) => f.key));
+    let key = spec.key;
+    if (existing.has(key)) {
+      let n = 2;
+      while (existing.has(`${spec.key}_${n}`)) n += 1;
+      key = `${spec.key}_${n}`;
+    }
     setDraft((d) => ({
       ...d,
       fields_config: [
         ...d.fields_config,
-        { key: `field_${d.fields_config.length + 1}`, label: "Новое поле", type: "text", required: false },
+        { key, label: spec.label, type: spec.type, required: spec.required },
       ],
     }));
     setDirty(true);
@@ -1373,6 +1382,20 @@ function LeadFormEditor({
 
   const embedCode = `<script src="${window.location.origin}/embed.js" async></script>\n<div data-qadam-form="${tenantSlug}/${form.id}"></div>`;
   const directLink = `${window.location.origin}/f/${tenantSlug}/${form.id}`;
+  const apiEndpoint = `${window.location.origin}/api/f/${tenantSlug}/${form.id}`;
+  const apiPayload = draft.fields_config.reduce<Record<string, string>>((acc, f) => {
+    acc[f.key] = f.type === "email"
+      ? "you@company.com"
+      : f.type === "phone"
+      ? "+7 700 000 00 00"
+      : f.type === "number"
+      ? "42"
+      : `<${f.label}>`;
+    return acc;
+  }, {});
+  const apiCurl = `curl -X POST '${apiEndpoint}' \\
+  -H 'Content-Type: application/json' \\
+  -d '${JSON.stringify({ payload: Object.keys(apiPayload).length ? apiPayload : { name: "Иван", contact: "+7 700 000 00 00" } })}'`;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
@@ -1444,7 +1467,7 @@ function LeadFormEditor({
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Поля формы</span>
-            <button className="btn-ghost !py-1 text-xs" onClick={addField}>
+            <button className="btn-ghost !py-1 text-xs" onClick={() => setAddFieldOpen(true)}>
               <Plus size={12} className="mr-1" /> Поле
             </button>
           </div>
@@ -1568,37 +1591,313 @@ function LeadFormEditor({
             <Copy size={12} className="mr-1" /> Скопировать
           </button>
         </div>
+
+        <div className="card p-4">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">API endpoint</div>
+          <p className="mb-2 text-[11px] text-neutral-500">
+            Если у вас уже есть своя форма, шлите заявки прямо на этот URL — авторизация не нужна.
+          </p>
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">POST</div>
+          <div className="flex gap-1">
+            <input className="input flex-1 font-mono text-[11px]" readOnly value={apiEndpoint} onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <button
+              className="btn-ghost !px-2"
+              title="Скопировать URL"
+              onClick={() => {
+                navigator.clipboard.writeText(apiEndpoint);
+                toast.success("URL скопирован");
+              }}
+            >
+              <Copy size={13} />
+            </button>
+          </div>
+
+          <div className="mt-3 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+            Пример запроса (curl)
+          </div>
+          <textarea
+            className="input min-h-[110px] font-mono text-[10.5px] leading-snug"
+            readOnly
+            value={apiCurl}
+            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+          />
+          <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
+            <span>Ответ: <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-800">{`{"message":"..."}`}</code></span>
+            <button
+              className="btn-ghost !py-1 text-xs"
+              onClick={() => {
+                navigator.clipboard.writeText(apiCurl);
+                toast.success("curl скопирован");
+              }}
+            >
+              <Copy size={12} className="mr-1" /> Скопировать
+            </button>
+          </div>
+          <div className="mt-2 rounded-md bg-neutral-50 p-2 text-[11px] text-neutral-500 dark:bg-neutral-800/40">
+            <b>Совет:</b> добавьте скрытое поле <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-800">website_url</code> —
+            если бот заполнит его, заявка тихо отбрасывается (honeypot).
+          </div>
+        </div>
       </div>
+
+      {addFieldOpen && (
+        <AddFieldModal
+          existingKeys={draft.fields_config.map((f) => f.key)}
+          onClose={() => setAddFieldOpen(false)}
+          onAdd={(spec) => {
+            addField(spec);
+            setAddFieldOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function FormPreview({ form }: { form: LeadFormT }) {
+function slugifyKey(label: string): string {
+  // Транслит кириллицы → латиница, потом snake_case, отсекаем цифру в начале.
+  const map: Record<string, string> = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+    и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+    с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh",
+    щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  };
+  const translit = label
+    .toLowerCase()
+    .split("")
+    .map((c) => (c in map ? map[c] : c))
+    .join("");
+  let s = translit.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (/^[0-9]/.test(s)) s = `f_${s}`;
+  return s.slice(0, 50) || "field";
+}
+
+function AddFieldModal({
+  onClose,
+  onAdd,
+  existingKeys,
+}: {
+  onClose: () => void;
+  onAdd: (spec: { label: string; key: string; type: FormFieldT["type"]; required: boolean }) => void;
+  existingKeys: string[];
+}) {
+  const [label, setLabel] = useState("");
+  const [type, setType] = useState<FormFieldT["type"]>("text");
+  const [required, setRequired] = useState(false);
+  const [keyManual, setKeyManual] = useState<string | null>(null);
+
+  // Ключ по умолчанию — авто-слаг с label, но если юзер вручную правил — не перезаписываем.
+  const key = keyManual ?? (label ? slugifyKey(label) : "");
+  const keyValid = /^[a-z][a-z0-9_]*$/.test(key);
+  const collision = existingKeys.includes(key);
+  const canSubmit = label.trim().length > 0 && key.length > 0 && keyValid;
+
   return (
-    <div className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="mb-1 text-base font-medium">{form.title}</div>
-      {form.subtitle && <div className="mb-3 text-xs text-neutral-500">{form.subtitle}</div>}
-      <div className="space-y-2">
-        {form.fields_config.map((f) => (
-          <div key={f.key}>
-            <label className="mb-0.5 block text-[11px] font-medium text-neutral-500">
-              {f.label} {f.required && <span className="text-rose-500">*</span>}
-            </label>
-            {f.type === "textarea" ? (
-              <textarea className="input min-h-[60px] text-xs" placeholder={f.placeholder || ""} readOnly />
-            ) : (
-              <input className="input text-xs" placeholder={f.placeholder || ""} readOnly />
+    <Modal open onClose={onClose} title="Новое поле" size="sm">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!canSubmit) return;
+          onAdd({ label: label.trim(), key, type, required });
+        }}
+        className="space-y-3"
+      >
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-500">Название поля *</span>
+          <input
+            className="input"
+            autoFocus
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Например: Название компании"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-500">Тип поля</span>
+          <select className="input" value={type} onChange={(e) => setType(e.target.value as FormFieldT["type"])}>
+            {FIELD_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="block">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium text-neutral-500">Ключ (латиница)</span>
+            {keyManual !== null && (
+              <button type="button" className="text-[11px] text-brand-600 hover:underline" onClick={() => setKeyManual(null)}>
+                Авто из названия
+              </button>
             )}
           </div>
-        ))}
+          <input
+            className="input font-mono text-xs"
+            value={key}
+            onChange={(e) => setKeyManual(e.target.value.toLowerCase())}
+            placeholder="company_name"
+          />
+          {!keyValid && key.length > 0 && (
+            <div className="mt-1 text-[11px] text-rose-500">
+              Ключ должен начинаться с латинской буквы и содержать только a-z, 0-9, _
+            </div>
+          )}
+          {keyValid && collision && (
+            <div className="mt-1 text-[11px] text-amber-600">
+              Такой ключ уже есть — при добавлении будет суффикс _2, _3 и т.д.
+            </div>
+          )}
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+          Обязательное поле
+        </label>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button type="submit" className="btn-primary" disabled={!canSubmit}>
+            <Plus size={13} /> Добавить
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function fieldIcon(type: FormFieldT["type"]) {
+  switch (type) {
+    case "email": return <Mail size={13} className="text-neutral-400" />;
+    case "phone": return <Phone size={13} className="text-neutral-400" />;
+    case "number": return <Hash size={13} className="text-neutral-400" />;
+    case "textarea": return <AlignLeft size={13} className="text-neutral-400" />;
+    case "select": return <ChevronDown size={13} className="text-neutral-400" />;
+    default: return null;
+  }
+}
+
+function fieldPlaceholder(f: FormFieldT): string {
+  if (f.placeholder) return f.placeholder;
+  switch (f.type) {
+    case "email": return "you@company.com";
+    case "phone": return "+7 700 000 00 00";
+    case "number": return "0";
+    case "textarea": return "Расскажите о задаче…";
+    case "select": return "Выберите…";
+    default: return f.label;
+  }
+}
+
+function FormPreview({ form }: { form: LeadFormT }) {
+  const [tab, setTab] = useState<"form" | "success">("form");
+  const color = form.brand_color || "#0f67fd";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex overflow-hidden rounded-lg border border-neutral-200 text-xs dark:border-neutral-700">
+        <button
+          type="button"
+          onClick={() => setTab("form")}
+          className={clsx("flex-1 px-2 py-1", tab === "form" ? "bg-neutral-100 dark:bg-neutral-800" : "text-neutral-500")}
+        >
+          Форма
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("success")}
+          className={clsx("flex-1 px-2 py-1", tab === "success" ? "bg-neutral-100 dark:bg-neutral-800" : "text-neutral-500")}
+        >
+          После отправки
+        </button>
       </div>
-      <button
-        type="button"
-        className="mt-3 w-full rounded-lg py-2 text-xs font-medium text-white"
-        style={{ background: form.brand_color }}
+
+      <div
+        className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-[0_10px_28px_-14px_rgba(23,23,31,0.18)] dark:border-neutral-700 dark:bg-neutral-900"
       >
-        {form.submit_label}
-      </button>
+        {/* Цветной хедер-бэйдж */}
+        <div
+          className="h-1.5 w-full"
+          style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }}
+        />
+        {tab === "form" ? (
+          <div className="p-4">
+            <div className="mb-0.5 text-[15px] font-semibold leading-tight text-neutral-900 dark:text-white">
+              {form.title || "Оставьте заявку"}
+            </div>
+            {form.subtitle && (
+              <div className="mb-3 text-[11px] leading-snug text-neutral-500">{form.subtitle}</div>
+            )}
+            <div className="space-y-2.5">
+              {form.fields_config.length === 0 && (
+                <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-center text-[11px] text-neutral-400 dark:border-neutral-700">
+                  Добавьте хотя бы одно поле
+                </div>
+              )}
+              {form.fields_config.map((f) => (
+                <div key={f.key}>
+                  <label className="mb-1 block text-[10.5px] font-medium text-neutral-600 dark:text-neutral-400">
+                    {f.label} {f.required && <span className="text-rose-500">*</span>}
+                  </label>
+                  <div className="relative">
+                    {fieldIcon(f.type) && (
+                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2">
+                        {fieldIcon(f.type)}
+                      </span>
+                    )}
+                    {f.type === "textarea" ? (
+                      <textarea
+                        className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-[11.5px] leading-snug placeholder:text-neutral-400 dark:border-neutral-700 dark:bg-neutral-800/40"
+                        placeholder={fieldPlaceholder(f)}
+                        rows={2}
+                        readOnly
+                      />
+                    ) : f.type === "select" ? (
+                      <div
+                        className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11.5px] text-neutral-400 dark:border-neutral-700 dark:bg-neutral-800/40"
+                      >
+                        {fieldPlaceholder(f)}
+                        <ChevronDown size={13} className="text-neutral-400" />
+                      </div>
+                    ) : (
+                      <input
+                        className={clsx(
+                          "w-full rounded-lg border border-neutral-200 bg-neutral-50 py-1.5 text-[11.5px] placeholder:text-neutral-400 dark:border-neutral-700 dark:bg-neutral-800/40",
+                          fieldIcon(f.type) ? "pl-7 pr-2.5" : "px-2.5",
+                        )}
+                        placeholder={fieldPlaceholder(f)}
+                        readOnly
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="mt-3.5 w-full rounded-lg py-2 text-[12px] font-medium text-white shadow-[0_6px_18px_-8px_rgba(23,23,31,0.35)] transition-transform active:scale-[0.99]"
+              style={{ background: `linear-gradient(180deg, ${color}, ${color}dd)` }}
+            >
+              {form.submit_label || "Отправить"}
+            </button>
+            <div className="mt-2 text-center text-[10px] text-neutral-400">
+              powered by Qadam
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 p-6 text-center">
+            <div
+              className="grid h-11 w-11 place-items-center rounded-full"
+              style={{ background: `${color}22`, color }}
+            >
+              <Check size={22} />
+            </div>
+            <div className="text-sm font-semibold">Заявка отправлена</div>
+            <div className="text-xs leading-snug text-neutral-500">
+              {form.success_message || "Спасибо! Мы свяжемся с вами."}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
