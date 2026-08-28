@@ -226,21 +226,21 @@ function NavBar() {
           maxWidth: scrolled ? 1000 : 1140,
           height: scrolled ? 58 : 64,
           padding: scrolled ? "0 8px 0 22px" : "0 12px 0 26px",
-          // Тёмный pill всегда — читается и на светлых, и на тёмных секциях.
-          background: "rgba(15,15,20,0.72)",
+          // Светлый прозрачный pill — сочетается со светлым hero и платформой.
+          background: "rgba(255,255,255,0.85)",
           backdropFilter: "saturate(180%) blur(18px)",
           WebkitBackdropFilter: "saturate(180%) blur(18px)",
-          border: "1px solid rgba(255,255,255,0.08)",
+          border: "1px solid rgba(10,10,18,0.08)",
           borderRadius: 999,
           boxShadow: scrolled
-            ? "0 14px 34px -14px rgba(10,10,18,0.45), 0 2px 6px -2px rgba(10,10,18,0.20)"
-            : "0 6px 20px -10px rgba(10,10,18,0.30)",
+            ? "0 14px 34px -14px rgba(10,10,18,0.15), 0 2px 6px -2px rgba(10,10,18,0.08)"
+            : "0 6px 20px -10px rgba(10,10,18,0.10)",
         }}
       >
         <Link to="/" className="flex items-center gap-2">
-          <LogoMark size={26} className="!text-white" />
-          <span className="text-[17px] font-bold tracking-tight text-white">
-            Qadam<span style={{ color: "#CBB8FF" }}>.</span>
+          <LogoMark size={26} className="!text-[#0A0A12]" />
+          <span className="text-[17px] font-bold tracking-tight" style={{ color: "#0A0A12" }}>
+            Qadam<span style={{ color: "#7C5CFF" }}>.</span>
           </span>
         </Link>
         <div className="qadam-hide-mobile flex items-center gap-7">
@@ -248,7 +248,10 @@ function NavBar() {
             <a
               key={l.href}
               href={l.href}
-              className="text-sm font-medium text-white/75 transition-colors hover:text-white"
+              className="text-sm font-medium transition-colors"
+              style={{ color: "#3F4457" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#0A0A12")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#3F4457")}
             >
               {l.label}
             </a>
@@ -257,7 +260,16 @@ function NavBar() {
         <div className="flex items-center gap-1">
           <Link
             to="/login"
-            className="hidden rounded-full px-4 py-1.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/10 hover:text-white sm:inline-flex"
+            className="hidden rounded-full px-4 py-1.5 text-sm font-medium transition-colors sm:inline-flex"
+            style={{ color: "#3F4457" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(10,10,18,0.05)";
+              e.currentTarget.style.color = "#0A0A12";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "#3F4457";
+            }}
           >
             Войти
           </Link>
@@ -284,10 +296,12 @@ function NavBar() {
 function Hero() {
   return (
     <section
-      className="qadam-section-dark relative overflow-hidden pt-[140px] pb-[100px] text-center"
-      style={{ background: "#0F0F14" }}
+      className="relative overflow-hidden pt-[140px] pb-[100px] text-center"
+      style={{
+        background: "linear-gradient(180deg, #FAFAFA 0%, #F3EFFF 100%)",
+      }}
     >
-      {/* Ambient blobs */}
+      {/* Ambient violet blobs — светлые полупрозрачные, для мягкого glow */}
       <div
         className="qadam-blob qadam-blob-drift"
         style={{
@@ -296,6 +310,7 @@ function Hero() {
           width: 400,
           height: 400,
           background: "#7C5CFF",
+          opacity: 0.15,
         }}
       />
       <div
@@ -306,19 +321,24 @@ function Hero() {
           width: 340,
           height: 340,
           background: "#6B47F5",
+          opacity: 0.12,
           animationDelay: "-8s",
         }}
       />
 
       <div className="qadam-container relative">
         <h1
-          className="mx-auto max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl lg:text-[72px]"
-          style={{ textWrap: "balance" as CSSProperties["textWrap"], letterSpacing: "-0.03em" }}
+          className="mx-auto max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-[72px]"
+          style={{
+            color: "#0A0A12",
+            textWrap: "balance" as CSSProperties["textWrap"],
+            letterSpacing: "-0.03em",
+          }}
         >
           Порядок в задачах <br />
-          <span style={{ color: "#CBB8FF" }}>с первого дня.</span>
+          <span style={{ color: "#7C5CFF" }}>с первого дня.</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/70 sm:text-lg">
+        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed sm:text-lg" style={{ color: "#52596E" }}>
           CRM для команд, которые устали от Excel и десяти вкладок. Задачи, мессенджер, лиды и
           аналитика — в одном спокойном месте.
         </p>
@@ -328,15 +348,19 @@ function Hero() {
             className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-medium text-white transition-transform hover:scale-[1.02]"
             style={{
               background: "#7C5CFF",
-              boxShadow: "0 14px 34px -12px rgba(124,92,255,0.65)",
+              boxShadow: "0 14px 34px -12px rgba(124,92,255,0.55)",
             }}
           >
             Начать бесплатно <ArrowRight size={16} />
           </Link>
           <a
             href="#pricing"
-            className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
-            style={{ border: "1px solid rgba(255,255,255,0.2)" }}
+            className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-medium transition-colors"
+            style={{
+              color: "#0A0A12",
+              border: "1px solid rgba(10,10,18,0.15)",
+              background: "rgba(255,255,255,0.6)",
+            }}
           >
             Смотреть цены
           </a>
@@ -345,8 +369,12 @@ function Hero() {
         {/* App peek */}
         <div className="qadam-reveal mx-auto mt-16 max-w-5xl">
           <div
-            className="overflow-hidden rounded-t-2xl border border-white/10 shadow-2xl"
-            style={{ background: "#17171F" }}
+            className="overflow-hidden rounded-t-2xl"
+            style={{
+              background: "#ffffff",
+              border: "1px solid rgba(10,10,18,0.08)",
+              boxShadow: "0 30px 80px -30px rgba(10,10,18,0.25)",
+            }}
           >
             <DashboardPeek />
           </div>
@@ -359,29 +387,39 @@ function Hero() {
 function DashboardPeek() {
   return (
     <div style={{ padding: "18px 20px 0" }}>
-      <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+      <div
+        className="flex items-center gap-3 border-b pb-3"
+        style={{ borderColor: "rgba(10,10,18,0.06)" }}
+      >
         <div className="flex gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#E4DBFF" }} />
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#E4DBFF" }} />
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#E4DBFF" }} />
         </div>
-        <div className="ml-4 flex items-center gap-2 text-xs text-white/50">
-          <LogoMark size={16} className="!text-white" />
+        <div className="ml-4 flex items-center gap-2 text-xs" style={{ color: "#6B7280" }}>
+          <LogoMark size={16} className="!text-[#0A0A12]" />
           <span>Qadam CRM</span>
         </div>
       </div>
       <div className="grid grid-cols-[220px_1fr] gap-4 pt-4 text-left">
-        <aside className="rounded-lg bg-white/[0.03] p-3 text-xs">
-          <div className="mb-3 text-[10px] uppercase tracking-wide text-white/40">Меню</div>
+        <aside
+          className="rounded-lg p-3 text-xs"
+          style={{ background: "#F7F7FA", border: "1px solid rgba(10,10,18,0.04)" }}
+        >
+          <div className="mb-3 text-[10px] uppercase tracking-wide" style={{ color: "#9CA3AF" }}>
+            Меню
+          </div>
           {["Панель", "Проекты", "Задачи", "Мессенджер", "Лиды", "Аналитика"].map((l, i) => (
             <div
               key={l}
-              className={
-                "mb-1 flex items-center gap-2 rounded px-2 py-1.5 " +
-                (i === 0 ? "bg-[#7C5CFF]/20 text-white" : "text-white/60")
+              className="mb-1 flex items-center gap-2 rounded px-2 py-1.5"
+              style={
+                i === 0
+                  ? { background: "rgba(124,92,255,0.12)", color: "#5A38DB", fontWeight: 500 }
+                  : { color: "#52596E" }
               }
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-[#7C5CFF]" />
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#7C5CFF" }} />
               {l}
             </div>
           ))}
@@ -392,14 +430,21 @@ function DashboardPeek() {
             { label: "В работе", val: "42", delta: "" },
             { label: "Просрочено", val: "3", delta: "" },
           ].map((s) => (
-            <div key={s.label} className="rounded-lg bg-white/[0.03] p-3">
-              <div className="text-[11px] text-white/50">{s.label}</div>
-              <div className="mt-1 text-xl font-semibold text-white">{s.val}</div>
-              {s.delta && <div className="mt-1 text-[10px] text-[#10B981]">{s.delta}</div>}
+            <div
+              key={s.label}
+              className="rounded-lg p-3"
+              style={{ background: "#F7F7FA", border: "1px solid rgba(10,10,18,0.04)" }}
+            >
+              <div className="text-[11px]" style={{ color: "#6B7280" }}>{s.label}</div>
+              <div className="mt-1 text-xl font-semibold" style={{ color: "#0A0A12" }}>{s.val}</div>
+              {s.delta && <div className="mt-1 text-[10px]" style={{ color: "#10B981" }}>{s.delta}</div>}
             </div>
           ))}
-          <div className="col-span-3 rounded-lg bg-white/[0.03] p-3">
-            <div className="mb-2 text-[11px] text-white/50">Динамика за неделю</div>
+          <div
+            className="col-span-3 rounded-lg p-3"
+            style={{ background: "#F7F7FA", border: "1px solid rgba(10,10,18,0.04)" }}
+          >
+            <div className="mb-2 text-[11px]" style={{ color: "#6B7280" }}>Динамика за неделю</div>
             <ChartPeek />
           </div>
         </div>
@@ -416,7 +461,7 @@ function ChartPeek() {
         <div
           key={i}
           className="flex-1 rounded-t"
-          style={{ height: `${h}%`, background: i === 3 ? "#7C5CFF" : "#7C5CFF80" }}
+          style={{ height: `${h}%`, background: i === 3 ? "#7C5CFF" : "rgba(124,92,255,0.35)" }}
         />
       ))}
     </div>
@@ -561,38 +606,40 @@ function SuccessStories() {
   const chartColor = tab === "with" ? "#10B981" : "#EF4444";
   const value = tab === "with" ? "+45,6%" : "−45,6%";
   return (
-    <section
-      className="qadam-section-dark qadam-reveal py-[120px]"
-      style={{ background: "#0F0F14" }}
-    >
+    <section className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
       <div className="qadam-container">
         <div className="mb-10 max-w-2xl">
           <div className="qadam-eyebrow mb-3">Продуктивность команды</div>
           <h2
-            className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl md:text-[42px]"
-            style={{ letterSpacing: "-0.025em" }}
+            className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
+            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
           >
             Меньше рутины — больше результата
           </h2>
         </div>
 
-        <div className="mb-8 inline-flex gap-1 rounded-full p-1" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div
+          className="mb-8 inline-flex gap-1 rounded-full p-1"
+          style={{ background: "rgba(10,10,18,0.05)" }}
+        >
           <button
-            className={
-              "rounded-full px-5 py-2 text-sm font-medium transition-colors " +
-              (tab === "with" ? "text-[#0F0F14]" : "text-white/70 hover:text-white")
+            className="rounded-full px-5 py-2 text-sm font-medium transition-colors"
+            style={
+              tab === "with"
+                ? { background: "#7C5CFF", color: "#ffffff", boxShadow: "0 4px 12px -4px rgba(124,92,255,0.5)" }
+                : { color: "#52596E" }
             }
-            style={tab === "with" ? { background: "#CBB8FF" } : {}}
             onClick={() => setTab("with")}
           >
             С Qadam CRM
           </button>
           <button
-            className={
-              "rounded-full px-5 py-2 text-sm font-medium transition-colors " +
-              (tab === "without" ? "text-[#0F0F14]" : "text-white/70 hover:text-white")
+            className="rounded-full px-5 py-2 text-sm font-medium transition-colors"
+            style={
+              tab === "without"
+                ? { background: "#0A0A12", color: "#ffffff" }
+                : { color: "#52596E" }
             }
-            style={tab === "without" ? { background: "#CBB8FF" } : {}}
             onClick={() => setTab("without")}
           >
             Без Qadam CRM
@@ -602,10 +649,10 @@ function SuccessStories() {
         <div className="grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-start">
           <ul className="space-y-4">
             {items.map((t) => (
-              <li key={t} className="flex items-start gap-3 text-white/85">
+              <li key={t} className="flex items-start gap-3" style={{ color: "#3F4457" }}>
                 <span
                   className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                  style={{ background: tab === "with" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)" }}
+                  style={{ background: tab === "with" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.12)" }}
                 >
                   {tab === "with" ? (
                     <Check size={13} className="text-[#10B981]" />
@@ -619,13 +666,17 @@ function SuccessStories() {
           </ul>
           <div
             className="rounded-2xl p-6"
-            style={{ background: "#17171F", border: "1px solid rgba(255,255,255,0.08)" }}
+            style={{
+              background: "#F7F7FA",
+              border: "1px solid rgba(10,10,18,0.06)",
+              boxShadow: "0 4px 14px -8px rgba(10,10,18,0.08)",
+            }}
           >
             <div className="mb-2 flex items-center justify-between text-xs">
-              <span className="text-white/50">Продуктивность команды</span>
+              <span style={{ color: "#6B7280" }}>Продуктивность команды</span>
               <span style={{ color: chartColor }}>{value}</span>
             </div>
-            <div className="mb-3 text-2xl font-semibold text-white">
+            <div className="mb-3 text-2xl font-semibold" style={{ color: "#0A0A12" }}>
               {tab === "with" ? "85 211" : "25 780"}
             </div>
             <FakeChart color={chartColor} up={tab === "with"} />
@@ -666,20 +717,17 @@ function FakeChart({ color, up }: { color: string; up: boolean }) {
 
 function Testimonials() {
   return (
-    <section
-      className="qadam-section-dark qadam-reveal py-[120px]"
-      style={{ background: "#0F0F14" }}
-    >
+    <section className="qadam-reveal py-[120px]" style={{ background: "#F7F7FA" }}>
       <div className="qadam-container">
         <div className="mb-14 text-center">
           <div className="qadam-eyebrow mb-3">Отзывы</div>
           <h2
-            className="mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl md:text-[42px]"
-            style={{ letterSpacing: "-0.025em" }}
+            className="mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
+            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
           >
             Что говорят пользователи
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-base text-white/60">
+          <p className="mx-auto mt-4 max-w-lg text-base" style={{ color: "#52596E" }}>
             Команды разных размеров — от 5 до 200 человек — уже упорядочили работу.
           </p>
         </div>
@@ -688,20 +736,27 @@ function Testimonials() {
           {TESTIMONIALS.map((t, i) => (
             <div
               key={i}
-              className="rounded-2xl p-6"
-              style={{ background: "#17171F", border: "1px solid rgba(255,255,255,0.08)" }}
+              className="rounded-2xl p-6 transition-all hover:-translate-y-1"
+              style={{
+                background: "#ffffff",
+                border: "1px solid rgba(10,10,18,0.06)",
+                boxShadow: "0 4px 14px -8px rgba(10,10,18,0.08)",
+              }}
             >
-              <p className="text-[15px] leading-relaxed text-white/85">"{t.quote}"</p>
-              <div className="mt-6 flex items-center gap-3 border-t border-white/5 pt-4">
+              <p className="text-[15px] leading-relaxed" style={{ color: "#3F4457" }}>"{t.quote}"</p>
+              <div
+                className="mt-6 flex items-center gap-3 border-t pt-4"
+                style={{ borderColor: "rgba(10,10,18,0.06)" }}
+              >
                 <div
                   className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white"
-                  style={{ background: `hsl(${(i * 60) % 360}, 60%, 55%)` }}
+                  style={{ background: `hsl(${255 + i * 15}, 65%, 65%)` }}
                 >
                   {t.name.split(" ").map((s) => s[0]).slice(0, 2).join("")}
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-white">{t.name}</div>
-                  <div className="text-xs text-white/50">{t.role}</div>
+                  <div className="text-sm font-semibold" style={{ color: "#0A0A12" }}>{t.name}</div>
+                  <div className="text-xs" style={{ color: "#6B7280" }}>{t.role}</div>
                 </div>
               </div>
             </div>
@@ -719,7 +774,7 @@ function Testimonials() {
 function Pricing() {
   const [yearly, setYearly] = useState(false);
   return (
-    <section id="pricing" className="qadam-reveal py-[120px]" style={{ background: "#F7F7FA" }}>
+    <section id="pricing" className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
       <div className="qadam-container">
         <div className="mb-8 text-center">
           <div className="qadam-eyebrow mb-3">Тарифы</div>
@@ -924,8 +979,11 @@ function CTASection() {
     <section id="cta" className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
       <div className="qadam-container">
         <div
-          className="qadam-section-dark relative overflow-hidden rounded-3xl p-10 md:p-14"
-          style={{ background: "#0F0F14" }}
+          className="relative overflow-hidden rounded-3xl p-10 md:p-14"
+          style={{
+            background: "linear-gradient(135deg, #F3EFFF 0%, #FAFAFA 100%)",
+            border: "1px solid rgba(124,92,255,0.15)",
+          }}
         >
           <div
             className="qadam-blob qadam-blob-drift"
@@ -935,21 +993,19 @@ function CTASection() {
               width: 320,
               height: 320,
               background: "#7C5CFF",
-              opacity: 0.35,
+              opacity: 0.18,
             }}
           />
           <div className="relative grid gap-10 md:grid-cols-[1.05fr_1fr] md:items-center">
             <div>
-              <div className="qadam-eyebrow mb-3" style={{ color: "#CBB8FF" }}>
-                Начать сегодня
-              </div>
+              <div className="qadam-eyebrow mb-3">Начать сегодня</div>
               <h2
-                className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl md:text-[44px]"
-                style={{ letterSpacing: "-0.025em" }}
+                className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[44px]"
+                style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
               >
                 Соберите команду в одном месте
               </h2>
-              <p className="mt-4 max-w-md text-base text-white/70">
+              <p className="mt-4 max-w-md text-base" style={{ color: "#52596E" }}>
                 Оставьте заявку — наш менеджер перезвонит, поможет с настройкой и подберёт тариф.
                 Или зарегистрируйтесь сами прямо сейчас.
               </p>
@@ -966,8 +1022,12 @@ function CTASection() {
                 </Link>
                 <a
                   href="mailto:hello@qadam.kz"
-                  className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
-                  style={{ border: "1px solid rgba(255,255,255,0.2)" }}
+                  className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium transition-colors"
+                  style={{
+                    color: "#0A0A12",
+                    border: "1px solid rgba(10,10,18,0.15)",
+                    background: "rgba(255,255,255,0.7)",
+                  }}
                 >
                   hello@qadam.kz
                 </a>
@@ -977,34 +1037,56 @@ function CTASection() {
             <form
               onSubmit={submit}
               className="relative rounded-2xl p-6"
-              style={{ background: "#17171F", border: "1px solid rgba(255,255,255,0.08)" }}
+              style={{
+                background: "#ffffff",
+                border: "1px solid rgba(10,10,18,0.08)",
+                boxShadow: "0 20px 50px -20px rgba(10,10,18,0.15)",
+              }}
             >
               {sent ? (
                 <div className="py-8 text-center">
-                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                  <div
+                    className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full"
+                    style={{ background: "rgba(16,185,129,0.15)", color: "#10B981" }}
+                  >
                     <Check size={22} />
                   </div>
-                  <div className="text-lg font-semibold text-white">Спасибо! Мы на связи.</div>
-                  <p className="mt-1 text-sm text-white/60">Свяжемся в течение рабочего дня.</p>
+                  <div className="text-lg font-semibold" style={{ color: "#0A0A12" }}>Спасибо! Мы на связи.</div>
+                  <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>Свяжемся в течение рабочего дня.</p>
                 </div>
               ) : (
                 <>
-                  <div className="mb-2 text-sm font-medium text-white/80">Оставить заявку</div>
+                  <div className="mb-2 text-sm font-medium" style={{ color: "#0A0A12" }}>Оставить заявку</div>
                   <div className="grid gap-2.5">
                     <input
-                      className="w-full rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                      style={{
+                        background: "#F7F7FA",
+                        color: "#0A0A12",
+                        border: "1px solid rgba(10,10,18,0.06)",
+                      }}
                       placeholder="Имя"
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                     />
                     <input
-                      className="w-full rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                      style={{
+                        background: "#F7F7FA",
+                        color: "#0A0A12",
+                        border: "1px solid rgba(10,10,18,0.06)",
+                      }}
                       placeholder="Компания"
                       value={form.company}
                       onChange={(e) => setForm({ ...form, company: e.target.value })}
                     />
                     <input
-                      className="w-full rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                      style={{
+                        background: "#F7F7FA",
+                        color: "#0A0A12",
+                        border: "1px solid rgba(10,10,18,0.06)",
+                      }}
                       placeholder="Email или телефон"
                       value={form.contact}
                       onChange={(e) => setForm({ ...form, contact: e.target.value })}
@@ -1016,13 +1098,12 @@ function CTASection() {
                           <button
                             key={v}
                             type="button"
-                            className={
-                              "flex-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors " +
-                              (active
-                                ? "text-white"
-                                : "text-white/60 hover:text-white hover:bg-white/[0.03]")
+                            className="flex-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors"
+                            style={
+                              active
+                                ? { background: "#7C5CFF", color: "#ffffff" }
+                                : { background: "#F7F7FA", color: "#52596E", border: "1px solid rgba(10,10,18,0.06)" }
                             }
-                            style={active ? { background: "#7C5CFF" } : { background: "rgba(255,255,255,0.05)" }}
                             onClick={() => setForm({ ...form, team: v })}
                           >
                             {v}
@@ -1032,13 +1113,21 @@ function CTASection() {
                     </div>
                     <textarea
                       rows={2}
-                      className="w-full resize-none rounded-lg bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+                      className="w-full resize-none rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                      style={{
+                        background: "#F7F7FA",
+                        color: "#0A0A12",
+                        border: "1px solid rgba(10,10,18,0.06)",
+                      }}
                       placeholder="Задача или комментарий"
                       value={form.note}
                       onChange={(e) => setForm({ ...form, note: e.target.value })}
                     />
                     {error && (
-                      <div className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                      <div
+                        className="rounded-lg px-3 py-2 text-xs"
+                        style={{ background: "rgba(239,68,68,0.08)", color: "#B91C1C" }}
+                      >
                         {error}
                       </div>
                     )}

@@ -8,8 +8,12 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
+from sqlalchemy.orm import Session
+
 from ..config import settings
 from ..core.celery_app import celery_app
+from ..core.plans import check_feature
+from ..database import get_db
 from ..tasks.reports import export_tasks_excel
 from .deps import TenantContext, require
 
@@ -22,8 +26,10 @@ def start_tasks_export(
     project_id: Optional[int] = None,
     assignee_id: Optional[int] = None,
     ctx: TenantContext = Depends(require("analytics.reports")),
+    db: Session = Depends(get_db),
 ):
     """Ставит в очередь генерацию Excel-отчёта по задачам текущей компании."""
+    check_feature(db, ctx.tenant, "export")
     async_result = export_tasks_excel.delay(
         tenant_id=ctx.tenant.id,
         status=status_filter,

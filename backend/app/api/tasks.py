@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from ..database import get_db
 from ..models import Task, User, ChecklistItem, Notification, Project, TenantMembership
 from ..models.task import TaskStatus, TaskPriority
+from ..core.events import build_change_payload, fire_event, serialize_task
 from ..core.permissions import user_has
 from ..core.ws_hub import publish_to_user
 from ..core.cache import invalidate_analytics
@@ -162,6 +163,7 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
     if task.assignee_id and task.assignee_id != user.id:
         publish_to_user(ctx.tenant.id, task.assignee_id, "notification.new", {"task_id": task.id})
         publish_to_user(ctx.tenant.id, task.assignee_id, "task.assigned", {"task_id": task.id})
+    fire_event("task.created", ctx.tenant.id, {"entity": serialize_task(task), "actor_id": user.id})
     return task
 
 
@@ -175,17 +177,23 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         raise HTTPException(403, "Нет права редактировать")
 
     changes: list[str] = []
+    field_changes: dict[str, tuple] = {}   # {field: (old, new)} для fire_event
+    old_status: Optional[str] = None
 
     if payload.title is not None and payload.title != task.title:
+        field_changes["title"] = (task.title, payload.title)
         task.title = payload.title
         changes.append("название")
     if payload.description is not None and (payload.description or "") != (task.description or ""):
+        field_changes["description"] = (task.description, payload.description)
         task.description = payload.description
         changes.append("описание")
     if payload.status is not None and payload.status != task.status:
         if not user_has(user, ["tasks.change_status"]):
             raise HTTPException(403, "Нет права менять статус")
         old = task.status.value
+        old_status = old
+        field_changes["status"] = (old, payload.status.value)
         task.status = payload.status
         changes.append(f"статус {old} → {payload.status.value}")
         if task.assignee_id and task.assignee_id != user.id:
@@ -226,6 +234,14 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
             publish_to_user(ctx.tenant.id, uid, "task.updated", {"task_id": task.id, "changes": changes})
             if any(c.startswith("статус") for c in changes) or any(c == "исполнитель" for c in changes):
                 publish_to_user(ctx.tenant.id, uid, "notification.new", {"task_id": task.id})
+
+        entity_snapshot = serialize_task(task)
+        base = {**build_change_payload(entity_snapshot, field_changes), "actor_id": user.id}
+        fire_event("task.updated", ctx.tenant.id, base)
+        if old_status is not None:
+            fire_event("task.status_changed", ctx.tenant.id, base)
+            if task.status.value == "done":
+                fire_event("task.completed", ctx.tenant.id, base)
 
     return task
 

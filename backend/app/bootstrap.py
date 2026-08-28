@@ -150,6 +150,13 @@ def seed_roles(db) -> None:
             "analytics.reports", "analytics.employees",
             "leads.view", "leads.create", "leads.update", "leads.convert", "leads.manage_forms",
             "messenger.use", "messenger.create_group",
+            "automations.manage",
+            "messengers.manage", "messengers.reply",
+            "mail.use",
+            "wiki.use", "wiki.publish",
+            "calendar.use",
+            "booking.use",
+            "time.use",
         ],
     )
     ensure_role(

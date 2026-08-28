@@ -28,6 +28,11 @@ celery_app = Celery(
         "app.tasks.imports",
         "app.tasks.leads_import",
         "app.tasks.scheduled",
+        "app.tasks.automation",
+        "app.tasks.messenger",
+        "app.tasks.mail",
+        "app.tasks.calendar",
+        "app.tasks.time_tracking",
     ],
 )
 
@@ -61,6 +66,18 @@ celery_app.conf.beat_schedule = {
     "messenger-offline-digest-every-5min": {
         "task": "scheduled.messenger_offline_digest",
         "schedule": crontab(minute="*/5"),
+    },
+    "mail-sync-all-every-2min": {
+        "task": "mail.sync_all",
+        "schedule": crontab(minute="*/2"),
+    },
+    "calendar-check-reminders-every-1min": {
+        "task": "calendar.check_reminders",
+        "schedule": crontab(minute="*"),
+    },
+    "time-tracking-auto-stop-idle-every-1min": {
+        "task": "time_tracking.auto_stop_idle",
+        "schedule": crontab(minute="*"),
     },
 }
 

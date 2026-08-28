@@ -10,6 +10,28 @@ from .activity import ActivityLog
 from .reaction import CommentReaction
 from .invitation import Invitation
 from .subscription import Subscription, SubscriptionStatus
+from .plan import Plan
+from .automation import Automation, AutomationRun, AutomationAction, AutomationRunStatus, AutomationActionStatus
+from .manager_availability import ManagerAvailability, DEFAULT_WORKING_HOURS
+from .messenger_channel import (
+    ExternalChannel, ExternalContact, ExternalConversation, ExternalMessage,
+    AutoReplyRule, MessageTemplate,
+    ChannelKind, MessageDirection, MessageStatus, AutoReplyKind,
+)
+from .mail import Mailbox, MailThread, MailMessage, MailAttachment, MailDirection, MailStatus
+from .wiki import (
+    WikiFolder, Article, ArticleVersion, ArticleComment, ArticleLink, ArticlePermission,
+    WikiTargetType, WikiAccessLevel, WikiPrincipalType,
+)
+from .calendar import (
+    Calendar, CalendarEvent, EventParticipant, EventReminder, EventException,
+    EventKind, ParticipantStatus, ReminderKind,
+)
+from .booking import (
+    BookingPage, Booking, BookingTeam,
+    BookingStatus, TeamStrategy, MeetingProvider,
+)
+from .time_tracking import TimeEntry, Timer, TimesheetApproval, ApprovalStatus
 from .lead import Lead
 from .lead_form import LeadForm, TenantLead
 from .channel import (
@@ -40,6 +62,57 @@ __all__ = [
     "Invitation",
     "Subscription",
     "SubscriptionStatus",
+    "Plan",
+    "Automation",
+    "AutomationRun",
+    "AutomationAction",
+    "AutomationRunStatus",
+    "AutomationActionStatus",
+    "ManagerAvailability",
+    "DEFAULT_WORKING_HOURS",
+    "ExternalChannel",
+    "ExternalContact",
+    "ExternalConversation",
+    "ExternalMessage",
+    "AutoReplyRule",
+    "MessageTemplate",
+    "ChannelKind",
+    "MessageDirection",
+    "MessageStatus",
+    "AutoReplyKind",
+    "Mailbox",
+    "MailThread",
+    "MailMessage",
+    "MailAttachment",
+    "MailDirection",
+    "MailStatus",
+    "WikiFolder",
+    "Article",
+    "ArticleVersion",
+    "ArticleComment",
+    "ArticleLink",
+    "ArticlePermission",
+    "WikiTargetType",
+    "WikiAccessLevel",
+    "WikiPrincipalType",
+    "Calendar",
+    "CalendarEvent",
+    "EventParticipant",
+    "EventReminder",
+    "EventException",
+    "EventKind",
+    "ParticipantStatus",
+    "ReminderKind",
+    "BookingPage",
+    "Booking",
+    "BookingTeam",
+    "BookingStatus",
+    "TeamStrategy",
+    "MeetingProvider",
+    "TimeEntry",
+    "Timer",
+    "TimesheetApproval",
+    "ApprovalStatus",
     "Lead",
     "LeadForm",
     "TenantLead",

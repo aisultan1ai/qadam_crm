@@ -26,6 +26,14 @@ const Admin = lazy(() => import("@/pages/Admin"));
 const Leads = lazy(() => import("@/pages/Leads"));
 const Messenger = lazy(() => import("@/pages/Messenger"));
 const PublicForm = lazy(() => import("@/pages/PublicForm"));
+const Automations = lazy(() => import("@/pages/Automations"));
+const AutomationEditor = lazy(() => import("@/pages/AutomationEditor"));
+const Inbox = lazy(() => import("@/pages/Inbox"));
+const Mail = lazy(() => import("@/pages/Mail"));
+const Wiki = lazy(() => import("@/pages/Wiki"));
+const CalendarPage = lazy(() => import("@/pages/Calendar"));
+const BookingPublic = lazy(() => import("@/pages/BookingPublic"));
+const TimeTracking = lazy(() => import("@/pages/TimeTracking"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function HomeGate() {
@@ -95,6 +103,14 @@ export default function App() {
         }
       />
       <Route
+        path="/book/:tenantSlug/:pageSlug"
+        element={
+          <Suspense fallback={<Loader />}>
+            <BookingPublic />
+          </Suspense>
+        }
+      />
+      <Route
         path="/privacy"
         element={
           <Suspense fallback={<Loader />}>
@@ -124,6 +140,15 @@ export default function App() {
         <Route path="leads" element={<Leads />} />
         <Route path="messenger" element={<Messenger />} />
         <Route path="messenger/:channelId" element={<Messenger />} />
+        <Route path="automations" element={<Automations />} />
+        <Route path="automations/new" element={<AutomationEditor />} />
+        <Route path="automations/:id" element={<AutomationEditor />} />
+        <Route path="inbox" element={<Inbox />} />
+        <Route path="mail" element={<Mail />} />
+        <Route path="wiki" element={<Wiki />} />
+        <Route path="wiki/:slug" element={<Wiki />} />
+        <Route path="calendar" element={<CalendarPage />} />
+        <Route path="time" element={<TimeTracking />} />
         {/* 404 внутри Layout — авторизованный юзер видит sidebar/header */}
         <Route path="*" element={<NotFound />} />
       </Route>

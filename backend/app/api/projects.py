@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from ..database import get_db
 from ..models import Project, User, Task, TenantMembership
+from ..core.events import fire_event, serialize_project
 from ..core.plans import check_project_limit
 from ..schemas.project import ProjectOut, ProjectCreate, ProjectUpdate
 from ..schemas.common import Message, Page, PageParams, page_params
@@ -133,6 +134,7 @@ def create_project(payload: ProjectCreate, ctx: TenantContext = Depends(require(
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="create", entity="project", entity_id=project.id, detail=project.name)
     db.commit()
     db.refresh(project)
+    fire_event("project.created", ctx.tenant.id, {"entity": serialize_project(project), "actor_id": actor.id})
     return _out(db, ctx.tenant.id, project)
 
 

@@ -4,8 +4,12 @@ from __future__ import annotations
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from sqlalchemy.orm import Session
+
 from ..core.celery_app import celery_app
+from ..core.plans import check_feature
 from ..core.redis_client import get_redis
+from ..database import get_db
 from ..tasks.imports import import_tasks_csv
 from ..tasks.leads_import import import_leads
 from .deps import TenantContext, get_current_context, require
@@ -21,7 +25,9 @@ LEADS_ALLOWED_EXT = {"csv", "xlsx"}
 async def start_tasks_import(
     file: UploadFile = File(...),
     ctx: TenantContext = Depends(require("tasks.create")),
+    db: Session = Depends(get_db),
 ):
+    check_feature(db, ctx.tenant, "import")
     raw = await file.read()
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "CSV слишком большой")
@@ -46,8 +52,10 @@ async def start_tasks_import(
 async def start_leads_import(
     file: UploadFile = File(...),
     ctx: TenantContext = Depends(require("leads.create")),
+    db: Session = Depends(get_db),
 ):
     """Импорт лидов из CSV или XLSX."""
+    check_feature(db, ctx.tenant, "import")
     name = (file.filename or "").lower()
     ext = name.rsplit(".", 1)[-1] if "." in name else ""
     if ext not in LEADS_ALLOWED_EXT:

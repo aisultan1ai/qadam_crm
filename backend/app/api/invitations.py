@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..core.cookies import set_auth_cookies
 from ..core.limiter import limiter
-from ..core.plans import check_user_limit
+from ..core.plans import check_feature, check_user_limit
 from ..core.security import hash_password
 from ..database import get_db
 from ..models import Invitation, Role, Tenant, TenantMembership, User
@@ -79,6 +79,8 @@ def create_invite(
 ):
     if tenant_id != ctx.tenant.id:
         raise HTTPException(403, "Можно приглашать только в текущую компанию")
+
+    check_feature(db, ctx.tenant, "invitations")
 
     email = payload.email.lower().strip()
 

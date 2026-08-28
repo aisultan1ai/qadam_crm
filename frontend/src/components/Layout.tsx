@@ -3,7 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, CheckSquare, BarChart3, Users, Settings,
   Sun, Moon, LogOut, Search, Bell, Menu, X, PanelLeftClose, PanelLeftOpen,
-  Shield, Zap, MessageSquare,
+  Shield, Zap, MessageSquare, Workflow, Inbox as InboxIcon, Mail as MailIcon,
+  BookOpen, Calendar as CalendarIcon, Timer as TimerIcon,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
@@ -18,6 +19,7 @@ import type { Notification, Page } from "@/types";
 import GlobalSearch from "./GlobalSearch";
 import TenantSwitcher from "./TenantSwitcher";
 import WelcomeModal from "./WelcomeModal";
+import { TimerWidget } from "./TimerWidget";
 import { LogoMark } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useRealtimeUpdates } from "@/lib/ws";
@@ -41,7 +43,13 @@ const NAV: NavItem[] = [
   { to: "/projects", label: t.nav.projects, icon: FolderKanban, code: "projects.view" },
   { to: "/tasks", label: t.nav.tasks, icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
   { to: "/messenger", label: "Мессенджер", icon: MessageSquare, code: "messenger.use" },
+  { to: "/inbox", label: "Открытые линии", icon: InboxIcon, code: "messengers.reply" },
+  { to: "/mail", label: "Почта", icon: MailIcon, code: "mail.use" },
+  { to: "/wiki", label: "База знаний", icon: BookOpen, code: "wiki.use" },
+  { to: "/calendar", label: "Календарь", icon: CalendarIcon, code: "calendar.use" },
+  { to: "/time", label: "Время", icon: TimerIcon, code: "time.use" },
   { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
+  { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
   { to: "/analytics", label: t.nav.analytics, icon: BarChart3, code: "analytics.reports" },
   { to: "/users", label: t.nav.users, icon: Users, code: "users.view" },
   { to: "/settings", label: t.nav.settings, icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
@@ -231,6 +239,8 @@ export default function Layout() {
               <span className="kbd">K</span>
             </span>
           </button>
+
+          <TimerWidget />
 
           <TenantSwitcher />
 

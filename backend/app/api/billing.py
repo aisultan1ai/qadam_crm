@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..core.plans import PLAN_LIMITS, plan_catalog
+from ..core.plans import plan_catalog, plan_exists
 from ..database import get_db
 from ..models import Subscription, SubscriptionStatus, Tenant
 from ..schemas.common import Message
@@ -50,9 +50,9 @@ def _serialize(sub: Optional[Subscription], tenant: Tenant) -> dict:
 
 
 @router.get("/plans")
-def get_plans():
+def get_plans(db: Session = Depends(get_db)):
     """Каталог тарифов: цена, фичи, лимиты. Доступ без auth — маркетинговая инфа."""
-    return plan_catalog()
+    return plan_catalog(db)
 
 
 @router.get("/subscription")
@@ -73,7 +73,7 @@ def subscribe(
     if not (ctx.membership.is_owner or ctx.user.is_platform_admin):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Только владелец может менять тариф")
 
-    if payload.plan not in PLAN_LIMITS:
+    if not plan_exists(db, payload.plan):
         raise HTTPException(400, f"Неизвестный план: {payload.plan}")
 
     now = _now()

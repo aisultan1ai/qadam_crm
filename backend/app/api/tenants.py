@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..core.plans import tenant_usage
+from ..core.plans import check_feature, tenant_usage
 from ..database import get_db
 from ..models import Tenant
 from ..schemas.common import Message
@@ -95,12 +95,15 @@ def patch_current(
         if val and not HEX_COLOR_RE.match(val):
             raise HTTPException(400, "primary_color: формат #RRGGBB")
         if val != tenant.primary_color:
+            if val is not None:
+                check_feature(db, tenant, "branding")
             tenant.primary_color = val
             changed.append("primary_color")
 
     if payload.subdomain is not None:
         val = payload.subdomain.strip().lower() or None
         if val:
+            check_feature(db, tenant, "custom_subdomain")
             if not SUBDOMAIN_RE.match(val):
                 raise HTTPException(400, "subdomain: 3–32 символа, только a-z, 0-9 и '-'")
             if val in RESERVED_SUBDOMAINS:
@@ -130,6 +133,7 @@ def upload_logo(
     db: Session = Depends(get_db),
 ):
     _require_owner(ctx)
+    check_feature(db, ctx.tenant, "branding")
     if not file.content_type or file.content_type not in LOGO_EXT_BY_MIME:
         raise HTTPException(400, "Разрешены JPEG, PNG, WebP или SVG")
 

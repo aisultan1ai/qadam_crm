@@ -19,7 +19,10 @@ from .api import (
     auth, roles, users, projects, tasks, comments, attachments,
     notifications, analytics, search, ws, exports, imports,
     invitations, tenants as tenants_api, admin as admin_api, billing,
-    leads, lead_forms, channels,
+    leads, lead_forms, channels, automations, manager_availability, messengers, mail, wiki,
+    calendar as calendar_api,
+    booking as booking_api,
+    time_tracking,
 )
 
 
@@ -137,6 +140,16 @@ def create_app() -> FastAPI:
         leads.router,
         lead_forms.router,
         channels.router,
+        automations.router,
+        manager_availability.router,
+        messengers.router,
+        mail.router,
+        wiki.router,
+        calendar_api.router,
+        calendar_api.public_router,
+        booking_api.router,
+        booking_api.public_router,
+        time_tracking.router,
     ):
         app.include_router(r)
 

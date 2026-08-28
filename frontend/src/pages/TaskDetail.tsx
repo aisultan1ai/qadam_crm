@@ -43,6 +43,7 @@ import { Avatar, Loader, PriorityChip, StatusChip } from "@/components/ui";
 import { ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile, Pencil } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
+import { TaskTimerButton } from "@/components/TaskTimerButton";
 
 type TaskPatch = {
   title?: string;
@@ -210,12 +211,15 @@ export default function TaskDetail() {
               <button className="btn-ghost" onClick={() => setEditingTitle(false)}>Отмена</button>
             </div>
           ) : (
-            <h1
-              className="cursor-text break-words text-2xl font-semibold tracking-tight"
-              onClick={() => can("tasks.update") && (setTitleDraft(task.title), setEditingTitle(true))}
-            >
-              {task.title}
-            </h1>
+            <div className="flex items-start justify-between gap-3">
+              <h1
+                className="cursor-text break-words text-2xl font-semibold tracking-tight"
+                onClick={() => can("tasks.update") && (setTitleDraft(task.title), setEditingTitle(true))}
+              >
+                {task.title}
+              </h1>
+              <TaskTimerButton taskId={taskId} />
+            </div>
           )}
           <div className="mt-1 text-xs text-neutral-500">
             Автор: {task.author?.name || "—"} · создано {new Date(task.created_at).toLocaleString("ru-RU")}

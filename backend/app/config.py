@@ -52,6 +52,11 @@ class Settings(BaseSettings):
 
     EXPORT_DIR: str = "/app/exports"
 
+    # Fernet-ключ для шифрования секретов в БД (IMAP/SMTP пароли и т.п.).
+    # Генерация: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # В dev — если пусто, генерится ephemeral (данные не сохранятся между рестартами).
+    SECRETS_KEY: Optional[str] = None
+
     # Считаем на 2 uvicorn workers: 2 * (POOL_SIZE + MAX_OVERFLOW) = 100 макс соединений.
     # Postgres по умолчанию max_connections=100 — оставляем запас для admin/psql/celery.
     DB_POOL_SIZE: int = 20

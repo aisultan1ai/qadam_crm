@@ -155,6 +155,16 @@ export function useRealtimeUpdates() {
           case "channel.deleted":
             qc.invalidateQueries({ queryKey: ["messenger", "channels"], exact: true });
             break;
+          case "messenger.message.new": {
+            // Открытые линии (Telegram/WhatsApp/Instagram): новое входящее сообщение.
+            // Инвалидируем и список conversations, и messages конкретного разговора.
+            qc.invalidateQueries({ queryKey: ["messenger-convs"] });
+            const convId = msg.payload?.conversation_id as number | undefined;
+            if (convId) {
+              qc.invalidateQueries({ queryKey: ["messenger-messages", convId] });
+            }
+            break;
+          }
           case "pong":
             break;
         }

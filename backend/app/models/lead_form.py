@@ -34,6 +34,16 @@ class LeadForm(Base):
     fields_config: Mapped[Any] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
+    # Стратегия распределения новых лидов между менеджерами:
+    #   manual       — assignee пуст, менеджер назначается вручную
+    #   round_robin  — по кругу среди менеджеров с leads.view
+    #   least_loaded — тот, у кого меньше открытых лидов
+    #   schedule     — только менеджеры на смене (working_hours + не в отпуске + не превысил quota)
+    assignee_strategy: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    default_assignee_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
     created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

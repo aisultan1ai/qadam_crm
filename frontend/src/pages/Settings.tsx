@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Route, Routes, Navigate } from "react-router-dom";
+import { Link, NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { api, extractApiError } from "@/api/client";
@@ -8,7 +8,8 @@ import { Loader, Modal } from "@/components/ui";
 import {
   Plus, Copy, Trash2, Save, CreditCard, Palette, UserPlus, Mail, Check,
   Clock, XCircle, RefreshCw, Users, HardDrive, Zap, Sparkles, Shield,
-  GripVertical, Eye, Phone, Hash, AlignLeft, ChevronDown,
+  GripVertical, Eye, Phone, Hash, AlignLeft, ChevronDown, MessageCircle,
+  Loader2, ExternalLink, CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
@@ -26,6 +27,10 @@ const SETTINGS_TABS: TabDef[] = [
   { to: "roles", label: "Роли и права", icon: Save, perm: "roles.manage" },
   { to: "team", label: "Команда", icon: UserPlus, perm: "users.create" },
   { to: "forms", label: "Формы захвата", icon: Zap, perm: "leads.manage_forms" },
+  { to: "manager-availability", label: "Расписание менеджеров", icon: Clock, perm: "leads.view" },
+  { to: "messengers", label: "Открытые линии", icon: MessageCircle, perm: "messengers.manage" },
+  { to: "mailbox", label: "Почта", icon: Mail, perm: "mail.use" },
+  { to: "booking", label: "Букинг", icon: CalendarClock, perm: "booking.use" },
   { to: "branding", label: "Брендинг", icon: Palette, ownerOnly: true },
   { to: "billing", label: "Тариф", icon: CreditCard, ownerOnly: true },
 ];
@@ -70,6 +75,22 @@ export default function Settings() {
         <Route path="roles" element={can("roles.manage") ? <RolesSettings /> : <Forbid />} />
         <Route path="team" element={(can("users.create") || isOwner) ? <TeamSettings /> : <Forbid />} />
         <Route path="forms" element={can("leads.manage_forms") ? <LeadFormsSettings /> : <Forbid />} />
+        <Route
+          path="manager-availability"
+          element={can("leads.view") ? <ManagerAvailabilitySettings /> : <Forbid />}
+        />
+        <Route
+          path="messengers"
+          element={can("messengers.manage") ? <MessengersSettings /> : <Forbid />}
+        />
+        <Route
+          path="mailbox"
+          element={can("mail.use") ? <MailboxSettings /> : <Forbid />}
+        />
+        <Route
+          path="booking"
+          element={can("booking.use") ? <BookingSettings /> : <Forbid />}
+        />
         <Route path="branding" element={isOwner ? <BrandingSettings /> : <Forbid />} />
         <Route path="billing" element={isOwner ? <BillingSettings /> : <Forbid />} />
       </Routes>
@@ -1169,6 +1190,8 @@ type FormFieldT = {
   options?: string[] | null;
 };
 
+type AssigneeStrategy = "manual" | "round_robin" | "least_loaded" | "schedule";
+
 type LeadFormT = {
   id: number;
   name: string;
@@ -1180,9 +1203,27 @@ type LeadFormT = {
   brand_color: string;
   fields_config: FormFieldT[];
   is_active: boolean;
+  assignee_strategy: AssigneeStrategy;
+  default_assignee_id: number | null;
   created_at: string;
   updated_at: string;
 };
+
+const STRATEGY_LABEL: Record<AssigneeStrategy, string> = {
+  manual: "Вручную",
+  round_robin: "По кругу (round-robin)",
+  least_loaded: "Наименее загруженному",
+  schedule: "По расписанию (на смене)",
+};
+
+const STRATEGY_HINT: Record<AssigneeStrategy, string> = {
+  manual: "Лиды приходят без назначения — менеджер выбирается вручную",
+  round_robin: "Автоматически распределяются по кругу между менеджерами с правом «просмотр лидов»",
+  least_loaded: "Отдаётся менеджеру с наименьшим количеством открытых лидов",
+  schedule: "Только менеджерам, которые сейчас на смене и не превысили квоту; резерв — вручную",
+};
+
+type TenantUser = { id: number; name: string; email: string };
 
 const FIELD_TYPES: { value: FormFieldT["type"]; label: string }[] = [
   { value: "text", label: "Текст" },
@@ -1307,6 +1348,15 @@ function LeadFormEditor({
   const [dirty, setDirty] = useState(false);
   const [addFieldOpen, setAddFieldOpen] = useState(false);
 
+  // Список менеджеров tenant для селекта default_assignee.
+  const { data: tenantUsers } = useQuery({
+    queryKey: ["tenant-users-for-forms"],
+    queryFn: async () =>
+      (await api.get<{ items: TenantUser[] }>("/api/users", { params: { per_page: 200 } }))
+        .data.items,
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
     setDraft(form);
     setDirty(false);
@@ -1328,6 +1378,8 @@ function LeadFormEditor({
         brand_color: draft.brand_color,
         is_active: draft.is_active,
         fields_config: draft.fields_config,
+        assignee_strategy: draft.assignee_strategy,
+        default_assignee_id: draft.default_assignee_id,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lead-forms"] });
@@ -1530,6 +1582,60 @@ function LeadFormEditor({
                 Полей пока нет. Добавьте хотя бы одно.
               </div>
             )}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Распределение лидов
+            </span>
+            <Link to="/settings/manager-availability" className="text-xs link">
+              Настроить расписание
+            </Link>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Стратегия</span>
+              <select
+                className="input"
+                value={draft.assignee_strategy}
+                onChange={(e) => upd("assignee_strategy", e.target.value as AssigneeStrategy)}
+              >
+                {(Object.keys(STRATEGY_LABEL) as AssigneeStrategy[]).map((s) => (
+                  <option key={s} value={s}>
+                    {STRATEGY_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-neutral-500">
+                {STRATEGY_HINT[draft.assignee_strategy]}
+              </p>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">
+                Менеджер по умолчанию
+                {draft.assignee_strategy === "schedule" && " (fallback вне смены)"}
+              </span>
+              <select
+                className="input"
+                value={draft.default_assignee_id ?? ""}
+                onChange={(e) =>
+                  upd("default_assignee_id", e.target.value ? Number(e.target.value) : null)
+                }
+                disabled={
+                  draft.assignee_strategy === "round_robin" ||
+                  draft.assignee_strategy === "least_loaded"
+                }
+              >
+                <option value="">— не выбран —</option>
+                {(tenantUsers ?? []).map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
 
@@ -1895,6 +2001,1933 @@ function FormPreview({ form }: { form: LeadFormT }) {
             <div className="text-xs leading-snug text-neutral-500">
               {form.success_message || "Спасибо! Мы свяжемся с вами."}
             </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================================================
+// ManagerAvailabilitySettings — рабочие часы менеджеров + отпуск + квота
+// ==========================================================================
+
+type ManagerAvailabilityRow = {
+  user_id: number;
+  user_name: string | null;
+  user_email: string | null;
+  timezone: string;
+  working_hours: Record<string, [number, number] | null>;
+  weekly_quota: number;
+  is_available: boolean;
+  vacation_from: string | null;
+  vacation_until: string | null;
+  on_shift_now: boolean;
+};
+
+const WEEKDAYS: { key: string; label: string }[] = [
+  { key: "monday", label: "Пн" },
+  { key: "tuesday", label: "Вт" },
+  { key: "wednesday", label: "Ср" },
+  { key: "thursday", label: "Чт" },
+  { key: "friday", label: "Пт" },
+  { key: "saturday", label: "Сб" },
+  { key: "sunday", label: "Вс" },
+];
+
+const HOUR_OPTIONS = Array.from({ length: 25 }, (_, i) => i);
+const TIMEZONE_PRESETS = [
+  "Asia/Almaty", "Asia/Aqtobe", "Asia/Astana",
+  "Europe/Moscow", "Europe/Kiev", "Europe/Istanbul",
+  "UTC",
+];
+
+function ManagerAvailabilitySettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { me, can } = useAuth();
+  const isOwner = !!me?.current_tenant?.is_owner;
+  const canEditOthers = isOwner || can("users.update");
+
+  const { data, isPending } = useQuery({
+    queryKey: ["manager-availability"],
+    queryFn: async () =>
+      (await api.get<ManagerAvailabilityRow[]>("/api/manager-availability")).data,
+  });
+
+  const [drafts, setDrafts] = useState<Record<number, ManagerAvailabilityRow>>({});
+  const [dirty, setDirty] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!data) return;
+    const next: Record<number, ManagerAvailabilityRow> = {};
+    for (const row of data) next[row.user_id] = row;
+    setDrafts(next);
+    setDirty(new Set());
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: async (userId: number) => {
+      const d = drafts[userId];
+      if (!d) return;
+      const isMe = me?.id === userId;
+      const url = isMe ? "/api/manager-availability/me" : `/api/manager-availability/${userId}`;
+      const method = isMe ? "put" : "patch";
+      return (
+        await api[method](url, {
+          timezone: d.timezone,
+          working_hours: d.working_hours,
+          weekly_quota: d.weekly_quota,
+          is_available: d.is_available,
+          vacation_from: d.vacation_from,
+          vacation_until: d.vacation_until,
+        })
+      ).data;
+    },
+    onSuccess: (_res, userId) => {
+      qc.invalidateQueries({ queryKey: ["manager-availability"] });
+      setDirty((s) => {
+        const next = new Set(s);
+        next.delete(userId);
+        return next;
+      });
+      toast.success("Сохранено");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const updateDraft = (userId: number, patch: Partial<ManagerAvailabilityRow>) => {
+    setDrafts((s) => ({ ...s, [userId]: { ...s[userId], ...patch } }));
+    setDirty((s) => new Set(s).add(userId));
+  };
+
+  const toggleDay = (userId: number, day: string, on: boolean) => {
+    const cur = drafts[userId]?.working_hours ?? {};
+    const nextHours = { ...cur, [day]: on ? [9, 18] as [number, number] : null };
+    updateDraft(userId, { working_hours: nextHours });
+  };
+
+  const updateHour = (userId: number, day: string, idx: 0 | 1, value: number) => {
+    const cur = drafts[userId]?.working_hours ?? {};
+    const hours = (cur[day] ?? [9, 18]) as [number, number];
+    const next = [...hours] as [number, number];
+    next[idx] = value;
+    if (next[0] >= next[1]) {
+      toast.error("Некорректно", "Час окончания должен быть больше начала");
+      return;
+    }
+    updateDraft(userId, { working_hours: { ...cur, [day]: next } });
+  };
+
+  if (isPending) return <Loader />;
+  if (!data || data.length === 0) {
+    return (
+      <div className="card p-8 text-center text-sm text-neutral-500">
+        Нет менеджеров с правом «Просмотр лидов» — расписание нечему настраивать
+      </div>
+    );
+  }
+
+  const rows = Object.values(drafts).sort((a, b) =>
+    (a.user_name || "").localeCompare(b.user_name || ""),
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg bg-brand-50 p-3 text-xs text-brand-800 dark:bg-brand-950/30 dark:text-brand-200">
+        Стратегия <b>«По расписанию»</b> в формах захвата учитывает эти часы: лид уходит только тому,
+        кто сейчас на смене и не превысил квоту. <b>«Наименее загруженному»</b> — по количеству
+        открытых лидов. <b>«По кругу»</b> и <b>«Вручную»</b> расписание не смотрят.
+      </div>
+
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const isSelf = me?.id === row.user_id;
+          const canEdit = isSelf || canEditOthers;
+          const rowDirty = dirty.has(row.user_id);
+
+          return (
+            <div key={row.user_id} className="card p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{row.user_name || "—"}</span>
+                    {isSelf && (
+                      <span className="chip bg-neutral-100 text-neutral-600 dark:bg-neutral-800">
+                        это вы
+                      </span>
+                    )}
+                    <span
+                      className={clsx(
+                        "chip",
+                        row.on_shift_now
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
+                      )}
+                    >
+                      {row.on_shift_now ? "На смене" : "Вне смены"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-neutral-500">{row.user_email}</div>
+                </div>
+                <button
+                  className="btn-primary"
+                  disabled={!rowDirty || !canEdit || save.isPending}
+                  onClick={() => save.mutate(row.user_id)}
+                >
+                  <Save size={13} className="mr-1" />
+                  Сохранить
+                </button>
+              </div>
+
+              <fieldset disabled={!canEdit} className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-neutral-500">
+                      Часовой пояс
+                    </span>
+                    <select
+                      className="input"
+                      value={row.timezone}
+                      onChange={(e) => updateDraft(row.user_id, { timezone: e.target.value })}
+                    >
+                      {TIMEZONE_PRESETS.includes(row.timezone) ? null : (
+                        <option value={row.timezone}>{row.timezone}</option>
+                      )}
+                      {TIMEZONE_PRESETS.map((tz) => (
+                        <option key={tz} value={tz}>
+                          {tz}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-neutral-500">
+                      Квота (лидов в работе, 0 = ∞)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      className="input"
+                      value={row.weekly_quota}
+                      onChange={(e) =>
+                        updateDraft(row.user_id, { weekly_quota: Number(e.target.value) || 0 })
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 pt-5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-600"
+                      checked={row.is_available}
+                      onChange={(e) => updateDraft(row.user_id, { is_available: e.target.checked })}
+                    />
+                    Доступен для распределения
+                  </label>
+                </div>
+
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    Рабочие часы (локальное время)
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {WEEKDAYS.map((d) => {
+                      const hours = row.working_hours?.[d.key] ?? null;
+                      const active = hours != null;
+                      const [start, end] = hours ?? [9, 18];
+                      return (
+                        <div
+                          key={d.key}
+                          className="flex items-center gap-2 rounded-lg border border-neutral-200 p-2 dark:border-neutral-800"
+                        >
+                          <label className="flex w-16 items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-brand-600"
+                              checked={active}
+                              onChange={(e) => toggleDay(row.user_id, d.key, e.target.checked)}
+                            />
+                            {d.label}
+                          </label>
+                          <select
+                            className="input !py-1 text-sm"
+                            value={start}
+                            disabled={!active}
+                            onChange={(e) =>
+                              updateHour(row.user_id, d.key, 0, Number(e.target.value))
+                            }
+                          >
+                            {HOUR_OPTIONS.slice(0, 24).map((h) => (
+                              <option key={h} value={h}>
+                                {String(h).padStart(2, "0")}:00
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-neutral-400">—</span>
+                          <select
+                            className="input !py-1 text-sm"
+                            value={end}
+                            disabled={!active}
+                            onChange={(e) =>
+                              updateHour(row.user_id, d.key, 1, Number(e.target.value))
+                            }
+                          >
+                            {HOUR_OPTIONS.slice(1).map((h) => (
+                              <option key={h} value={h}>
+                                {String(h).padStart(2, "0")}:00
+                              </option>
+                            ))}
+                          </select>
+                          {!active && (
+                            <span className="ml-1 text-xs text-neutral-400">выходной</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-neutral-500">
+                      Отпуск с
+                    </span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={row.vacation_from ?? ""}
+                      onChange={(e) =>
+                        updateDraft(row.user_id, { vacation_from: e.target.value || null })
+                      }
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-neutral-500">
+                      Отпуск до
+                    </span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={row.vacation_until ?? ""}
+                      onChange={(e) =>
+                        updateDraft(row.user_id, { vacation_until: e.target.value || null })
+                      }
+                    />
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================================================
+// MessengersSettings — открытые линии: Telegram/WhatsApp/Instagram каналы,
+// auto-reply правила, шаблоны быстрых ответов
+// ==========================================================================
+
+type ChannelKindT = "telegram" | "whatsapp" | "instagram";
+
+const M_KIND_LABEL: Record<ChannelKindT, string> = {
+  telegram: "Telegram",
+  whatsapp: "WhatsApp",
+  instagram: "Instagram",
+};
+
+const M_KIND_HINT: Record<ChannelKindT, string> = {
+  telegram: "Bot API — бесплатно. Создайте бота у @BotFather и вставьте токен ниже.",
+  whatsapp: "WhatsApp Business Cloud API (Meta или 360dialog). Требует Business-аккаунт и BSP.",
+  instagram: "Meta Graph API. Требует Instagram Business + связанную Facebook Page.",
+};
+
+type ChannelRow = {
+  id: number;
+  kind: ChannelKindT;
+  name: string;
+  provider_config: Record<string, string>;
+  external_identifier: string | null;
+  webhook_secret_set: boolean;
+  is_active: boolean;
+  last_error: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type RuleRow = {
+  id: number;
+  channel_id: number;
+  kind: "welcome" | "off_hours" | "keyword";
+  response_text: string;
+  trigger_config: Record<string, unknown>;
+  is_active: boolean;
+  priority: number;
+};
+
+type TemplateRow = {
+  id: number;
+  name: string;
+  body: string;
+  kind: string;
+  language: string;
+  whatsapp_template_name: string | null;
+};
+
+function MessengersSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [tab, setTab] = useState<"channels" | "templates">("channels");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const { data: channels, isPending } = useQuery({
+    queryKey: ["messenger-channels"],
+    queryFn: async () => (await api.get<ChannelRow[]>("/api/messengers/channels")).data,
+  });
+
+  const selected = useMemo(
+    () => channels?.find((c) => c.id === selectedId) ?? channels?.[0] ?? null,
+    [channels, selectedId],
+  );
+
+  const del = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/messengers/channels/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["messenger-channels"] });
+      setSelectedId(null);
+      toast.success("Канал удалён");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  return (
+    <div className="space-y-4">
+      <nav className="flex gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900/60 w-fit">
+        <button
+          className={clsx(
+            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
+            tab === "channels"
+              ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
+              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
+          )}
+          onClick={() => setTab("channels")}
+        >
+          <MessageCircle size={14} /> Каналы
+        </button>
+        <button
+          className={clsx(
+            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
+            tab === "templates"
+              ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
+              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
+          )}
+          onClick={() => setTab("templates")}
+        >
+          <Sparkles size={14} /> Шаблоны быстрых ответов
+        </button>
+      </nav>
+
+      {tab === "channels" && (
+        <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+          <div className="card p-2">
+            <div className="mb-1 flex items-center justify-between px-2 py-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Каналы</span>
+              <button className="btn-ghost !p-1" title="Подключить канал" onClick={() => setCreating(true)}>
+                <Plus size={14} />
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto">
+              {isPending && <Loader />}
+              {!isPending && (channels ?? []).length === 0 && (
+                <div className="p-4 text-center text-sm text-neutral-500">
+                  Каналов пока нет.<br />
+                  <button className="mt-2 text-brand-600" onClick={() => setCreating(true)}>
+                    Подключить первый
+                  </button>
+                </div>
+              )}
+              {(channels ?? []).map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedId(c.id)}
+                  className={clsx(
+                    "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors",
+                    selected?.id === c.id
+                      ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
+                      : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                  )}
+                >
+                  <MessageCircle size={14} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{c.name}</div>
+                    <div className="truncate text-xs text-neutral-500">{M_KIND_LABEL[c.kind]}</div>
+                  </div>
+                  {!c.is_active && (
+                    <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>
+                  )}
+                  {c.last_error && (
+                    <span className="chip bg-rose-100 text-rose-700 dark:bg-rose-950/30" title={c.last_error}>
+                      !
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {selected ? (
+            <ChannelEditor
+              channel={selected}
+              onDelete={async () => {
+                if (await confirm({ title: "Удалить канал?", message: `Все диалоги и сообщения канала «${selected.name}» будут удалены.`, confirmLabel: "Удалить" })) {
+                  del.mutate(selected.id);
+                }
+              }}
+              onSaved={() => qc.invalidateQueries({ queryKey: ["messenger-channels"] })}
+            />
+          ) : (
+            <div className="card p-8 text-center text-sm text-neutral-500">Выберите канал слева</div>
+          )}
+        </div>
+      )}
+
+      {tab === "templates" && <MessageTemplatesSettings />}
+
+      {creating && (
+        <CreateChannelModal
+          onClose={() => setCreating(false)}
+          onCreated={(newId) => {
+            qc.invalidateQueries({ queryKey: ["messenger-channels"] });
+            setSelectedId(newId);
+            setCreating(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateChannelModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: number) => void;
+}) {
+  const toast = useToast();
+  const [kind, setKind] = useState<ChannelKindT>("telegram");
+  const [name, setName] = useState("");
+  const [tgToken, setTgToken] = useState("");
+  const [waApiUrl, setWaApiUrl] = useState("https://waba-v2.360dialog.io");
+  const [waApiKey, setWaApiKey] = useState("");
+  const [waPhoneId, setWaPhoneId] = useState("");
+  const [waAppSecret, setWaAppSecret] = useState("");
+  const [igApiUrl, setIgApiUrl] = useState("https://graph.facebook.com/v18.0");
+  const [igToken, setIgToken] = useState("");
+  const [igUserId, setIgUserId] = useState("");
+  const [igAppSecret, setIgAppSecret] = useState("");
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const cfg: Record<string, string> = {};
+      if (kind === "telegram") cfg.bot_token = tgToken.trim();
+      if (kind === "whatsapp") {
+        cfg.api_url = waApiUrl.trim();
+        cfg.api_key = waApiKey.trim();
+        if (waPhoneId.trim()) cfg.phone_number_id = waPhoneId.trim();
+        if (waAppSecret.trim()) cfg.app_secret = waAppSecret.trim();
+      }
+      if (kind === "instagram") {
+        cfg.api_url = igApiUrl.trim();
+        cfg.page_access_token = igToken.trim();
+        cfg.ig_user_id = igUserId.trim();
+        if (igAppSecret.trim()) cfg.app_secret = igAppSecret.trim();
+      }
+      return (
+        await api.post<ChannelRow>("/api/messengers/channels", {
+          kind,
+          name: name.trim() || M_KIND_LABEL[kind],
+          provider_config: cfg,
+        })
+      ).data;
+    },
+    onSuccess: (data) => {
+      toast.success("Канал подключён");
+      onCreated(data.id);
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const canCreate =
+    (kind === "telegram" && !!tgToken.trim()) ||
+    (kind === "whatsapp" && !!waApiKey.trim()) ||
+    (kind === "instagram" && !!igToken.trim() && !!igUserId.trim());
+
+  return (
+    <Modal open onClose={onClose} title="Подключить канал" size="lg">
+      <div className="space-y-4">
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Тип канала</div>
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.keys(M_KIND_LABEL) as ChannelKindT[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKind(k)}
+                className={clsx(
+                  "rounded-lg border-2 p-3 text-left text-sm transition-colors",
+                  kind === k
+                    ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30"
+                    : "border-neutral-200 hover:border-neutral-300 dark:border-neutral-800",
+                )}
+              >
+                <div className="font-semibold">{M_KIND_LABEL[k]}</div>
+                <div className="mt-1 text-xs text-neutral-500">{M_KIND_HINT[k]}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-500">Название канала</span>
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={`Мой ${M_KIND_LABEL[kind]}`}
+          />
+        </label>
+
+        {kind === "telegram" && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Bot Token</span>
+            <input
+              type="password"
+              className="input font-mono"
+              value={tgToken}
+              onChange={(e) => setTgToken(e.target.value)}
+              placeholder="1234567:AAE..."
+            />
+            <p className="mt-1 text-[11px] text-neutral-500">
+              Получите у <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="link">@BotFather</a>
+            </p>
+          </label>
+        )}
+
+        {kind === "whatsapp" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">API URL</span>
+              <input className="input" value={waApiUrl} onChange={(e) => setWaApiUrl(e.target.value)} />
+              <p className="mt-1 text-[11px] text-neutral-500">
+                Meta: <code>https://graph.facebook.com/v18.0</code>, 360dialog: <code>https://waba-v2.360dialog.io</code>
+              </p>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">API Key</span>
+              <input type="password" className="input font-mono" value={waApiKey} onChange={(e) => setWaApiKey(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Phone Number ID (только Meta)</span>
+              <input className="input font-mono" value={waPhoneId} onChange={(e) => setWaPhoneId(e.target.value)} />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">App Secret (для проверки подписи Meta)</span>
+              <input type="password" className="input font-mono" value={waAppSecret} onChange={(e) => setWaAppSecret(e.target.value)} />
+            </label>
+          </div>
+        )}
+
+        {kind === "instagram" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Graph API URL</span>
+              <input className="input" value={igApiUrl} onChange={(e) => setIgApiUrl(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Page Access Token</span>
+              <input type="password" className="input font-mono" value={igToken} onChange={(e) => setIgToken(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Instagram User ID</span>
+              <input className="input font-mono" value={igUserId} onChange={(e) => setIgUserId(e.target.value)} />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">App Secret</span>
+              <input type="password" className="input font-mono" value={igAppSecret} onChange={(e) => setIgAppSecret(e.target.value)} />
+            </label>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button className="btn-ghost" onClick={onClose}>
+            Отмена
+          </button>
+          <button
+            className="btn-primary"
+            disabled={!canCreate || create.isPending}
+            onClick={() => create.mutate()}
+          >
+            Подключить
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ChannelEditor({
+  channel,
+  onDelete,
+  onSaved,
+}: {
+  channel: ChannelRow;
+  onDelete: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [name, setName] = useState(channel.name);
+  const [isActive, setIsActive] = useState(channel.is_active);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [webhookInfo, setWebhookInfo] = useState<string | null>(null);
+  const webhookUrl = `${window.location.origin}/api/messengers/webhook/${channel.id}`;
+
+  useEffect(() => {
+    setName(channel.name);
+    setIsActive(channel.is_active);
+    setTestResult(null);
+    setWebhookInfo(null);
+  }, [channel.id]);
+
+  const save = useMutation({
+    mutationFn: async () =>
+      (await api.patch(`/api/messengers/channels/${channel.id}`, { name, is_active: isActive })).data,
+    onSuccess: () => {
+      toast.success("Сохранено");
+      onSaved();
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const test = useMutation({
+    mutationFn: async () =>
+      (await api.post(`/api/messengers/channels/${channel.id}/test`)).data as { ok: boolean; info: Record<string, unknown> },
+    onSuccess: (data) => {
+      setTestResult(JSON.stringify(data.info, null, 2));
+      toast.success("Подключение работает");
+    },
+    onError: (e) => {
+      setTestResult(extractApiError(e).message);
+      toast.error("Ошибка", extractApiError(e).message);
+    },
+  });
+
+  const setWh = useMutation({
+    mutationFn: async () =>
+      (await api.post(`/api/messengers/channels/${channel.id}/set-webhook`)).data as { ok: boolean; webhook_url: string; provider_response: Record<string, unknown> },
+    onSuccess: (data) => {
+      setWebhookInfo(`OK: ${JSON.stringify(data.provider_response)}`);
+      toast.success("Webhook установлен");
+    },
+    onError: (e) => {
+      setWebhookInfo(extractApiError(e).message);
+      toast.error("Ошибка", extractApiError(e).message);
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="card space-y-3 p-5">
+        <div className="flex items-center justify-between">
+          <input
+            className="input max-w-sm text-lg font-medium"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+            />
+            Активен
+          </label>
+        </div>
+
+        <div className="rounded-lg bg-neutral-50 p-3 text-xs dark:bg-neutral-800/50">
+          <div className="mb-1 font-semibold">Тип: {M_KIND_LABEL[channel.kind]}</div>
+          {channel.last_error && (
+            <div className="mt-1 rounded bg-rose-50 p-2 text-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+              <b>Последняя ошибка:</b> {channel.last_error}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Webhook URL</div>
+          <div className="flex gap-1">
+            <input className="input flex-1 text-xs font-mono" readOnly value={webhookUrl}
+              onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <button
+              className="btn-ghost !px-2"
+              onClick={() => {
+                navigator.clipboard.writeText(webhookUrl);
+                toast.success("URL скопирован");
+              }}
+            >
+              <Copy size={13} />
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-neutral-500">
+            {channel.kind === "telegram"
+              ? "Установите этот URL как webhook у бота (кнопка справа сделает это автоматически)"
+              : "Настройте этот URL в кабинете провайдера (Meta / 360dialog / Instagram)."}
+          </p>
+          {webhookInfo && (
+            <pre className="mt-2 max-h-32 overflow-y-auto rounded bg-neutral-50 p-2 text-[10px] dark:bg-neutral-900">
+              {webhookInfo}
+            </pre>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-secondary" onClick={() => test.mutate()} disabled={test.isPending}>
+              {test.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Проверить подключение
+            </button>
+            {channel.kind === "telegram" && (
+              <button className="btn-secondary" onClick={() => setWh.mutate()} disabled={setWh.isPending}>
+                {setWh.isPending ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+                Установить webhook у бота
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-ghost text-rose-600" onClick={onDelete}>
+              <Trash2 size={14} /> Удалить канал
+            </button>
+            <button className="btn-primary" onClick={() => save.mutate()} disabled={save.isPending}>
+              <Save size={14} /> Сохранить
+            </button>
+          </div>
+        </div>
+        {testResult && (
+          <pre className="max-h-40 overflow-y-auto rounded bg-neutral-50 p-2 text-[10px] dark:bg-neutral-900">
+            {testResult}
+          </pre>
+        )}
+      </div>
+
+      <AutoReplyRulesEditor channelId={channel.id} />
+    </div>
+  );
+}
+
+function AutoReplyRulesEditor({ channelId }: { channelId: number }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data: rules } = useQuery({
+    queryKey: ["messenger-rules", channelId],
+    queryFn: async () =>
+      (await api.get<RuleRow[]>(`/api/messengers/channels/${channelId}/auto-reply-rules`)).data,
+  });
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<RuleRow | null>(null);
+
+  const del = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/messengers/auto-reply-rules/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["messenger-rules", channelId] });
+      toast.success("Правило удалено");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  return (
+    <div className="card space-y-2 p-5">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Автоответы</h3>
+        <button className="btn-ghost !py-1 text-xs" onClick={() => setCreating(true)}>
+          <Plus size={12} className="mr-1" /> Правило
+        </button>
+      </div>
+      {(rules?.length ?? 0) === 0 && (
+        <div className="rounded border border-dashed border-neutral-300 p-4 text-center text-xs text-neutral-500 dark:border-neutral-700">
+          Автоответов ещё нет. Добавьте правило: приветствие, вне рабочих часов или по ключевому слову.
+        </div>
+      )}
+      <div className="space-y-2">
+        {(rules ?? []).map((r) => (
+          <div
+            key={r.id}
+            className="flex items-start gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="chip bg-brand-50 text-brand-700 dark:bg-brand-950/30 dark:text-brand-200">
+                  {r.kind === "welcome" ? "Приветствие" : r.kind === "off_hours" ? "Вне рабочих часов" : "По ключевому слову"}
+                </span>
+                {!r.is_active && (
+                  <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>
+                )}
+                {r.kind === "keyword" && (r.trigger_config as { keywords?: string[] })?.keywords && (
+                  <span className="text-xs text-neutral-500">
+                    ключи: {((r.trigger_config as { keywords: string[] }).keywords).join(", ")}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 line-clamp-2 text-sm text-neutral-700 dark:text-neutral-300">
+                {r.response_text}
+              </div>
+            </div>
+            <div className="flex gap-1">
+              <button className="btn-ghost !p-1.5" title="Редактировать" onClick={() => setEditing(r)}>
+                <Save size={13} />
+              </button>
+              <button
+                className="btn-ghost !p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                title="Удалить"
+                onClick={() => del.mutate(r.id)}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {(creating || editing) && (
+        <AutoReplyRuleModal
+          channelId={channelId}
+          rule={editing}
+          onClose={() => {
+            setCreating(false);
+            setEditing(null);
+          }}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["messenger-rules", channelId] });
+            setCreating(false);
+            setEditing(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AutoReplyRuleModal({
+  channelId,
+  rule,
+  onClose,
+  onSaved,
+}: {
+  channelId: number;
+  rule: RuleRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = rule != null;
+  const toast = useToast();
+  const [kind, setKind] = useState<RuleRow["kind"]>(rule?.kind ?? "welcome");
+  const [text, setText] = useState(rule?.response_text ?? "");
+  const [keywords, setKeywords] = useState<string>(
+    (rule?.trigger_config as { keywords?: string[] })?.keywords?.join(", ") ?? "",
+  );
+  const [isActive, setIsActive] = useState(rule?.is_active ?? true);
+  const [priority, setPriority] = useState<number>(rule?.priority ?? 0);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const trigger_config: Record<string, unknown> = {};
+      if (kind === "keyword") {
+        trigger_config.keywords = keywords
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean);
+      }
+      const body = {
+        kind,
+        response_text: text,
+        trigger_config,
+        is_active: isActive,
+        priority,
+      };
+      if (isEdit) {
+        return (await api.patch(`/api/messengers/auto-reply-rules/${rule.id}`, body)).data;
+      }
+      return (await api.post(`/api/messengers/channels/${channelId}/auto-reply-rules`, body)).data;
+    },
+    onSuccess: () => {
+      toast.success(isEdit ? "Правило обновлено" : "Правило создано");
+      onSaved();
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  return (
+    <Modal open onClose={onClose} title={isEdit ? "Правило автоответа" : "Новое правило автоответа"} size="md">
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-500">Когда срабатывает</span>
+          <select className="input" value={kind} onChange={(e) => setKind(e.target.value as RuleRow["kind"])}>
+            <option value="welcome">Приветствие (первое сообщение от клиента)</option>
+            <option value="off_hours">Вне рабочих часов (нет менеджера на смене)</option>
+            <option value="keyword">По ключевому слову</option>
+          </select>
+        </label>
+        {kind === "keyword" && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Ключевые слова (через запятую)</span>
+            <input
+              className="input"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              placeholder="цена, стоимость, купить"
+            />
+          </label>
+        )}
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-500">Текст ответа</span>
+          <textarea
+            className="input min-h-[100px]"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Здравствуйте! Спасибо за обращение. Мы ответим в ближайшее время."
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex items-center gap-2 pt-4 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-brand-600"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+            />
+            Активно
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Приоритет</span>
+            <input
+              type="number"
+              className="input"
+              value={priority}
+              onChange={(e) => setPriority(Number(e.target.value) || 0)}
+            />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button className="btn-primary" disabled={!text.trim() || save.isPending} onClick={() => save.mutate()}>
+            {isEdit ? "Сохранить" : "Создать"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function MessageTemplatesSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data: templates } = useQuery({
+    queryKey: ["messenger-templates"],
+    queryFn: async () => (await api.get<TemplateRow[]>("/api/messengers/templates")).data,
+  });
+  const [editing, setEditing] = useState<TemplateRow | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const del = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/messengers/templates/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["messenger-templates"] });
+      toast.success("Шаблон удалён");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-neutral-500">
+          Шаблоны быстрых ответов — доступны менеджерам в inbox при ответе клиенту.
+        </p>
+        <button className="btn-primary" onClick={() => setCreating(true)}>
+          <Plus size={16} /> Новый шаблон
+        </button>
+      </div>
+      <div className="grid gap-2">
+        {(templates ?? []).map((t) => (
+          <div
+            key={t.id}
+            className="flex items-start gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
+          >
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">{t.name}</span>
+                <span className="chip bg-neutral-100 text-neutral-600 dark:bg-neutral-800">{t.language}</span>
+                {t.whatsapp_template_name && (
+                  <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    WhatsApp: {t.whatsapp_template_name}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 line-clamp-2 text-sm text-neutral-600 dark:text-neutral-400">{t.body}</p>
+            </div>
+            <div className="flex gap-1">
+              <button className="btn-ghost !p-1.5" title="Редактировать" onClick={() => setEditing(t)}>
+                <Save size={13} />
+              </button>
+              <button
+                className="btn-ghost !p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                title="Удалить"
+                onClick={() => del.mutate(t.id)}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {(templates?.length ?? 0) === 0 && (
+          <div className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
+            Шаблонов пока нет
+          </div>
+        )}
+      </div>
+
+      {(editing || creating) && (
+        <TemplateModal
+          template={editing}
+          onClose={() => {
+            setEditing(null);
+            setCreating(false);
+          }}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["messenger-templates"] });
+            setEditing(null);
+            setCreating(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TemplateModal({
+  template,
+  onClose,
+  onSaved,
+}: {
+  template: TemplateRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = template != null;
+  const toast = useToast();
+  const [name, setName] = useState(template?.name ?? "");
+  const [body, setBody] = useState(template?.body ?? "");
+  const [language, setLanguage] = useState(template?.language ?? "ru");
+  const [waName, setWaName] = useState(template?.whatsapp_template_name ?? "");
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        name: name.trim(),
+        body,
+        kind: "text",
+        language,
+        whatsapp_template_name: waName.trim() || null,
+      };
+      if (isEdit) {
+        return (await api.patch(`/api/messengers/templates/${template.id}`, payload)).data;
+      }
+      return (await api.post(`/api/messengers/templates`, payload)).data;
+    },
+    onSuccess: () => {
+      toast.success(isEdit ? "Шаблон обновлён" : "Шаблон создан");
+      onSaved();
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  return (
+    <Modal open onClose={onClose} title={isEdit ? "Шаблон" : "Новый шаблон"} size="md">
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-500">Название</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-500">Текст</span>
+          <textarea className="input min-h-[100px]" value={body} onChange={(e) => setBody(e.target.value)} />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Язык</span>
+            <input className="input" value={language} onChange={(e) => setLanguage(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">
+              WhatsApp template name (для HSM)
+            </span>
+            <input className="input" value={waName} onChange={(e) => setWaName(e.target.value)} />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button className="btn-ghost" onClick={onClose}>
+            Отмена
+          </button>
+          <button className="btn-primary" disabled={!name.trim() || !body.trim() || save.isPending} onClick={() => save.mutate()}>
+            {isEdit ? "Сохранить" : "Создать"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ==========================================================================
+// MailboxSettings — настройки email-ящика пользователя (IMAP + SMTP)
+// ==========================================================================
+
+type MailboxRow = {
+  id: number;
+  name: string;
+  email: string;
+  reply_to_name: string | null;
+  imap_host: string;
+  imap_port: number;
+  imap_ssl: boolean;
+  imap_user: string;
+  imap_password_set: boolean;
+  imap_folder: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_tls: boolean;
+  smtp_user: string;
+  smtp_password_set: boolean;
+  is_active: boolean;
+  sync_interval_sec: number;
+  last_sync_at: string | null;
+  last_error: string | null;
+  last_seen_uid: number | null;
+};
+
+const EMPTY_MAILBOX = {
+  name: "",
+  email: "",
+  reply_to_name: "",
+  imap_host: "",
+  imap_port: 993,
+  imap_ssl: true,
+  imap_user: "",
+  imap_password: "",
+  imap_folder: "INBOX",
+  smtp_host: "",
+  smtp_port: 587,
+  smtp_tls: true,
+  smtp_user: "",
+  smtp_password: "",
+  is_active: true,
+  sync_interval_sec: 120,
+};
+
+function MailboxSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  const { data: mb, isPending } = useQuery({
+    queryKey: ["my-mailbox"],
+    queryFn: async () => (await api.get<MailboxRow | null>("/api/mail/mailboxes/me")).data,
+  });
+
+  const [form, setForm] = useState(EMPTY_MAILBOX);
+
+  useEffect(() => {
+    if (mb) {
+      setForm({
+        name: mb.name || "",
+        email: mb.email || "",
+        reply_to_name: mb.reply_to_name || "",
+        imap_host: mb.imap_host,
+        imap_port: mb.imap_port,
+        imap_ssl: mb.imap_ssl,
+        imap_user: mb.imap_user,
+        imap_password: "",   // не показываем пароль; поле для смены
+        imap_folder: mb.imap_folder || "INBOX",
+        smtp_host: mb.smtp_host,
+        smtp_port: mb.smtp_port,
+        smtp_tls: mb.smtp_tls,
+        smtp_user: mb.smtp_user,
+        smtp_password: "",
+        is_active: mb.is_active,
+        sync_interval_sec: mb.sync_interval_sec,
+      });
+    }
+  }, [mb]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, unknown> = { ...form };
+      // Пустые пароли не отправляем (не менять)
+      if (!form.imap_password) delete payload.imap_password;
+      if (!form.smtp_password) delete payload.smtp_password;
+      if (!form.reply_to_name) delete payload.reply_to_name;
+      return (await api.put("/api/mail/mailboxes/me", payload)).data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-mailbox"] });
+      toast.success("Сохранено");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const test = useMutation({
+    mutationFn: async () => (await api.post("/api/mail/mailboxes/me/test")).data as { ok: boolean; imap: Record<string, unknown>; smtp: Record<string, unknown> },
+    onSuccess: (data) => {
+      if (data.ok) toast.success("IMAP+SMTP подключились успешно");
+      else toast.error("Проверка не удалась", JSON.stringify({imap: data.imap, smtp: data.smtp}));
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const del = useMutation({
+    mutationFn: async () => api.delete("/api/mail/mailboxes/me"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-mailbox"] });
+      toast.success("Mailbox удалён");
+      setForm(EMPTY_MAILBOX);
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  if (isPending) return <Loader />;
+
+  const upd = <K extends keyof typeof EMPTY_MAILBOX>(k: K, v: (typeof EMPTY_MAILBOX)[K]) => {
+    setForm((f) => ({ ...f, [k]: v }));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg bg-brand-50 p-3 text-xs text-brand-800 dark:bg-brand-950/30 dark:text-brand-200">
+        Настройте IMAP + SMTP для вашего рабочего почтового ящика. Входящие письма
+        будут отображаться на странице «Почта» с группировкой по threadам.
+        Пароли шифруются перед сохранением в БД (Fernet).
+      </div>
+
+      {mb?.last_error && (
+        <div className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+          <b>Последняя ошибка синхронизации:</b> {mb.last_error}
+        </div>
+      )}
+
+      <div className="card space-y-4 p-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Имя отправителя</span>
+            <input className="input" value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="Иван Петров" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Email</span>
+            <input className="input" type="email" value={form.email} onChange={(e) => upd("email", e.target.value)} placeholder="ivan@company.kz" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Reply-To имя (опционально)</span>
+            <input className="input" value={form.reply_to_name} onChange={(e) => upd("reply_to_name", e.target.value)} />
+          </label>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">IMAP (входящие)</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs text-neutral-500">Сервер</span>
+              <input className="input" value={form.imap_host} onChange={(e) => upd("imap_host", e.target.value)} placeholder="imap.gmail.com" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Порт</span>
+              <input type="number" className="input" value={form.imap_port} onChange={(e) => upd("imap_port", Number(e.target.value))} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Логин</span>
+              <input className="input" value={form.imap_user} onChange={(e) => upd("imap_user", e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">
+                Пароль {mb?.imap_password_set && "(сохранён — оставьте пустым если не меняете)"}
+              </span>
+              <input type="password" className="input" value={form.imap_password} onChange={(e) => upd("imap_password", e.target.value)} placeholder={mb?.imap_password_set ? "••••••••" : ""} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Папка</span>
+              <input className="input" value={form.imap_folder} onChange={(e) => upd("imap_folder", e.target.value)} placeholder="INBOX" />
+            </label>
+            <label className="flex items-center gap-2 pt-4 text-sm sm:col-span-3">
+              <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={form.imap_ssl} onChange={(e) => upd("imap_ssl", e.target.checked)} />
+              SSL/TLS (обычно порт 993)
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">SMTP (исходящие)</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs text-neutral-500">Сервер</span>
+              <input className="input" value={form.smtp_host} onChange={(e) => upd("smtp_host", e.target.value)} placeholder="smtp.gmail.com" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Порт</span>
+              <input type="number" className="input" value={form.smtp_port} onChange={(e) => upd("smtp_port", Number(e.target.value))} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Логин</span>
+              <input className="input" value={form.smtp_user} onChange={(e) => upd("smtp_user", e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">
+                Пароль {mb?.smtp_password_set && "(сохранён)"}
+              </span>
+              <input type="password" className="input" value={form.smtp_password} onChange={(e) => upd("smtp_password", e.target.value)} placeholder={mb?.smtp_password_set ? "••••••••" : ""} />
+            </label>
+            <label className="flex items-center gap-2 pt-4 text-sm">
+              <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={form.smtp_tls} onChange={(e) => upd("smtp_tls", e.target.checked)} />
+              STARTTLS (587)
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">Настройки синхронизации</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="flex items-center gap-2 pt-4 text-sm">
+              <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={form.is_active} onChange={(e) => upd("is_active", e.target.checked)} />
+              Активен
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Интервал (сек)</span>
+              <input type="number" min={30} max={3600} className="input" value={form.sync_interval_sec} onChange={(e) => upd("sync_interval_sec", Number(e.target.value))} />
+            </label>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <div className="flex gap-2">
+            <button
+              className="btn-secondary"
+              disabled={test.isPending || !mb}
+              onClick={() => test.mutate()}
+              title="Проверить IMAP + SMTP подключение"
+            >
+              {test.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Проверить подключение
+            </button>
+            {mb && (
+              <button
+                className="btn-ghost text-rose-600"
+                onClick={async () => {
+                  if (await confirm({ title: "Удалить mailbox?", message: "Все threads и сообщения будут удалены.", confirmLabel: "Удалить" })) {
+                    del.mutate();
+                  }
+                }}
+              >
+                <Trash2 size={14} /> Удалить
+              </button>
+            )}
+          </div>
+          <button className="btn-primary" onClick={() => save.mutate()} disabled={save.isPending}>
+            {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Сохранить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================================================
+// BookingSettings — Calendly-style страницы бронирования встреч
+// ==========================================================================
+
+type BookingPageRow = {
+  id: number;
+  owner_user_id: number | null;
+  team_id: number | null;
+  slug: string;
+  title: string;
+  description: string | null;
+  color: string;
+  duration_min: number;
+  buffer_before_min: number;
+  buffer_after_min: number;
+  working_hours: Record<string, Array<[number, number]>>;
+  timezone: string;
+  min_notice_hours: number;
+  max_days_ahead: number;
+  questions: Array<{ key: string; label: string; type: string; required: boolean }>;
+  calendar_id: number | null;
+  meeting_provider: string;
+  meeting_url_template: string | null;
+  is_active: boolean;
+  public_url: string | null;
+};
+
+type BookingRow = {
+  id: number;
+  page_id: number;
+  assignee_user_id: number | null;
+  name: string;
+  email: string;
+  phone: string | null;
+  start_at: string;
+  end_at: string;
+  status: string;
+  answers: Record<string, string>;
+  meeting_url: string | null;
+  calendar_event_id: number | null;
+  created_at: string | null;
+};
+
+const B_WEEKDAYS: { key: string; label: string }[] = [
+  { key: "monday", label: "Пн" },
+  { key: "tuesday", label: "Вт" },
+  { key: "wednesday", label: "Ср" },
+  { key: "thursday", label: "Чт" },
+  { key: "friday", label: "Пт" },
+  { key: "saturday", label: "Сб" },
+  { key: "sunday", label: "Вс" },
+];
+
+const DEFAULT_BOOKING_HOURS = {
+  monday: [[9, 18]] as Array<[number, number]>,
+  tuesday: [[9, 18]] as Array<[number, number]>,
+  wednesday: [[9, 18]] as Array<[number, number]>,
+  thursday: [[9, 18]] as Array<[number, number]>,
+  friday: [[9, 18]] as Array<[number, number]>,
+  saturday: [] as Array<[number, number]>,
+  sunday: [] as Array<[number, number]>,
+};
+
+function BookingSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  const { data: pages, isPending } = useQuery({
+    queryKey: ["booking-pages"],
+    queryFn: async () => (await api.get<BookingPageRow[]>("/api/booking/pages")).data,
+  });
+
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selected = useMemo(
+    () => pages?.find((p) => p.id === selectedId) ?? pages?.[0] ?? null,
+    [pages, selectedId],
+  );
+
+  const create = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<BookingPageRow>("/api/booking/pages", {
+          title: "Новая встреча",
+          duration_min: 30,
+          working_hours: DEFAULT_BOOKING_HOURS,
+        })
+      ).data,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["booking-pages"] });
+      setSelectedId(data.id);
+      toast.success("Страница создана");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/booking/pages/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["booking-pages"] });
+      setSelectedId(null);
+      toast.success("Удалено");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  if (isPending) return <Loader />;
+
+  return (
+    <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+      <div className="card p-2">
+        <div className="mb-1 flex items-center justify-between px-2 py-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Страницы</span>
+          <button className="btn-ghost !p-1" onClick={() => create.mutate()} title="Новая">
+            <Plus size={14} />
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto">
+          {(pages ?? []).length === 0 && (
+            <div className="p-4 text-center text-sm text-neutral-500">
+              Страниц пока нет.<br />
+              <button className="mt-2 text-brand-600" onClick={() => create.mutate()}>Создать первую</button>
+            </div>
+          )}
+          {(pages ?? []).map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setSelectedId(p.id)}
+              className={clsx(
+                "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors",
+                selected?.id === p.id
+                  ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
+                  : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+              )}
+            >
+              <span className="inline-block h-3 w-3 rounded" style={{ background: p.color }} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{p.title}</div>
+                <div className="truncate text-xs text-neutral-500">{p.duration_min} мин · /{p.slug}</div>
+              </div>
+              {!p.is_active && <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selected ? (
+        <BookingPageEditor
+          page={selected}
+          onDelete={async () => {
+            if (await confirm({ title: "Удалить страницу?", message: "Все связанные бронирования будут удалены.", confirmLabel: "Удалить" })) {
+              del.mutate(selected.id);
+            }
+          }}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["booking-pages"] })}
+        />
+      ) : (
+        <div className="card p-8 text-center text-sm text-neutral-500">Создайте страницу слева</div>
+      )}
+    </div>
+  );
+}
+
+function BookingPageEditor({
+  page, onDelete, onSaved,
+}: {
+  page: BookingPageRow;
+  onDelete: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [draft, setDraft] = useState(page);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setDraft(page);
+    setDirty(false);
+  }, [page.id]);
+
+  const upd = <K extends keyof BookingPageRow>(k: K, v: BookingPageRow[K]) => {
+    setDraft((d) => ({ ...d, [k]: v }));
+    setDirty(true);
+  };
+
+  const { data: calendars } = useQuery({
+    queryKey: ["my-calendars-for-booking"],
+    queryFn: async () =>
+      (await api.get<{ id: number; name: string }[]>("/api/calendar/calendars")).data,
+    staleTime: 60_000,
+  });
+
+  const { data: bookings } = useQuery({
+    queryKey: ["booking-page-bookings", page.id],
+    queryFn: async () =>
+      (await api.get<BookingRow[]>(`/api/booking/bookings`, { params: { page_id: page.id, only_mine: false } })).data,
+  });
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.patch(`/api/booking/pages/${page.id}`, {
+        title: draft.title,
+        description: draft.description,
+        color: draft.color,
+        duration_min: draft.duration_min,
+        buffer_before_min: draft.buffer_before_min,
+        buffer_after_min: draft.buffer_after_min,
+        working_hours: draft.working_hours,
+        timezone: draft.timezone,
+        min_notice_hours: draft.min_notice_hours,
+        max_days_ahead: draft.max_days_ahead,
+        questions: draft.questions,
+        calendar_id: draft.calendar_id,
+        meeting_provider: draft.meeting_provider,
+        meeting_url_template: draft.meeting_url_template,
+        is_active: draft.is_active,
+      }),
+    onSuccess: () => {
+      onSaved();
+      setDirty(false);
+      toast.success("Сохранено");
+    },
+    onError: (e) => toast.error("Ошибка", extractApiError(e).message),
+  });
+
+  const toggleDay = (day: string, on: boolean) => {
+    upd("working_hours", {
+      ...draft.working_hours,
+      [day]: on ? [[9, 18]] : [],
+    });
+  };
+  const updateSegment = (day: string, idx: 0 | 1, hour: number) => {
+    const segs = draft.working_hours[day] || [];
+    const seg = (segs[0] || [9, 18]) as [number, number];
+    const next = [...seg] as [number, number];
+    next[idx] = hour;
+    if (next[0] >= next[1]) {
+      toast.error("Некорректно", "Конец должен быть больше начала");
+      return;
+    }
+    upd("working_hours", { ...draft.working_hours, [day]: [next] });
+  };
+
+  const addQuestion = () => {
+    upd("questions", [
+      ...(draft.questions || []),
+      { key: `q${(draft.questions || []).length + 1}`, label: "Вопрос", type: "text", required: false },
+    ]);
+  };
+  const updateQuestion = (idx: number, patch: Partial<{ key: string; label: string; type: string; required: boolean }>) => {
+    upd("questions", (draft.questions || []).map((q, i) => (i === idx ? { ...q, ...patch } : q)));
+  };
+  const removeQuestion = (idx: number) => {
+    upd("questions", (draft.questions || []).filter((_, i) => i !== idx));
+  };
+
+  const publicUrl = page.public_url ? `${window.location.origin}${page.public_url}` : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="card space-y-4 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <input
+            className="input max-w-md text-lg font-medium"
+            value={draft.title}
+            onChange={(e) => upd("title", e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.is_active}
+              onChange={(e) => upd("is_active", e.target.checked)}
+            />
+            Активна
+          </label>
+        </div>
+
+        {publicUrl && (
+          <div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Публичная ссылка</div>
+            <div className="flex gap-1">
+              <input className="input flex-1 text-xs" readOnly value={publicUrl}
+                onClick={(e) => (e.target as HTMLInputElement).select()} />
+              <button
+                className="btn-ghost !px-2"
+                onClick={() => {
+                  navigator.clipboard.writeText(publicUrl);
+                  toast.success("Скопировано");
+                }}
+              >
+                <Copy size={13} />
+              </button>
+              <a
+                className="btn-ghost !px-2"
+                href={publicUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={13} />
+              </a>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Описание</span>
+            <textarea
+              className="input min-h-[60px]"
+              value={draft.description ?? ""}
+              onChange={(e) => upd("description", e.target.value)}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Цвет</span>
+            <div className="flex items-center gap-2">
+              <input type="color" value={draft.color} onChange={(e) => upd("color", e.target.value)}
+                className="h-9 w-14 cursor-pointer rounded border" />
+              <input className="input flex-1" value={draft.color} onChange={(e) => upd("color", e.target.value)} />
+            </div>
+          </label>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-4">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Длительность (мин)</span>
+            <input type="number" className="input" value={draft.duration_min}
+              onChange={(e) => upd("duration_min", Number(e.target.value))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Buffer до (мин)</span>
+            <input type="number" className="input" value={draft.buffer_before_min}
+              onChange={(e) => upd("buffer_before_min", Number(e.target.value))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Buffer после (мин)</span>
+            <input type="number" className="input" value={draft.buffer_after_min}
+              onChange={(e) => upd("buffer_after_min", Number(e.target.value))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Timezone</span>
+            <input className="input" value={draft.timezone}
+              onChange={(e) => upd("timezone", e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Минимум за N часов</span>
+            <input type="number" className="input" value={draft.min_notice_hours}
+              onChange={(e) => upd("min_notice_hours", Number(e.target.value))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Максимум N дней вперёд</span>
+            <input type="number" className="input" value={draft.max_days_ahead}
+              onChange={(e) => upd("max_days_ahead", Number(e.target.value))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Календарь (для авто-события)</span>
+            <select
+              className="input"
+              value={draft.calendar_id ?? ""}
+              onChange={(e) => upd("calendar_id", e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">— не сохранять —</option>
+              {(calendars ?? []).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Ссылка на встречу</span>
+            <input className="input text-xs font-mono" value={draft.meeting_url_template ?? ""}
+              placeholder="https://zoom.us/j/..."
+              onChange={(e) => upd("meeting_url_template", e.target.value)} />
+          </label>
+        </div>
+
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Рабочие часы</div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {B_WEEKDAYS.map((d) => {
+              const segs = draft.working_hours[d.key] || [];
+              const active = segs.length > 0;
+              const [start, end] = segs[0] || [9, 18];
+              return (
+                <div key={d.key} className="flex items-center gap-2 rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">
+                  <label className="flex w-16 items-center gap-2 text-sm">
+                    <input type="checkbox" className="h-4 w-4 accent-brand-600"
+                      checked={active} onChange={(e) => toggleDay(d.key, e.target.checked)} />
+                    {d.label}
+                  </label>
+                  <select className="input !py-1 text-sm" disabled={!active} value={start}
+                    onChange={(e) => updateSegment(d.key, 0, Number(e.target.value))}>
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    ))}
+                  </select>
+                  <span className="text-neutral-400">—</span>
+                  <select className="input !py-1 text-sm" disabled={!active} value={end}
+                    onChange={(e) => updateSegment(d.key, 1, Number(e.target.value))}>
+                    {Array.from({ length: 24 }, (_, h) => h + 1).map((h) => (
+                      <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    ))}
+                  </select>
+                  {!active && <span className="ml-1 text-xs text-neutral-400">выходной</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Дополнительные вопросы</div>
+            <button className="btn-ghost !py-1 text-xs" onClick={addQuestion}>
+              <Plus size={12} className="mr-1" /> Вопрос
+            </button>
+          </div>
+          <div className="space-y-2">
+            {(draft.questions ?? []).map((q, idx) => (
+              <div key={idx} className="grid grid-cols-[1fr_1fr_120px_auto_auto] items-center gap-2 rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">
+                <input className="input !py-1 text-sm" value={q.key}
+                  onChange={(e) => updateQuestion(idx, { key: e.target.value })} placeholder="ключ" />
+                <input className="input !py-1 text-sm" value={q.label}
+                  onChange={(e) => updateQuestion(idx, { label: e.target.value })} placeholder="Название" />
+                <select className="input !py-1 text-sm" value={q.type}
+                  onChange={(e) => updateQuestion(idx, { type: e.target.value })}>
+                  <option value="text">Текст</option>
+                  <option value="textarea">Многострочный</option>
+                </select>
+                <label className="flex items-center gap-1 text-xs">
+                  <input type="checkbox" checked={q.required}
+                    onChange={(e) => updateQuestion(idx, { required: e.target.checked })} /> обяз.
+                </label>
+                <button className="rounded p-1 text-neutral-400 hover:bg-rose-50 hover:text-rose-600"
+                  onClick={() => removeQuestion(idx)}>
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+            {(draft.questions ?? []).length === 0 && (
+              <div className="rounded-lg border border-dashed border-neutral-300 p-3 text-center text-xs text-neutral-500 dark:border-neutral-700">
+                Дополнительных вопросов нет. Клиенту нужны будут только имя + email.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2">
+          <button className="btn-ghost inline-flex items-center gap-1 text-rose-600" onClick={onDelete}>
+            <Trash2 size={14} /> Удалить страницу
+          </button>
+          <button className="btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+            <Save size={14} className="mr-1" /> Сохранить
+          </button>
+        </div>
+      </div>
+
+      <div className="card p-5">
+        <div className="mb-3 text-sm font-semibold">Забронированные встречи ({(bookings ?? []).length})</div>
+        {(bookings?.length ?? 0) === 0 ? (
+          <div className="rounded border border-dashed border-neutral-300 p-4 text-center text-xs text-neutral-500 dark:border-neutral-700">
+            Пока никто не бронировал
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {(bookings ?? []).map((b) => (
+              <div key={b.id} className="flex items-center justify-between rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{b.name}</div>
+                  <div className="text-xs text-neutral-500">{b.email} {b.phone && `· ${b.phone}`}</div>
+                </div>
+                <div className="text-right text-xs text-neutral-500">
+                  <div>{new Date(b.start_at).toLocaleString("ru-RU")}</div>
+                  <span className={clsx(
+                    "chip !text-[10px]",
+                    b.status === "confirmed" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30",
+                    b.status === "canceled" && "bg-rose-100 text-rose-800 dark:bg-rose-950/30",
+                    b.status === "pending" && "bg-amber-100 text-amber-800 dark:bg-amber-950/30",
+                  )}>{b.status}</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

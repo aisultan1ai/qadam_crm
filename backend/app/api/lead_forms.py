@@ -16,8 +16,11 @@ from sqlalchemy.orm import Session
 
 from slugify import slugify
 
+from ..core.events import build_change_payload, fire_event, serialize_tenant_lead
 from ..core.limiter import limiter
-from ..core.ws_hub import publish_to_tenant
+from ..core.plans import check_feature
+from ..core.ws_hub import publish_to_tenant, publish_to_user
+from ..services.lead_router import pick_assignee
 from ..database import get_db
 from ..models import LeadForm, TenantLead, Tenant, Task, User
 from ..models.task import TaskStatus, TaskPriority
@@ -53,6 +56,9 @@ class FormField(BaseModel):
         return v
 
 
+ALLOWED_ASSIGNEE_STRATEGIES = {"manual", "round_robin", "least_loaded", "schedule"}
+
+
 class LeadFormCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     slug: Optional[str] = Field(default=None, max_length=80)
@@ -63,6 +69,15 @@ class LeadFormCreate(BaseModel):
     brand_color: str = Field(default="#0f67fd", max_length=20)
     fields_config: list[FormField] = Field(default_factory=list)
     is_active: bool = True
+    assignee_strategy: str = "manual"
+    default_assignee_id: Optional[int] = None
+
+    @field_validator("assignee_strategy")
+    @classmethod
+    def _validate_strategy(cls, v: str) -> str:
+        if v not in ALLOWED_ASSIGNEE_STRATEGIES:
+            raise ValueError(f"assignee_strategy must be one of {sorted(ALLOWED_ASSIGNEE_STRATEGIES)}")
+        return v
 
 
 class LeadFormUpdate(BaseModel):
@@ -74,6 +89,17 @@ class LeadFormUpdate(BaseModel):
     brand_color: Optional[str] = Field(default=None, max_length=20)
     fields_config: Optional[list[FormField]] = None
     is_active: Optional[bool] = None
+    assignee_strategy: Optional[str] = None
+    default_assignee_id: Optional[int] = None
+
+    @field_validator("assignee_strategy")
+    @classmethod
+    def _validate_strategy(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if v not in ALLOWED_ASSIGNEE_STRATEGIES:
+            raise ValueError(f"assignee_strategy must be one of {sorted(ALLOWED_ASSIGNEE_STRATEGIES)}")
+        return v
 
 
 class LeadFormOut(BaseModel):
@@ -87,6 +113,8 @@ class LeadFormOut(BaseModel):
     brand_color: str
     fields_config: Any
     is_active: bool
+    assignee_strategy: str
+    default_assignee_id: Optional[int]
     created_at: datetime
     updated_at: datetime
 
@@ -255,6 +283,7 @@ def create_form(
     ctx: TenantContext = Depends(require("leads.manage_forms")),
     db: Session = Depends(get_db),
 ):
+    check_feature(db, ctx.tenant, "lead_forms")
     slug = payload.slug.strip() if payload.slug else payload.name
     slug = _unique_form_slug(db, ctx.tenant.id, slug)
     form = LeadForm(
@@ -268,6 +297,8 @@ def create_form(
         brand_color=payload.brand_color.strip() or "#0f67fd",
         fields_config=[f.model_dump() for f in payload.fields_config],
         is_active=payload.is_active,
+        assignee_strategy=payload.assignee_strategy,
+        default_assignee_id=payload.default_assignee_id,
         created_by=ctx.user.id,
     )
     db.add(form)
@@ -390,6 +421,9 @@ def public_submit(
     # custom_fields = всё что пришло, кроме honeypot и служебных
     custom = {k: v for k, v in data.items() if k != HONEYPOT_FIELD}
 
+    # Распределение: если у формы задана стратегия — назначаем менеджера
+    assignee_id = pick_assignee(db, tenant.id, form)
+
     lead = TenantLead(
         tenant_id=tenant.id,
         form_id=form.id,
@@ -399,6 +433,7 @@ def public_submit(
         note=None,
         status="new",
         source="form",
+        assignee_id=assignee_id,
         ip_address=(request.client.host if request.client else None),
         user_agent=(request.headers.get("user-agent") or "")[:500] or None,
         referer=(request.headers.get("referer") or "")[:500] or None,
@@ -408,9 +443,27 @@ def public_submit(
     db.refresh(lead)
 
     # Realtime + email owner'у
-    publish_to_tenant(tenant.id, "lead.new", {"id": lead.id, "name": lead.name, "contact": lead.contact, "form_id": form.id})
+    publish_to_tenant(tenant.id, "lead.new", {
+        "id": lead.id, "name": lead.name, "contact": lead.contact,
+        "form_id": form.id, "assignee_id": assignee_id,
+    })
+    if assignee_id:
+        # Персональное уведомление назначенному менеджеру
+        publish_to_user(tenant.id, assignee_id, "lead.assigned", {
+            "lead_id": lead.id, "name": lead.name, "contact": lead.contact,
+        })
     _notify_owner_of_lead(db, tenant, lead)
 
+    fire_event(
+        "lead.created",
+        tenant.id,
+        {"entity": serialize_tenant_lead(lead), "form_id": form.id, "source": "form"},
+    )
+    fire_event(
+        "form.submitted",
+        tenant.id,
+        {"form_id": form.id, "form_name": form.name, "lead": serialize_tenant_lead(lead)},
+    )
     return Message(message=form.success_message)
 
 
@@ -494,6 +547,11 @@ def create_lead(
         if not active:
             raise HTTPException(400, "Исполнитель не найден в этой компании")
 
+    # Если менеджер не указан явно — прогоняем через роутер (round_robin по дефолту)
+    resolved_assignee = payload.assignee_id
+    if resolved_assignee is None:
+        resolved_assignee = pick_assignee(db, ctx.tenant.id, form=None)
+
     lead = TenantLead(
         tenant_id=ctx.tenant.id,
         form_id=None,
@@ -503,7 +561,7 @@ def create_lead(
         note=(payload.note or "").strip() or None,
         status=payload.status,
         source=(payload.source or "manual").strip()[:50],
-        assignee_id=payload.assignee_id,
+        assignee_id=resolved_assignee,
     )
     db.add(lead)
     log_action(
@@ -515,6 +573,11 @@ def create_lead(
     publish_to_tenant(ctx.tenant.id, "lead.new", {
         "id": lead.id, "name": lead.name, "contact": lead.contact, "form_id": None,
     })
+    fire_event(
+        "lead.created",
+        ctx.tenant.id,
+        {"entity": serialize_tenant_lead(lead), "actor_id": ctx.user.id, "source": "manual"},
+    )
     return _serialize_lead(lead)
 
 
@@ -542,12 +605,22 @@ def update_lead(
         raise HTTPException(404, "Лид не найден")
 
     data = payload.model_dump(exclude_unset=True)
+    old_status = lead.status
     for k, v in data.items():
         setattr(lead, k, v)
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="lead", entity_id=lead.id, detail=str(data.get("status") or ""))
     db.commit()
     db.refresh(lead)
     publish_to_tenant(ctx.tenant.id, "lead.update", {"id": lead.id, "status": lead.status})
+    if "status" in data and old_status != lead.status:
+        fire_event(
+            "lead.status_changed",
+            ctx.tenant.id,
+            build_change_payload(
+                serialize_tenant_lead(lead),
+                {"status": (old_status, lead.status)},
+            ),
+        )
     return _serialize_lead(lead)
 
 

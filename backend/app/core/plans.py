@@ -1,116 +1,130 @@
 """Тарифы и лимиты.
 
-Каждый tenant имеет `plan` (строка) — в этом файле хранятся лимиты по плану.
-Enforcement идёт через dependency `enforce_plan_limit(resource)`.
+Планы хранятся в таблице `plans` и управляются платформенным админом
+через `/api/admin/plans`. Тенант ссылается на план по строковому ключу
+(`Tenant.plan` = `Plan.key`).
+
+Enforcement:
+- `check_user_limit` / `check_project_limit` / `check_storage_limit` — количественные
+  лимиты, вызываются перед созданием ресурса → 402
+- `check_feature(feature)` — булевые фичи, вызываются dependency `require_feature("export")`
+- `get_plan(db, key)` — источник истины при рантайме, fallback на free
 """
 from __future__ import annotations
 
-from enum import Enum
+import logging
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..database import get_db
-from ..models import Attachment, Project, Tenant, TenantMembership
+from ..models import Attachment, Plan, Project, Tenant, TenantMembership
 
+log = logging.getLogger("qadam.plans")
 
-class Plan(str, Enum):
-    free = "free"
-    pro = "pro"
-    enterprise = "enterprise"
+DEFAULT_PLAN_KEY = "free"
 
-
-PLAN_LIMITS: dict[str, dict[str, Optional[int]]] = {
-    Plan.free.value: {
-        "max_users": 5,
-        "max_projects": 3,
-        "max_storage_bytes": 1 * 1024 * 1024 * 1024,        # 1 GB
-        "api_rate_per_min": 60,
-    },
-    Plan.pro.value: {
-        "max_users": 50,
-        "max_projects": 50,
-        "max_storage_bytes": 20 * 1024 * 1024 * 1024,       # 20 GB
-        "api_rate_per_min": 300,
-    },
-    Plan.enterprise.value: {
-        "max_users": None,
-        "max_projects": None,
-        "max_storage_bytes": None,
-        "api_rate_per_min": 1000,
-    },
+# Хардкод-фолбэк на случай пустой таблицы plans (сразу после миграции 0013 таблица
+# заполнена, но на всякий случай). Реальная конфигурация — в БД.
+_FALLBACK_LIMITS = {
+    "max_users": 5,
+    "max_projects": 3,
+    "max_storage_bytes": 1 * 1024 * 1024 * 1024,
+    "api_rate_per_min": 60,
 }
 
 
-PLAN_INFO: dict[str, dict] = {
-    Plan.free.value: {
-        "title": "Free",
-        "price_month": 0,
-        "currency": "KZT",
-        "tagline": "Для знакомства с CRM и небольших команд",
-        "features": [
-            "До 5 пользователей",
-            "До 3 проектов",
-            "1 ГБ файлов",
-            "Kanban, чек-листы, комментарии",
-            "Email-уведомления (dry-run без SMTP)",
-        ],
-    },
-    Plan.pro.value: {
-        "title": "Pro",
-        "price_month": 9_990,
-        "currency": "KZT",
-        "tagline": "Для растущих компаний, где CRM — рабочий инструмент",
-        "features": [
-            "До 50 пользователей",
-            "До 50 проектов",
-            "20 ГБ файлов",
-            "Экспорт задач в Excel и CSV-импорт",
-            "Redis-кэш аналитики и WebSocket-уведомления",
-            "Приглашения по email",
-        ],
-    },
-    Plan.enterprise.value: {
-        "title": "Enterprise",
-        "price_month": None,   # индивидуально
-        "currency": "KZT",
-        "tagline": "Для крупных компаний с особыми требованиями",
-        "features": [
-            "Без лимитов на пользователей, проекты и хранилище",
-            "Кастомный поддомен (acme.qadam.kz)",
-            "Брендирование: логотип и цвет",
-            "SLA и поддержка приоритетно",
-            "Индивидуальные интеграции",
-        ],
-    },
+FEATURE_LABELS: dict[str, str] = {
+    "export": "Экспорт в Excel",
+    "import": "Импорт из CSV",
+    "invitations": "Приглашения по email",
+    "lead_forms": "Формы захвата лидов",
+    "analytics_cache": "Кэш аналитики",
+    "branding": "Брендирование",
+    "custom_subdomain": "Кастомный поддомен",
+    "priority_support": "Приоритетная поддержка",
 }
 
 
-def get_limits(plan: str) -> dict[str, Optional[int]]:
-    return PLAN_LIMITS.get(plan, PLAN_LIMITS[Plan.free.value])
+def _feature_column_name(feature: str) -> str:
+    return f"feature_{feature}"
 
 
-def plan_catalog() -> list[dict]:
-    """Список всех планов с описанием, ценой, фичами и лимитами.
+def get_plan(db: Session, key: str) -> Optional[Plan]:
+    """Загружает Plan по ключу. Возвращает None если не найден."""
+    if not key:
+        return None
+    return db.query(Plan).filter(Plan.key == key).first()
 
-    Используется /api/billing/plans для отрисовки страницы тарифов.
-    """
-    out = []
-    for key in (Plan.free.value, Plan.pro.value, Plan.enterprise.value):
-        info = PLAN_INFO[key]
-        limits = PLAN_LIMITS[key]
-        out.append({
-            "key": key,
-            "title": info["title"],
-            "tagline": info["tagline"],
-            "price_month": info["price_month"],
-            "currency": info["currency"],
-            "features": info["features"],
-            "limits": limits,
-        })
-    return out
+
+def _resolve_plan(db: Session, key: str) -> Optional[Plan]:
+    """Как get_plan, но с фолбэком на 'free'."""
+    plan = get_plan(db, key)
+    if plan:
+        return plan
+    if key != DEFAULT_PLAN_KEY:
+        return get_plan(db, DEFAULT_PLAN_KEY)
+    return None
+
+
+def plan_exists(db: Session, key: str) -> bool:
+    return db.query(Plan.id).filter(Plan.key == key).first() is not None
+
+
+def get_limits(db: Session, plan_key: str) -> dict[str, Optional[int]]:
+    """Возвращает лимиты плана: {max_users, max_projects, max_storage_bytes, api_rate_per_min}."""
+    plan = _resolve_plan(db, plan_key)
+    if not plan:
+        log.warning("plan '%s' not found in DB — using fallback limits", plan_key)
+        return dict(_FALLBACK_LIMITS)
+    return {
+        "max_users": plan.max_users,
+        "max_projects": plan.max_projects,
+        "max_storage_bytes": plan.max_storage_bytes,
+        "api_rate_per_min": plan.api_rate_per_min,
+    }
+
+
+def plan_to_dict(plan: Plan) -> dict:
+    features_text = plan.marketing_features or ""
+    features_list = [line.strip() for line in features_text.splitlines() if line.strip()]
+    return {
+        "key": plan.key,
+        "title": plan.title,
+        "tagline": plan.tagline,
+        "price_month": plan.price_month,
+        "currency": plan.currency,
+        "features": features_list,
+        "limits": {
+            "max_users": plan.max_users,
+            "max_projects": plan.max_projects,
+            "max_storage_bytes": plan.max_storage_bytes,
+            "api_rate_per_min": plan.api_rate_per_min,
+        },
+        "feature_flags": {
+            "export": plan.feature_export,
+            "import": plan.feature_import,
+            "invitations": plan.feature_invitations,
+            "lead_forms": plan.feature_lead_forms,
+            "analytics_cache": plan.feature_analytics_cache,
+            "branding": plan.feature_branding,
+            "custom_subdomain": plan.feature_custom_subdomain,
+            "priority_support": plan.feature_priority_support,
+        },
+        "is_active": plan.is_active,
+        "is_public": plan.is_public,
+        "sort_order": plan.sort_order,
+    }
+
+
+def plan_catalog(db: Session, include_hidden: bool = False) -> list[dict]:
+    """Список планов для витрины (по умолчанию — только публичные и активные)."""
+    q = db.query(Plan)
+    if not include_hidden:
+        q = q.filter(Plan.is_active.is_(True), Plan.is_public.is_(True))
+    rows = q.order_by(Plan.sort_order.asc(), Plan.id.asc()).all()
+    return [plan_to_dict(p) for p in rows]
 
 
 def count_users(db: Session, tenant_id: int) -> int:
@@ -137,17 +151,17 @@ def _check_limit(current: int, limit: Optional[int], resource: str) -> None:
 
 
 def check_user_limit(db: Session, tenant: Tenant) -> None:
-    limits = get_limits(tenant.plan)
+    limits = get_limits(db, tenant.plan)
     _check_limit(count_users(db, tenant.id), limits["max_users"], "пользователи")
 
 
 def check_project_limit(db: Session, tenant: Tenant) -> None:
-    limits = get_limits(tenant.plan)
+    limits = get_limits(db, tenant.plan)
     _check_limit(count_projects(db, tenant.id), limits["max_projects"], "проекты")
 
 
 def check_storage_limit(db: Session, tenant: Tenant, additional_bytes: int = 0) -> None:
-    limits = get_limits(tenant.plan)
+    limits = get_limits(db, tenant.plan)
     limit = limits["max_storage_bytes"]
     if limit is None:
         return
@@ -160,11 +174,35 @@ def check_storage_limit(db: Session, tenant: Tenant, additional_bytes: int = 0) 
         )
 
 
+def has_feature(db: Session, tenant: Tenant, feature: str) -> bool:
+    """Проверяет boolean-фичу текущего плана тенанта."""
+    plan = _resolve_plan(db, tenant.plan)
+    if not plan:
+        return False
+    col = _feature_column_name(feature)
+    return bool(getattr(plan, col, False))
+
+
+def check_feature(db: Session, tenant: Tenant, feature: str) -> None:
+    """Бросает 402 если фича недоступна на текущем плане тенанта."""
+    if feature not in FEATURE_LABELS:
+        raise HTTPException(500, f"Неизвестная фича: {feature}")
+    if has_feature(db, tenant, feature):
+        return
+    label = FEATURE_LABELS[feature]
+    raise HTTPException(
+        status.HTTP_402_PAYMENT_REQUIRED,
+        f"Функция «{label}» недоступна на вашем тарифе. Обновите тариф.",
+    )
+
+
 def tenant_usage(db: Session, tenant: Tenant) -> dict:
-    limits = get_limits(tenant.plan)
+    limits = get_limits(db, tenant.plan)
+    plan = _resolve_plan(db, tenant.plan)
     return {
         "plan": tenant.plan,
         "limits": limits,
+        "features": plan_to_dict(plan)["feature_flags"] if plan else {},
         "usage": {
             "users": count_users(db, tenant.id),
             "projects": count_projects(db, tenant.id),

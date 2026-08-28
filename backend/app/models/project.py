@@ -32,6 +32,9 @@ class Project(Base):
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    default_hourly_rate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    default_currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+
     members: Mapped[List["User"]] = relationship(  # type: ignore  # noqa: F821
         "User", secondary=project_members, lazy="selectin"
     )

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_
 
 from ..core.celery_app import celery_app
+from ..core.events import fire_event, serialize_task
 from ..core.ws_hub import publish_to_user
 from ..database import SessionLocal
 from ..models import (
@@ -73,6 +74,11 @@ def check_deadlines() -> dict:
             for t in tasks:
                 if t.assignee_id:
                     publish_to_user(t.tenant_id, t.assignee_id, "notification.new", {"task_id": t.id, "kind": REMINDER_KIND})
+                    fire_event(
+                        "task.deadline_near",
+                        t.tenant_id,
+                        {"entity": serialize_task(t), "hours_left": int((t.deadline - now).total_seconds() // 3600)},
+                    )
 
     log.info("check_deadlines: created=%d", created)
     return {"created": created}

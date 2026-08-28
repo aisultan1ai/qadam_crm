@@ -16,3 +16,9 @@ celery[redis]==5.4.0
 openpyxl==3.1.5
 python-slugify==8.0.4
 httpx==0.28.1
+cryptography==43.0.3
+imapclient==3.0.1
+bleach==6.2.0
+markdown-it-py==3.0.0
+pygments==2.18.0
+python-dateutil==2.9.0.post0

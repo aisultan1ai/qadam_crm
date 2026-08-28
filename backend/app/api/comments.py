@@ -5,6 +5,7 @@ from typing import List
 
 from ..database import get_db
 from ..models import Task, Comment, User, Notification, CommentReaction, TenantMembership
+from ..core.events import fire_event, serialize_comment
 from ..core.permissions import user_has
 from ..core.ws_hub import publish_to_user
 from ..schemas.task import CommentOut, CommentCreate
@@ -91,6 +92,15 @@ def create_comment(task_id: int, payload: CommentCreate, ctx: TenantContext = De
     if task.author_id and task.author_id != user.id:
         publish_to_user(ctx.tenant.id, task.author_id, "task.comment", {"task_id": task.id, "comment_id": comment.id})
 
+    fire_event(
+        "comment.added",
+        ctx.tenant.id,
+        {
+            "entity": serialize_comment(comment),
+            "task": {"id": task.id, "title": task.title},
+            "actor_id": user.id,
+        },
+    )
     return comment
 
 
