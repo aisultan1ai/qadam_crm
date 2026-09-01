@@ -1,0 +1,41 @@
+# Override для реального prod-деплоя с HTTPS.
+# Использование:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
+#
+# Требует:
+#   - Работающий scripts/init-letsencrypt.sh (первичное получение сертификата)
+#   - DNS домена уже указывает на этот сервер
+#   - Открытые порты 80 и 443
+#
+# Что делает по сравнению с базовым compose:
+#   - Подменяет nginx.conf на nginx.prod.conf (443 + HSTS + OCSP + редирект)
+#   - Открывает порт 443
+#   - Монтирует Let's Encrypt volume в nginx (read-only)
+#   - Добавляет сервис certbot для авто-renewal
+#   - Перезагружает nginx каждые 6 часов чтобы подхватить обновлённый cert
+
+services:
+  nginx:
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - qadam_crm_uploads:/var/www/uploads:ro
+      - qadam_crm_letsencrypt:/etc/letsencrypt:ro
+      - qadam_crm_certbot_www:/var/www/certbot:ro
+    command: >
+      sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: qadam_crm_certbot
+    restart: unless-stopped
+    volumes:
+      - qadam_crm_letsencrypt:/etc/letsencrypt
+      - qadam_crm_certbot_www:/var/www/certbot
+    entrypoint: >
+      sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+
+volumes:
+  qadam_crm_letsencrypt:
+  qadam_crm_certbot_www:
