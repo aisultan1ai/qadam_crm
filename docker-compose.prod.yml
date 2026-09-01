@@ -144,12 +144,34 @@ services:
         condition: service_started
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Prod-конфиг с HTTPS. Требует Let's Encrypt сертификата (см. scripts/init-letsencrypt.sh).
+      # Для локального теста без HTTPS используй nginx.conf (COMPOSE_FILE=docker-compose.yml).
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - qadam_crm_uploads:/var/www/uploads:ro
+      - qadam_crm_letsencrypt:/etc/letsencrypt:ro
+      - qadam_crm_certbot_www:/var/www/certbot:ro
+    # Каждые 6 часов nginx reload — подхватит обновлённый сертификат от certbot.
+    command: >
+      sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
+  # Автоматический renewal сертификатов Let's Encrypt.
+  # Первичное получение делается через scripts/init-letsencrypt.sh (там же — dummy для первого запуска nginx).
+  certbot:
+    image: certbot/certbot:latest
+    container_name: qadam_crm_certbot
+    restart: unless-stopped
+    volumes:
+      - qadam_crm_letsencrypt:/etc/letsencrypt
+      - qadam_crm_certbot_www:/var/www/certbot
+    entrypoint: >
+      sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
 
 volumes:
   qadam_crm_pgdata:
   qadam_crm_uploads:
   qadam_crm_exports:
   qadam_crm_redis:
+  qadam_crm_letsencrypt:
+  qadam_crm_certbot_www:

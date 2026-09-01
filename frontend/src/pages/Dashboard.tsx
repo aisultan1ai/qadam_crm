@@ -8,6 +8,7 @@ import { STATUS_LABEL, TaskStatus } from "@/types";
 import { Skeleton } from "@/components/Skeleton";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useAuth } from "@/store/auth";
+import { BirthdaysWidget, MyGoalsWidget, KudosFeedWidget } from "@/components/HRWidgets";
 
 type Dashboard = {
   total: number;
@@ -241,6 +242,15 @@ function DashboardContent({ data, startAnimations }: { data: Dashboard; startAni
             </div>
           ))}
         </div>
+      </div>
+
+      <div
+        className="grid gap-4 lg:grid-cols-3"
+        style={{ animation: "rise .52s cubic-bezier(.2,.8,.2,1) both", animationDelay: "480ms" }}
+      >
+        <MyGoalsWidget />
+        <BirthdaysWidget />
+        <KudosFeedWidget />
       </div>
     </div>
   );

@@ -34,6 +34,8 @@ const Wiki = lazy(() => import("@/pages/Wiki"));
 const CalendarPage = lazy(() => import("@/pages/Calendar"));
 const BookingPublic = lazy(() => import("@/pages/BookingPublic"));
 const TimeTracking = lazy(() => import("@/pages/TimeTracking"));
+const People = lazy(() => import("@/pages/People"));
+const OrgChart = lazy(() => import("@/pages/OrgChart"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function HomeGate() {
@@ -149,6 +151,9 @@ export default function App() {
         <Route path="wiki/:slug" element={<Wiki />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="time" element={<TimeTracking />} />
+        <Route path="people" element={<People />} />
+        <Route path="people/:id" element={<Profile />} />
+        <Route path="org-chart" element={<OrgChart />} />
         {/* 404 внутри Layout — авторизованный юзер видит sidebar/header */}
         <Route path="*" element={<NotFound />} />
       </Route>

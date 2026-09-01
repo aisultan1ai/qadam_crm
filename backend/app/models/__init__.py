@@ -32,6 +32,10 @@ from .booking import (
     BookingStatus, TeamStrategy, MeetingProvider,
 )
 from .time_tracking import TimeEntry, Timer, TimesheetApproval, ApprovalStatus
+from .hr_profiles import (
+    Skill, UserSkill, Goal, OneOnOne, Kudos,
+    SkillLevel, GoalStatus, KudosBadge,
+)
 from .lead import Lead
 from .lead_form import LeadForm, TenantLead
 from .channel import (
@@ -113,6 +117,14 @@ __all__ = [
     "Timer",
     "TimesheetApproval",
     "ApprovalStatus",
+    "Skill",
+    "UserSkill",
+    "Goal",
+    "OneOnOne",
+    "Kudos",
+    "SkillLevel",
+    "GoalStatus",
+    "KudosBadge",
     "Lead",
     "LeadForm",
     "TenantLead",

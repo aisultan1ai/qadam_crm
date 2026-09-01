@@ -156,7 +156,9 @@ def seed_roles(db) -> None:
             "wiki.use", "wiki.publish",
             "calendar.use",
             "booking.use",
-            "time.use",
+            "time.use", "time.approve",
+            "hr.view_profiles", "hr.manage_goals", "hr.manage_one_on_ones",
+            "kudos.give",
         ],
     )
     ensure_role(
@@ -167,6 +169,7 @@ def seed_roles(db) -> None:
             "comments.view", "comments.create", "comments.update_own",
             "files.upload", "files.download",
             "messenger.use",
+            "hr.view_profiles", "kudos.give",
         ],
     )
     db.commit()

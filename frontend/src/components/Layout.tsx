@@ -5,6 +5,7 @@ import {
   Sun, Moon, LogOut, Search, Bell, Menu, X, PanelLeftClose, PanelLeftOpen,
   Shield, Zap, MessageSquare, Workflow, Inbox as InboxIcon, Mail as MailIcon,
   BookOpen, Calendar as CalendarIcon, Timer as TimerIcon,
+  Network, Contact2,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
@@ -51,6 +52,8 @@ const NAV: NavItem[] = [
   { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
   { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
   { to: "/analytics", label: t.nav.analytics, icon: BarChart3, code: "analytics.reports" },
+  { to: "/people", label: "Люди", icon: Contact2, code: "hr.view_profiles" },
+  { to: "/org-chart", label: "Оргструктура", icon: Network, code: "hr.view_profiles" },
   { to: "/users", label: t.nav.users, icon: Users, code: "users.view" },
   { to: "/settings", label: t.nav.settings, icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
   { to: "/admin", label: t.nav.platform, icon: Shield, platformAdminOnly: true },

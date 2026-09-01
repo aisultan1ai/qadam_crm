@@ -12,7 +12,7 @@ from ..database import get_db
 from ..models import User, Role, Department, TenantMembership
 from ..core.security import hash_password, verify_password
 from ..core.plans import check_user_limit
-from ..schemas.user import UserOut, UserCreate, UserUpdate, MeUpdate, DepartmentOut, DepartmentCreate
+from ..schemas.user import UserOut, UserCreate, UserUpdate, MeUpdate, DepartmentOut, DepartmentCreate, DepartmentUpdate
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, require, get_current_user, get_current_context, log_action
 
@@ -169,6 +169,20 @@ def update_me(payload: MeUpdate, ctx: TenantContext = Depends(get_current_contex
         user.password_hash = hash_password(payload.new_password)
         changes.append("пароль")
 
+    # M11 — свой HR-профиль
+    if payload.position is not None and payload.position != (user.position or ""):
+        user.position = payload.position or None
+        changes.append("должность")
+    if payload.phone is not None and payload.phone != (user.phone or ""):
+        user.phone = payload.phone or None
+        changes.append("телефон")
+    if payload.bio is not None and payload.bio != (user.bio or ""):
+        user.bio = payload.bio or None
+        changes.append("bio")
+    if payload.birthday is not None and payload.birthday != user.birthday:
+        user.birthday = payload.birthday
+        changes.append("день рождения")
+
     if changes:
         log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail=", ".join(changes))
     db.commit()
@@ -288,6 +302,28 @@ def update_user(user_id: int, payload: UserUpdate, ctx: TenantContext = Depends(
             user.department_id = None
     if payload.role_ids is not None:
         user.roles = _tenant_roles_query(db, ctx.tenant.id, payload.role_ids).all()
+    # M11 HR-профиль
+    if payload.manager_id is not None:
+        if payload.manager_id == 0:
+            user.manager_id = None
+        else:
+            if payload.manager_id == user.id:
+                raise HTTPException(400, "Пользователь не может быть руководителем самого себя")
+            manager = _load_tenant_user(db, ctx.tenant.id, payload.manager_id)
+            # Простая защита от цикла: если manager подчиняется этому юзеру (одна ступень), запрет.
+            if manager.manager_id == user.id:
+                raise HTTPException(400, "Циклическая иерархия руководителей")
+            user.manager_id = manager.id
+    if payload.position is not None:
+        user.position = payload.position or None
+    if payload.phone is not None:
+        user.phone = payload.phone or None
+    if payload.bio is not None:
+        user.bio = payload.bio or None
+    if payload.birthday is not None:
+        user.birthday = payload.birthday
+    if payload.hire_date is not None:
+        user.hire_date = payload.hire_date
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="update", entity="user", entity_id=user.id)
     db.commit()
     db.refresh(user)
@@ -322,6 +358,19 @@ def list_departments(ctx: TenantContext = Depends(get_current_context), db: Sess
     )
 
 
+def _validate_department_parent(db: Session, tenant_id: int, dep_id: Optional[int], parent_id: Optional[int]) -> None:
+    """Проверка: parent в том же tenant + отсутствие цикла (одна ступень)."""
+    if parent_id is None:
+        return
+    parent = db.get(Department, parent_id)
+    if not parent or parent.tenant_id != tenant_id:
+        raise HTTPException(400, "Родительский отдел не найден")
+    if dep_id is not None and parent_id == dep_id:
+        raise HTTPException(400, "Отдел не может быть родителем самого себя")
+    if dep_id is not None and parent.parent_id == dep_id:
+        raise HTTPException(400, "Циклическая иерархия отделов")
+
+
 @router.post("/departments", response_model=DepartmentOut, status_code=201)
 def create_department(payload: DepartmentCreate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     exists = (
@@ -331,8 +380,49 @@ def create_department(payload: DepartmentCreate, ctx: TenantContext = Depends(re
     )
     if exists:
         raise HTTPException(400, "Отдел с таким названием уже существует")
-    dep = Department(tenant_id=ctx.tenant.id, name=payload.name)
+    _validate_department_parent(db, ctx.tenant.id, None, payload.parent_id)
+    if payload.head_user_id is not None:
+        _load_tenant_user(db, ctx.tenant.id, payload.head_user_id)
+    dep = Department(
+        tenant_id=ctx.tenant.id,
+        name=payload.name,
+        parent_id=payload.parent_id,
+        head_user_id=payload.head_user_id,
+    )
     db.add(dep)
+    db.commit()
+    db.refresh(dep)
+    return dep
+
+
+@router.patch("/departments/{department_id}", response_model=DepartmentOut)
+def update_department(department_id: int, payload: DepartmentUpdate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
+    dep = db.get(Department, department_id)
+    if not dep or dep.tenant_id != ctx.tenant.id:
+        raise HTTPException(404, "Отдел не найден")
+    if payload.name is not None and payload.name != dep.name:
+        conflict = (
+            db.query(Department.id)
+            .filter(
+                Department.tenant_id == ctx.tenant.id,
+                Department.name == payload.name,
+                Department.id != dep.id,
+            )
+            .first()
+        )
+        if conflict:
+            raise HTTPException(400, "Отдел с таким названием уже существует")
+        dep.name = payload.name
+    if payload.parent_id is not None:
+        new_parent = payload.parent_id or None
+        _validate_department_parent(db, ctx.tenant.id, dep.id, new_parent)
+        dep.parent_id = new_parent
+    if payload.head_user_id is not None:
+        if payload.head_user_id == 0:
+            dep.head_user_id = None
+        else:
+            head = _load_tenant_user(db, ctx.tenant.id, payload.head_user_id)
+            dep.head_user_id = head.id
     db.commit()
     db.refresh(dep)
     return dep

@@ -2,7 +2,7 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 EmailStr = str  # relaxed: avoid rejecting .local / internal TLDs
 from typing import List, Optional
-from datetime import datetime
+from datetime import date, datetime
 
 from .role import RoleOut
 
@@ -29,10 +29,20 @@ class DepartmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    parent_id: Optional[int] = None
+    head_user_id: Optional[int] = None
 
 
 class DepartmentCreate(BaseModel):
     name: str
+    parent_id: Optional[int] = None
+    head_user_id: Optional[int] = None
+
+
+class DepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    parent_id: Optional[int] = None
+    head_user_id: Optional[int] = None
 
 
 class UserBase(BaseModel):
@@ -41,6 +51,13 @@ class UserBase(BaseModel):
     is_active: bool = True
     department_id: Optional[int] = None
     avatar_url: Optional[str] = None
+    # M11 HR-профиль (все Optional — старые юзеры без этих данных валидны)
+    manager_id: Optional[int] = None
+    position: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    birthday: Optional[date] = None
+    hire_date: Optional[date] = None
 
 
 class UserCreate(UserBase):
@@ -61,6 +78,13 @@ class UserUpdate(BaseModel):
     department_id: Optional[int] = None
     avatar_url: Optional[str] = None
     role_ids: Optional[List[int]] = None
+    # M11 HR-профиль (доступно с permission users.update)
+    manager_id: Optional[int] = None
+    position: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    birthday: Optional[date] = None
+    hire_date: Optional[date] = None
 
     @field_validator("password")
     @classmethod
@@ -75,6 +99,11 @@ class MeUpdate(BaseModel):
     name: Optional[str] = None
     new_password: Optional[str] = Field(default=None, min_length=PASSWORD_MIN_LEN, max_length=PASSWORD_MAX_LEN)
     current_password: Optional[str] = None
+    # M11: свой HR-профиль (без email/пароля — эти отдельно)
+    position: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    birthday: Optional[date] = None
 
     @field_validator("new_password")
     @classmethod

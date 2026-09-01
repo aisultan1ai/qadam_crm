@@ -117,6 +117,12 @@ class Settings(BaseSettings):
                     "python -c \"import secrets; print(secrets.token_urlsafe(32))\" "
                     "или ALLOW_INSECURE_PROD=true если billing-webhook не используется."
                 )
+            if not (self.SECRETS_KEY or "").strip():
+                raise ValueError(
+                    "SECRETS_KEY не задан в production. Без него IMAP/SMTP пароли шифруются "
+                    "ephemeral-ключом и теряются при рестарте. Сгенерируй: "
+                    "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                )
         else:
             import logging
             log = logging.getLogger("qadam.config")
@@ -124,6 +130,8 @@ class Settings(BaseSettings):
                 log.warning("ALLOW_INSECURE_PROD=true — COOKIE_SECURE=false в prod допущен, но НЕБЕЗОПАСНО.")
             if not self.BILLING_WEBHOOK_SECRET:
                 log.warning("ALLOW_INSECURE_PROD=true — BILLING_WEBHOOK_SECRET не задан, webhook отклонит запросы.")
+            if not (self.SECRETS_KEY or "").strip():
+                log.warning("ALLOW_INSECURE_PROD=true — SECRETS_KEY не задан, шифрование ephemeral (данные не переживут рестарт).")
         return self
 
 

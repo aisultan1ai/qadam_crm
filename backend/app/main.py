@@ -23,6 +23,7 @@ from .api import (
     calendar as calendar_api,
     booking as booking_api,
     time_tracking,
+    hr as hr_api,
 )
 
 
@@ -150,6 +151,7 @@ def create_app() -> FastAPI:
         booking_api.router,
         booking_api.public_router,
         time_tracking.router,
+        hr_api.router,
     ):
         app.include_router(r)
 
