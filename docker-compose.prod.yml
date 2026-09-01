@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: qadam_crm_db
     restart: unless-stopped
     environment:
@@ -16,7 +16,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: qadam_crm_redis
     restart: unless-stopped
     command: >
@@ -134,7 +134,7 @@ services:
       - "80"
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.28-alpine
     container_name: qadam_crm_nginx
     restart: unless-stopped
     depends_on:
