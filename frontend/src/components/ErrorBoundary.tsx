@@ -45,7 +45,7 @@ function DefaultFallback({ error, reset }: { error: Error; reset: () => void }) 
         <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
           Произошла непредвиденная ошибка. Попробуйте перезагрузить страницу — если повторится, напишите в поддержку.
         </p>
-        <details className="mb-4 rounded-lg bg-neutral-50 p-2 text-left text-xs text-neutral-500 dark:bg-neutral-800">
+        <details className="mb-4 rounded-lg bg-neutral-50 p-2 text-left text-xs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-300">
           <summary className="cursor-pointer select-none">Детали</summary>
           <pre className="mt-2 whitespace-pre-wrap break-words">{error.message}</pre>
         </details>

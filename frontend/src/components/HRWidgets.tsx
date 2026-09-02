@@ -60,9 +60,9 @@ export function BirthdaysWidget() {
         </h3>
         <Link to="/people" className="text-xs text-brand-600 hover:underline">Все</Link>
       </div>
-      {isPending && <div className="text-sm text-neutral-500">Загрузка…</div>}
+      {isPending && <div className="text-sm text-neutral-500 dark:text-neutral-400">Загрузка…</div>}
       {data && data.length === 0 && (
-        <div className="text-sm text-neutral-500">В ближайший месяц ни у кого нет ДР</div>
+        <div className="text-sm text-neutral-500 dark:text-neutral-400">В ближайший месяц ни у кого нет ДР</div>
       )}
       <div className="space-y-2">
         {(data ?? []).slice(0, 5).map((u) => (
@@ -74,13 +74,13 @@ export function BirthdaysWidget() {
             <Avatar name={u.name} url={u.avatar_url} size={32} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">{u.name}</div>
-              {u.position && <div className="truncate text-xs text-neutral-500">{u.position}</div>}
+              {u.position && <div className="truncate text-xs text-neutral-500 dark:text-neutral-400">{u.position}</div>}
             </div>
             <div className="text-right text-xs">
               <div className="font-medium">
                 {new Date(u.birthday).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
               </div>
-              <div className={u.days_until === 0 ? "text-brand-600 font-medium" : "text-neutral-500"}>
+              <div className={u.days_until === 0 ? "text-brand-600 font-medium dark:text-brand-400" : "text-neutral-500 dark:text-neutral-400"}>
                 {u.days_until === 0 ? "сегодня 🎉" : `через ${u.days_until} дн.`}
               </div>
             </div>
@@ -116,9 +116,9 @@ export function MyGoalsWidget() {
           Все <ArrowRight size={11} />
         </Link>
       </div>
-      {isPending && <div className="text-sm text-neutral-500">Загрузка…</div>}
+      {isPending && <div className="text-sm text-neutral-500 dark:text-neutral-400">Загрузка…</div>}
       {data && active.length === 0 && (
-        <div className="text-sm text-neutral-500">Активных целей нет</div>
+        <div className="text-sm text-neutral-500 dark:text-neutral-400">Активных целей нет</div>
       )}
       <div className="space-y-2">
         {active.slice(0, 4).map((g) => {
@@ -133,7 +133,7 @@ export function MyGoalsWidget() {
             >
               <div className="truncate text-sm font-medium">{g.title}</div>
               {g.deadline && (
-                <div className="mt-0.5 text-[11px] text-neutral-500">
+                <div className="mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400">
                   до {new Date(g.deadline).toLocaleDateString("ru-RU")}
                 </div>
               )}
@@ -142,7 +142,7 @@ export function MyGoalsWidget() {
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
                     <div className="h-full bg-brand-500 transition-all" style={{ width: `${progress}%` }} />
                   </div>
-                  <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
                     <span>{current ?? 0}{g.unit ? ` ${g.unit}` : ""}</span>
                     <span>{target}{g.unit ? ` ${g.unit}` : ""}</span>
                   </div>
@@ -186,9 +186,9 @@ export function KudosFeedWidget() {
         </h3>
         <Link to="/people" className="text-xs text-brand-600 hover:underline">Отправить</Link>
       </div>
-      {isPending && <div className="text-sm text-neutral-500">Загрузка…</div>}
+      {isPending && <div className="text-sm text-neutral-500 dark:text-neutral-400">Загрузка…</div>}
       {data && data.length === 0 && (
-        <div className="text-sm text-neutral-500">Ещё никто не благодарил коллег</div>
+        <div className="text-sm text-neutral-500 dark:text-neutral-400">Ещё никто не благодарил коллег</div>
       )}
       <div className="space-y-3">
         {(data ?? []).map((k) => {
@@ -202,7 +202,7 @@ export function KudosFeedWidget() {
                     {k.from_user.name}
                   </Link>
                 )}
-                <ArrowRight size={11} className="text-neutral-400" />
+                <ArrowRight size={11} className="text-neutral-400 dark:text-neutral-500" />
                 {k.to_user && (
                   <Link to={`/people/${k.to_user.id}`} className="flex items-center gap-1 font-medium hover:underline">
                     <Avatar name={k.to_user.name} url={k.to_user.avatar_url} size={20} />

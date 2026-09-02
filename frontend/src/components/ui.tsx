@@ -281,7 +281,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      {icon && <div className="mb-3 text-neutral-400">{icon}</div>}
+      {icon && <div className="mb-3 text-neutral-400 dark:text-neutral-500">{icon}</div>}
       <div className="text-base font-medium">{title}</div>
       {description && <div className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{description}</div>}
       {action && <div className="mt-4">{action}</div>}

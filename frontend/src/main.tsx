@@ -24,11 +24,6 @@ const queryClient = new QueryClient({
   },
 });
 
-const stored = localStorage.getItem("theme");
-if (stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-  document.documentElement.classList.add("dark");
-}
-
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

@@ -45,7 +45,7 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
   return (
     <Modal open={open} onClose={onClose} title="Глобальный поиск" size="lg">
       <div className="mb-4 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-700/50 dark:bg-[#2b2b34]">
-        <Search size={16} className="text-neutral-400" />
+        <Search size={16} className="text-neutral-400 dark:text-neutral-500" />
         <input
           autoFocus
           value={q}
@@ -55,7 +55,7 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
         />
       </div>
 
-      {!hit && <div className="py-8 text-center text-sm text-neutral-500">Начните вводить запрос</div>}
+      {!hit && <div className="py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Начните вводить запрос</div>}
 
       {hit && (
         <div className="space-y-5">
@@ -76,7 +76,7 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
           <Group title="Пользователи" empty={hit.users.length === 0}>
             {hit.users.map((u) => (
               <div key={u.id} className="rounded-lg px-3 py-2 text-sm">
-                {u.name} <span className="text-neutral-500">— {u.email}</span>
+                {u.name} <span className="text-neutral-500 dark:text-neutral-400">— {u.email}</span>
               </div>
             ))}
           </Group>
@@ -100,8 +100,8 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
 function Group({ title, empty, children }: { title: string; empty: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">{title}</div>
-      {empty ? <div className="text-sm text-neutral-400">Ничего не найдено</div> : <div className="space-y-0.5">{children}</div>}
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">{title}</div>
+      {empty ? <div className="text-sm text-neutral-400 dark:text-neutral-500">Ничего не найдено</div> : <div className="space-y-0.5">{children}</div>}
     </div>
   );
 }
