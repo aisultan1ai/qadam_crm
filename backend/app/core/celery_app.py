@@ -75,6 +75,10 @@ celery_app.conf.beat_schedule = {
         "task": "calendar.check_reminders",
         "schedule": crontab(minute="*"),
     },
+    "calendar-sync-google-every-15min": {
+        "task": "calendar.sync_google_all",
+        "schedule": crontab(minute="*/15"),
+    },
     "time-tracking-auto-stop-idle-every-1min": {
         "task": "time_tracking.auto_stop_idle",
         "schedule": crontab(minute="*"),

@@ -4,15 +4,17 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 from slugify import slugify
 from sqlalchemy import desc, func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..core.permissions import user_has
 from ..database import get_db
 from ..models import (
@@ -22,6 +24,9 @@ from ..models import (
 from ..schemas.common import Message
 from ..services.wiki.access import (
     can_admin, can_edit, can_view, effective_level, has_at_least, LEVEL_BY_STR,
+)
+from ..services.wiki.importers import (
+    MAX_IMPORT_BYTES, docx_to_markdown, replace_image_placeholders, xlsx_to_markdown,
 )
 from ..services.wiki.markdown import extract_wiki_links, render_markdown
 from ..services.wiki.versioning import bump_version, rebuild_links, resolve_backlinks, snapshot_current
@@ -404,6 +409,80 @@ def create_article(
     rebuild_links(db, a)
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
                action="create", entity="wiki_article", entity_id=a.id, detail=a.title)
+    db.commit()
+    db.refresh(a)
+    return _article_out(a, include_content=True)
+
+
+@router.post("/articles/import", status_code=201)
+def import_article_from_file(
+    file: UploadFile = File(...),
+    folder_id: Optional[int] = Form(None),
+    title: Optional[str] = Form(None),
+    ctx: TenantContext = Depends(require("wiki.publish")),
+    db: Session = Depends(get_db),
+):
+    """Импорт .xlsx или .docx в новую статью с извлечением картинок."""
+    filename = file.filename or "import"
+    ext = Path(filename).suffix.lower()
+    if ext not in (".xlsx", ".docx"):
+        raise HTTPException(400, "Поддерживаются только .xlsx и .docx")
+
+    data = file.file.read(MAX_IMPORT_BYTES + 1)
+    if len(data) > MAX_IMPORT_BYTES:
+        raise HTTPException(413, f"Файл слишком большой (макс {MAX_IMPORT_BYTES // (1024 * 1024)} МБ)")
+    if not data:
+        raise HTTPException(400, "Пустой файл")
+
+    if folder_id:
+        folder = db.get(WikiFolder, folder_id)
+        if not folder or folder.tenant_id != ctx.tenant.id:
+            raise HTTPException(404, "Папка не найдена")
+
+    try:
+        if ext == ".xlsx":
+            md_raw, images = xlsx_to_markdown(data)
+        else:
+            md_raw, images = docx_to_markdown(data)
+    except Exception as e:
+        log.exception("wiki import failed")
+        raise HTTPException(400, f"Не удалось разобрать файл: {e}")
+
+    final_title = (title or Path(filename).stem).strip()[:300] or "Импорт"
+    slug = _make_slug(db, ctx.tenant.id, final_title)
+
+    a = Article(
+        tenant_id=ctx.tenant.id,
+        folder_id=folder_id,
+        slug=slug,
+        title=final_title,
+        content_md="",  # временно, обновим ниже после сохранения картинок
+        is_published=False,
+        author_id=ctx.user.id,
+        last_editor_id=ctx.user.id,
+        current_version=1,
+    )
+    db.add(a)
+    db.flush()
+
+    # Сохраняем картинки на диск в /uploads/{tenant_id}/wiki/{article_id}/
+    # и отдаём их как /media/{tenant_id}/wiki/{article_id}/{name}
+    if images:
+        target_dir = Path(settings.UPLOAD_DIR) / str(ctx.tenant.id) / "wiki" / str(a.id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for name, blob, _ct in images:
+            try:
+                (target_dir / name).write_bytes(blob)
+            except OSError:
+                log.warning("wiki import: не удалось сохранить картинку %s", name)
+
+    url_prefix = f"/media/{ctx.tenant.id}/wiki/{a.id}"
+    a.content_md = replace_image_placeholders(md_raw, url_prefix)
+
+    snapshot_current(db, a, ctx.user.id, comment=f"импорт из {ext[1:].upper()}")
+    rebuild_links(db, a)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
+               action="import", entity="wiki_article", entity_id=a.id, detail=filename)
     db.commit()
     db.refresh(a)
     return _article_out(a, include_content=True)

@@ -153,9 +153,21 @@ export default function ProjectDetail() {
             </thead>
             <tbody>
               {tasks.map((t) => (
-                <tr key={t.id} className="table-row">
+                <tr
+                  key={t.id}
+                  className="table-row cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/40"
+                  onClick={() => nav(`/tasks/${t.id}`)}
+                  role="link"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      nav(`/tasks/${t.id}`);
+                    }
+                  }}
+                >
                   <td className="px-5 py-3">
-                    <Link to={`/tasks/${t.id}`} className="font-medium hover:text-brand-600">{t.title}</Link>
+                    <span className="font-medium">{t.title}</span>
                   </td>
                   <td className="px-5 py-3"><StatusChip status={t.status} /></td>
                   <td className="px-5 py-3"><PriorityChip priority={t.priority} /></td>

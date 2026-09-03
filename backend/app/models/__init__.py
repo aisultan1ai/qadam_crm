@@ -27,6 +27,7 @@ from .calendar import (
     Calendar, CalendarEvent, EventParticipant, EventReminder, EventException,
     EventKind, ParticipantStatus, ReminderKind,
 )
+from .google_calendar import GoogleCalendarAccount
 from .booking import (
     BookingPage, Booking, BookingTeam,
     BookingStatus, TeamStrategy, MeetingProvider,
@@ -107,6 +108,7 @@ __all__ = [
     "EventKind",
     "ParticipantStatus",
     "ReminderKind",
+    "GoogleCalendarAccount",
     "BookingPage",
     "Booking",
     "BookingTeam",

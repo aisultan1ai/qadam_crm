@@ -151,11 +151,9 @@ def assign_user_skill(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    # Юзер может править только свои скиллы; users.update — чужие.
+    # Скиллы — персональные: только сам пользователь может их добавлять/менять.
     if user_id != ctx.user.id:
-        from ..core.permissions import user_has
-        if not user_has(ctx.user, ("users.update",)):
-            raise HTTPException(403, "Forbidden")
+        raise HTTPException(403, "Скиллы может редактировать только владелец профиля")
 
     _assert_tenant_member(db, ctx.tenant.id, user_id)
     skill = db.get(Skill, payload.skill_id)
@@ -193,9 +191,7 @@ def remove_user_skill(
     db: Session = Depends(get_db),
 ):
     if user_id != ctx.user.id:
-        from ..core.permissions import user_has
-        if not user_has(ctx.user, ("users.update",)):
-            raise HTTPException(403, "Forbidden")
+        raise HTTPException(403, "Скиллы может редактировать только владелец профиля")
 
     us = (
         db.query(UserSkill)
@@ -244,9 +240,12 @@ def list_goals(
 @router.post("/goals", response_model=GoalOut, status_code=201)
 def create_goal(
     payload: GoalCreate,
-    ctx: TenantContext = Depends(require("hr.manage_goals")),
+    ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
+    # Цели — персональные: только владелец создаёт свои.
+    if payload.user_id != ctx.user.id:
+        raise HTTPException(403, "Цели может создавать только сам сотрудник")
     _assert_tenant_member(db, ctx.tenant.id, payload.user_id)
 
     goal = Goal(
@@ -280,30 +279,21 @@ def update_goal(
     if not goal or goal.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Цель не найдена")
 
-    # Владелец цели может менять статус и current_value. Постановщик/менеджер — всё.
-    is_owner = goal.user_id == ctx.user.id
-    from ..core.permissions import user_has
-    can_manage = user_has(ctx.user, ("hr.manage_goals",))
-    if not (is_owner or can_manage):
-        raise HTTPException(403, "Forbidden")
+    # Цели — персональные: только сам владелец может их менять.
+    if goal.user_id != ctx.user.id:
+        raise HTTPException(403, "Цели может редактировать только владелец")
 
     if payload.title is not None:
-        if not can_manage:
-            raise HTTPException(403, "Только постановщик может менять формулировку")
         goal.title = payload.title
     if payload.description is not None:
         goal.description = payload.description or None
     if payload.target_value is not None:
-        if not can_manage:
-            raise HTTPException(403, "Только постановщик может менять целевое значение")
         goal.target_value = payload.target_value
     if payload.current_value is not None:
         goal.current_value = payload.current_value
     if payload.unit is not None:
         goal.unit = payload.unit or None
     if payload.deadline is not None:
-        if not can_manage:
-            raise HTTPException(403, "Только постановщик может менять дедлайн")
         goal.deadline = payload.deadline
     if payload.status is not None:
         new_status = GoalStatus(payload.status)
@@ -322,12 +312,14 @@ def update_goal(
 @router.delete("/goals/{goal_id}", response_model=Message)
 def delete_goal(
     goal_id: int,
-    ctx: TenantContext = Depends(require("hr.manage_goals")),
+    ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
     goal = db.get(Goal, goal_id)
     if not goal or goal.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Цель не найдена")
+    if goal.user_id != ctx.user.id:
+        raise HTTPException(403, "Цели может удалять только владелец")
     db.delete(goal)
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="delete", entity="goal", entity_id=goal_id)
     db.commit()

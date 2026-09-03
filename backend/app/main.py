@@ -24,6 +24,7 @@ from .api import (
     booking as booking_api,
     time_tracking,
     hr as hr_api,
+    integrations_google,
 )
 
 
@@ -152,6 +153,7 @@ def create_app() -> FastAPI:
         booking_api.public_router,
         time_tracking.router,
         hr_api.router,
+        integrations_google.router,
     ):
         app.include_router(r)
 

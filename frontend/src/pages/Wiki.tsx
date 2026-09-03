@@ -7,7 +7,7 @@ import clsx from "clsx";
 import {
   BookOpen, Folder, FolderPlus, FileText, Plus, Save, Search, ChevronRight,
   ChevronDown, Loader2, History, Link as LinkIcon, MessageSquare, Eye, Edit,
-  Globe, Lock, Trash2, RotateCcw,
+  Globe, Lock, Trash2, RotateCcw, Upload,
 } from "lucide-react";
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
@@ -94,6 +94,7 @@ export default function Wiki() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -125,6 +126,9 @@ export default function Wiki() {
           >
             <Search size={14} /> Поиск
           </button>
+          <button className="btn-secondary" onClick={() => setImportOpen(true)} title="Импорт Excel/Word">
+            <Upload size={14} /> Импорт
+          </button>
           <button className="btn-primary" onClick={() => navigate("/wiki/new")}>
             <Plus size={14} /> Новая статья
           </button>
@@ -141,7 +145,119 @@ export default function Wiki() {
       </div>
 
       {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} />}
+      {importOpen && <ImportModal onClose={() => setImportOpen(false)} />}
     </div>
+  );
+}
+
+// ============================================================================
+// Import (xlsx/docx) modal
+// ============================================================================
+
+function ImportModal({ onClose }: { onClose: () => void }) {
+  const nav = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  const { data: tree } = useQuery({
+    queryKey: ["wiki-tree"],
+    queryFn: async () => (await api.get<Tree>("/api/wiki/tree")).data,
+  });
+
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [folderId, setFolderId] = useState<number | "">("");
+
+  const importMut = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error("Выберите файл");
+      const fd = new FormData();
+      fd.append("file", file);
+      if (title.trim()) fd.append("title", title.trim());
+      if (folderId !== "") fd.append("folder_id", String(folderId));
+      const res = await api.post<ArticleFull>("/api/wiki/articles/import", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data;
+    },
+    onSuccess: (a) => {
+      qc.invalidateQueries({ queryKey: ["wiki-tree"] });
+      toast.success("Импорт завершён");
+      onClose();
+      nav(`/wiki/${a.slug}`);
+    },
+    onError: (e) => toast.error("Не удалось импортировать", extractApiError(e).message),
+  });
+
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    if (!title) {
+      const base = f.name.replace(/\.(xlsx|docx)$/i, "");
+      setTitle(base);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Импорт из Excel/Word" size="md">
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (file && !importMut.isPending) importMut.mutate(); }}
+        className="space-y-4"
+      >
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+            Файл (.xlsx или .docx)
+          </span>
+          <input
+            type="file"
+            accept=".xlsx,.docx"
+            onChange={onPick}
+            className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-500 file:px-3 file:py-1.5 file:text-white hover:file:bg-brand-600"
+          />
+          {file && (
+            <div className="mt-1 text-xs text-neutral-500">
+              {file.name} · {(file.size / 1024).toFixed(1)} КБ
+            </div>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название статьи</span>
+          <input
+            className="input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Автоматически из имени файла"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Папка (необязательно)</span>
+          <select
+            className="input"
+            value={folderId}
+            onChange={(e) => setFolderId(e.target.value === "" ? "" : Number(e.target.value))}
+          >
+            <option value="">— в корень —</option>
+            {(tree?.folders ?? []).map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
+          Excel: каждый лист — раздел, таблицы сохранятся. Word: заголовки, списки и таблицы конвертируются в Markdown. Картинки из обоих форматов подхватываются автоматически.
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
+          <button type="submit" className="btn-primary" disabled={!file || importMut.isPending}>
+            {importMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Импортировать
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

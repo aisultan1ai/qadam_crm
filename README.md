@@ -140,35 +140,6 @@ qadam_crm/
             └── Profile.tsx
 ```
 
-## Локальная разработка без Docker
-
-Backend:
-
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-export DATABASE_URL=postgresql+psycopg://qadam_crm:qadam_crm@localhost:5432/qadam_crm
-export REDIS_URL=redis://localhost:6379/0
-export JWT_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))")
-export ADMIN_EMAIL=admin@qadam.local
-export ADMIN_PASSWORD=admin123
-
-python -m app.bootstrap
-uvicorn app.main:app --reload
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Для полноценной работы нужны запущенные локально Postgres и Redis (проще всего поднять только их через `docker compose up db redis`).
-
 ## Миграции
 
 Схема хранится в `backend/alembic/`. При обычном запуске `bootstrap.py` сам делает `upgrade head`. Для ручной работы:

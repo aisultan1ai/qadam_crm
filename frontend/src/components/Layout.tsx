@@ -211,7 +211,7 @@ export default function Layout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-white/95 px-3 text-neutral-900 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:gap-3 sm:px-4 dark:border-neutral-800 dark:bg-[#0F0F14]/95 dark:text-neutral-100 dark:supports-[backdrop-filter]:bg-[#0F0F14]/80">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-white px-3 text-neutral-900 backdrop-blur sm:gap-3 sm:px-4 dark:border-neutral-800 dark:bg-[#0F0F14] dark:text-neutral-100">
           <button
             className="btn-ghost !p-2 md:hidden"
             onClick={() => setMobileNavOpen(true)}

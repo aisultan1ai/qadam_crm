@@ -9,7 +9,7 @@ import {
   Plus, Copy, Trash2, Save, CreditCard, Palette, UserPlus, Mail, Check,
   Clock, XCircle, RefreshCw, Users, HardDrive, Zap, Sparkles, Shield,
   GripVertical, Eye, Phone, Hash, AlignLeft, ChevronDown, MessageCircle,
-  Loader2, ExternalLink, CalendarClock,
+  Loader2, ExternalLink, CalendarClock, Link2, LogOut,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
@@ -31,6 +31,7 @@ const SETTINGS_TABS: TabDef[] = [
   { to: "messengers", label: "Открытые линии", icon: MessageCircle, perm: "messengers.manage" },
   { to: "mailbox", label: "Почта", icon: Mail, perm: "mail.use" },
   { to: "booking", label: "Букинг", icon: CalendarClock, perm: "booking.use" },
+  { to: "integrations", label: "Интеграции", icon: Link2, perm: "calendar.use" },
   { to: "branding", label: "Брендинг", icon: Palette, ownerOnly: true },
   { to: "billing", label: "Тариф", icon: CreditCard, ownerOnly: true },
 ];
@@ -90,6 +91,10 @@ export default function Settings() {
         <Route
           path="booking"
           element={can("booking.use") ? <BookingSettings /> : <Forbid />}
+        />
+        <Route
+          path="integrations"
+          element={can("calendar.use") ? <IntegrationsSettings /> : <Forbid />}
         />
         <Route path="branding" element={isOwner ? <BrandingSettings /> : <Forbid />} />
         <Route path="billing" element={isOwner ? <BillingSettings /> : <Forbid />} />
@@ -3930,6 +3935,324 @@ function BookingPageEditor({
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Интеграции (Google Calendar и т.п.)
+// ============================================================================
+
+type GoogleStatus = {
+  connected: boolean;
+  google_email: string | null;
+  sync_enabled: boolean;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+  configured: boolean;
+};
+
+function IntegrationsSettings() {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+  const { me } = useAuth();
+  const isOwner = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin;
+
+  useEffect(() => {
+    // Показать баннер после OAuth-callback от Google.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("google_connected") === "1") {
+      toast.success("Google Calendar подключён");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("google_error")) {
+      toast.error("Не удалось подключить Google", params.get("google_error") || "");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  const statusQ = useQuery({
+    queryKey: ["integrations", "google", "status"],
+    queryFn: async () => (await api.get<GoogleStatus>("/api/integrations/google/status")).data,
+  });
+
+  const connect = useMutation({
+    mutationFn: async () => (await api.get<{ auth_url: string }>("/api/integrations/google/auth-url")).data,
+    onSuccess: (d) => { window.location.href = d.auth_url; },
+    onError: (e) => toast.error("Не удалось запустить подключение", extractApiError(e).message),
+  });
+
+  const syncNow = useMutation({
+    mutationFn: async () => (await api.post<{ created: number; updated: number; deleted: number }>("/api/integrations/google/sync")).data,
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["integrations", "google", "status"] });
+      toast.success("Синхронизация выполнена", `Создано: ${r.created}, обновлено: ${r.updated}, удалено: ${r.deleted}`);
+    },
+    onError: (e) => toast.error("Ошибка синхронизации", extractApiError(e).message),
+  });
+
+  const disconnect = useMutation({
+    mutationFn: async () => (await api.delete("/api/integrations/google/disconnect")).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["integrations", "google", "status"] });
+      toast.success("Google-аккаунт отключён");
+    },
+    onError: (e) => toast.error("Не удалось отключить", extractApiError(e).message),
+  });
+
+  const s = statusQ.data;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Интеграции</h2>
+        <p className="text-sm text-neutral-500">Подключение внешних сервисов к вашему аккаунту</p>
+      </div>
+
+      {isOwner && <GoogleTenantConfig onSaved={() => qc.invalidateQueries({ queryKey: ["integrations", "google", "status"] })} />}
+
+      <div className="card p-5">
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#4285F4]/10 text-[#4285F4]">
+            <CalendarClock size={22} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold">Мой Google Calendar</h3>
+              {s?.connected && (
+                <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  <Check size={11} /> Подключён
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-sm text-neutral-500">
+              События из вашего Google Calendar появятся в разделе «Календарь» (только чтение).
+              Синхронизация автоматически каждые 15 минут.
+            </p>
+
+            {s && !s.configured && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                {isOwner
+                  ? "Сначала заполните данные Google OAuth в блоке выше — свой client_id/secret и redirect_uri для вашей компании."
+                  : "Интеграция ещё не настроена в вашей компании. Обратитесь к владельцу — он должен ввести данные Google OAuth в /settings/integrations."}
+              </div>
+            )}
+
+            {s?.connected && (
+              <div className="mt-3 space-y-1 text-xs text-neutral-500">
+                <div><b>Аккаунт:</b> {s.google_email}</div>
+                {s.last_sync_at && (
+                  <div><b>Последняя синхронизация:</b> {new Date(s.last_sync_at).toLocaleString("ru-RU")}</div>
+                )}
+                {s.last_sync_error && (
+                  <div className="text-rose-600 dark:text-rose-400"><b>Ошибка:</b> {s.last_sync_error}</div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {!s?.connected && (
+                <button
+                  className="btn-primary"
+                  onClick={() => connect.mutate()}
+                  disabled={!s?.configured || connect.isPending}
+                >
+                  {connect.isPending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
+                  Подключить Google
+                </button>
+              )}
+              {s?.connected && (
+                <>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => syncNow.mutate()}
+                    disabled={syncNow.isPending}
+                  >
+                    {syncNow.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    Синхронизировать сейчас
+                  </button>
+                  <button
+                    className="btn-ghost text-rose-500"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: "Отключить Google Calendar?",
+                        message: "Все события, полученные из Google, будут удалены. Настройки Google остаются нетронутыми.",
+                        confirmLabel: "Отключить",
+                        danger: true,
+                      });
+                      if (ok) disconnect.mutate();
+                    }}
+                    disabled={disconnect.isPending}
+                  >
+                    <LogOut size={14} /> Отключить
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type TenantConfig = {
+  client_id: string | null;
+  redirect_uri: string | null;
+  has_secret: boolean;
+};
+
+function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+
+  const cfgQ = useQuery({
+    queryKey: ["integrations", "google", "tenant-config"],
+    queryFn: async () => (await api.get<TenantConfig>("/api/integrations/google/tenant-config")).data,
+  });
+
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [redirectUri, setRedirectUri] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (cfgQ.data && !initialized) {
+      setClientId(cfgQ.data.client_id ?? "");
+      setRedirectUri(cfgQ.data.redirect_uri ?? "");
+      setInitialized(true);
+    }
+  }, [cfgQ.data, initialized]);
+
+  const save = useMutation({
+    mutationFn: async () =>
+      (await api.put<TenantConfig>("/api/integrations/google/tenant-config", {
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        redirect_uri: redirectUri.trim(),
+      })).data,
+    onSuccess: () => {
+      toast.success("Настройки Google сохранены");
+      setClientSecret("");
+      qc.invalidateQueries({ queryKey: ["integrations", "google", "tenant-config"] });
+      onSaved();
+    },
+    onError: (e) => toast.error("Не удалось сохранить", extractApiError(e).message),
+  });
+
+  const clear = useMutation({
+    mutationFn: async () => api.delete("/api/integrations/google/tenant-config"),
+    onSuccess: () => {
+      toast.success("Настройки Google очищены");
+      setClientId(""); setClientSecret(""); setRedirectUri("");
+      setInitialized(false);
+      qc.invalidateQueries({ queryKey: ["integrations", "google", "tenant-config"] });
+      onSaved();
+    },
+    onError: (e) => toast.error("Не удалось очистить", extractApiError(e).message),
+  });
+
+  const hasSecret = cfgQ.data?.has_secret ?? false;
+  const secretRequired = !hasSecret; // если секрет уже сохранён — можно не вводить, только client_id/redirect_uri перезапишутся
+  const canSubmit =
+    clientId.trim().length >= 10 &&
+    redirectUri.trim().length >= 10 &&
+    (!secretRequired || clientSecret.trim().length >= 10);
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-start gap-4">
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600">
+          <Shield size={22} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-semibold">Настройки Google OAuth для компании</h3>
+          <p className="mt-0.5 text-sm text-neutral-500">
+            Владелец задаёт client_id / secret / redirect_uri из Google Cloud Console. После этого все сотрудники смогут подключить свои Google-календари.
+          </p>
+
+          <details className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 open:pb-3 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
+            <summary className="cursor-pointer font-medium">Как получить credentials</summary>
+            <ol className="mt-2 list-decimal space-y-1 pl-4">
+              <li>Открыть <a className="link" href="https://console.cloud.google.com" target="_blank" rel="noreferrer">Google Cloud Console</a></li>
+              <li>Создать проект (например, «Qadam CRM — MyCompany»)</li>
+              <li>APIs &amp; Services → Library → включить <b>Google Calendar API</b></li>
+              <li>OAuth consent screen → External → добавить email owner в Test users</li>
+              <li>Credentials → Create OAuth client ID → тип <b>Web application</b></li>
+              <li>В Authorized redirect URIs указать URL из поля ниже, например:<br /><code>https://ваш-домен/api/integrations/google/callback</code></li>
+              <li>Скопировать <b>Client ID</b> и <b>Client secret</b> в поля ниже</li>
+            </ol>
+          </details>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Client ID</span>
+              <input
+                className="input font-mono text-xs"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="123456789-abc.apps.googleusercontent.com"
+              />
+            </label>
+
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                Client Secret {hasSecret && <span className="text-emerald-600">· сохранён</span>}
+              </span>
+              <input
+                className="input font-mono text-xs"
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={hasSecret ? "Оставьте пустым, чтобы не менять" : "GOCSPX-..."}
+                autoComplete="new-password"
+              />
+            </label>
+
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Redirect URI</span>
+              <input
+                className="input font-mono text-xs"
+                value={redirectUri}
+                onChange={(e) => setRedirectUri(e.target.value)}
+                placeholder={`${window.location.origin}/api/integrations/google/callback`}
+              />
+              <span className="mt-1 block text-[11px] text-neutral-500">
+                Точное совпадение с Authorized redirect URIs в Google Cloud. Обычно: <code>{window.location.origin}/api/integrations/google/callback</code>
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              className="btn-primary"
+              onClick={() => save.mutate()}
+              disabled={!canSubmit || save.isPending}
+            >
+              {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Сохранить
+            </button>
+            {(cfgQ.data?.client_id || cfgQ.data?.has_secret) && (
+              <button
+                className="btn-ghost text-rose-500"
+                disabled={clear.isPending}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Очистить настройки Google?",
+                    message: "Все подключения сотрудников перестанут синхронизироваться, пока настройки не будут введены заново.",
+                    confirmLabel: "Очистить",
+                    danger: true,
+                  });
+                  if (ok) clear.mutate();
+                }}
+              >
+                <Trash2 size={14} /> Очистить
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

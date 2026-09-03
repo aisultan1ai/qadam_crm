@@ -91,7 +91,9 @@ export default function Profile() {
   const [goalOpen, setGoalOpen] = useState<Goal | "new" | null>(null);
 
   const canEdit = isSelf || can("users.update");
-  const canManageGoals = can("hr.manage_goals");
+  // Скиллы и цели персональные — только владелец может их менять, даже админ только смотрит.
+  const canManageSkills = isSelf;
+  const canManageGoals = isSelf;
 
   if (!user && !isSelf && otherUserQ.isPending) {
     return <div className="text-sm text-neutral-500">Загрузка…</div>;
@@ -115,7 +117,7 @@ export default function Profile() {
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Award size={16} /> Скиллы
             </h3>
-            {canEdit && (
+            {canManageSkills && (
               <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setSkillsOpen(true)}>
                 <Plus size={13} /> Управлять
               </button>

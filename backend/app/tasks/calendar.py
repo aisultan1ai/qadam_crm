@@ -102,3 +102,41 @@ def _send_reminder(db, event: CalendarEvent, reminder: EventReminder, occ: dict,
                     email_task.delay(to=user.email, title=title, body=body, link_url=event.url)
                 except Exception:
                     log.exception("calendar reminder email failed for user %s", uid)
+
+
+@celery_app.task(name="calendar.sync_google_all")
+def sync_google_all() -> dict:
+    """Синхронизирует все включённые Google-аккаунты по всем тенантам. Раз в 15 минут.
+
+    Пропускает аккаунты, чей tenant не сконфигурировал Google OAuth.
+    """
+    from ..models import GoogleCalendarAccount, Tenant
+    from ..services import google_calendar as gcal
+
+    stats = {"accounts": 0, "created": 0, "updated": 0, "deleted": 0, "failed": 0, "skipped": 0}
+    with SessionLocal() as db:
+        accs = (
+            db.query(GoogleCalendarAccount)
+            .filter(GoogleCalendarAccount.sync_enabled.is_(True))
+            .all()
+        )
+        for acc in accs:
+            tenant = db.get(Tenant, acc.tenant_id)
+            if not tenant or not gcal.tenant_configured(tenant):
+                stats["skipped"] += 1
+                continue
+            stats["accounts"] += 1
+            try:
+                c, u, d = gcal.sync_account(db, acc)
+                stats["created"] += c
+                stats["updated"] += u
+                stats["deleted"] += d
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                log.warning("google sync failed for acc %s: %s", acc.id, e)
+                acc.last_sync_error = str(e)[:1000]
+                db.commit()
+                stats["failed"] += 1
+    log.info("calendar.sync_google_all: %s", stats)
+    return stats
