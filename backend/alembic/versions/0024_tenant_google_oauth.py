@@ -1,4 +1,4 @@
-"""Per-tenant Google OAuth credentials
+"""per-tenant google oauth credentials
 
 Revision ID: 0024_tenant_google_oauth
 Revises: 0023_google_calendar

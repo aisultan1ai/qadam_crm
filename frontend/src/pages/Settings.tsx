@@ -3941,7 +3941,7 @@ function BookingPageEditor({
 }
 
 // ============================================================================
-// Интеграции (Google Calendar и т.п.)
+// IntegrationsSettings — Google Calendar
 // ============================================================================
 
 type GoogleStatus = {
@@ -3961,7 +3961,6 @@ function IntegrationsSettings() {
   const isOwner = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin;
 
   useEffect(() => {
-    // Показать баннер после OAuth-callback от Google.
     const params = new URLSearchParams(window.location.search);
     if (params.get("google_connected") === "1") {
       toast.success("Google Calendar подключён");
@@ -4127,12 +4126,14 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
   }, [cfgQ.data, initialized]);
 
   const save = useMutation({
-    mutationFn: async () =>
-      (await api.put<TenantConfig>("/api/integrations/google/tenant-config", {
+    mutationFn: async () => {
+      const body: Record<string, string> = {
         client_id: clientId.trim(),
-        client_secret: clientSecret.trim(),
         redirect_uri: redirectUri.trim(),
-      })).data,
+      };
+      if (clientSecret.trim()) body.client_secret = clientSecret.trim();
+      return (await api.put<TenantConfig>("/api/integrations/google/tenant-config", body)).data;
+    },
     onSuccess: () => {
       toast.success("Настройки Google сохранены");
       setClientSecret("");
@@ -4155,7 +4156,7 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
   });
 
   const hasSecret = cfgQ.data?.has_secret ?? false;
-  const secretRequired = !hasSecret; // если секрет уже сохранён — можно не вводить, только client_id/redirect_uri перезапишутся
+  const secretRequired = !hasSecret;
   const canSubmit =
     clientId.trim().length >= 10 &&
     redirectUri.trim().length >= 10 &&

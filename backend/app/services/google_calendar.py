@@ -1,12 +1,7 @@
-"""Клиент Google Calendar: OAuth2 flow, token refresh, sync events → CalendarEvent.
-
-Credentials хранятся per-tenant (Tenant.google_client_id / google_client_secret_enc /
-google_redirect_uri). Настраивает tenant owner в /settings/integrations.
-"""
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 from google.auth.transport.requests import Request as GoogleRequest
@@ -31,7 +26,6 @@ GOOGLE_SOURCE = "google"
 
 
 def tenant_configured(tenant: Tenant) -> bool:
-    """У tenant заданы все три поля для OAuth."""
     return bool(
         tenant.google_client_id
         and tenant.google_client_secret_enc
@@ -64,15 +58,12 @@ def build_auth_url(tenant: Tenant, state: str) -> str:
 
 
 def exchange_code(tenant: Tenant, code: str, state: str) -> Tuple[Credentials, str]:
-    """Обменивает authorization code на tokens. Возвращает (creds, google_email)."""
     flow = Flow.from_client_config(_client_config_for(tenant), scopes=SCOPES, state=state)
     flow.redirect_uri = tenant.google_redirect_uri
     flow.fetch_token(code=code)
     creds: Credentials = flow.credentials  # type: ignore[assignment]
 
-    # Получаем email через userinfo
-    from googleapiclient.discovery import build as _build
-    service = _build("oauth2", "v2", credentials=creds, cache_discovery=False)
+    service = build("oauth2", "v2", credentials=creds, cache_discovery=False)
     info = service.userinfo().get().execute()
     email = info.get("email") or ""
     return creds, email
@@ -137,7 +128,6 @@ def _ensure_fresh(acc: GoogleCalendarAccount, creds: Credentials, db: Session) -
 
 
 def _get_or_create_local_calendar(db: Session, acc: GoogleCalendarAccount) -> Calendar:
-    """Отдельный локальный Calendar «Google — {email}», в который льём google-события."""
     name = f"Google — {acc.google_email}"
     cal = (
         db.query(Calendar)
@@ -153,7 +143,7 @@ def _get_or_create_local_calendar(db: Session, acc: GoogleCalendarAccount) -> Ca
             tenant_id=acc.tenant_id,
             owner_id=acc.user_id,
             name=name,
-            color="#4285F4",  # Google-blue
+            color="#4285F4",
             is_visible=True,
         )
         db.add(cal)
@@ -162,7 +152,6 @@ def _get_or_create_local_calendar(db: Session, acc: GoogleCalendarAccount) -> Ca
 
 
 def _parse_dt(value: Optional[dict]) -> Tuple[Optional[datetime], bool]:
-    """Google возвращает {dateTime, timeZone} или {date} для all-day. Отдаёт (utc_dt, all_day)."""
     if not value:
         return None, False
     if "dateTime" in value:
@@ -176,10 +165,6 @@ def _parse_dt(value: Optional[dict]) -> Tuple[Optional[datetime], bool]:
 
 
 def sync_account(db: Session, acc: GoogleCalendarAccount) -> Tuple[int, int, int]:
-    """Синхронизирует события primary-календаря аккаунта.
-
-    Returns: (created, updated, deleted)
-    """
     tenant = db.get(Tenant, acc.tenant_id)
     if not tenant or not tenant_configured(tenant):
         raise RuntimeError("tenant Google credentials not configured")
@@ -199,12 +184,9 @@ def sync_account(db: Session, acc: GoogleCalendarAccount) -> Tuple[int, int, int
     next_sync_token: Optional[str] = None
     request_kwargs: dict = {"calendarId": calendar_id, "singleEvents": True, "showDeleted": True, "maxResults": 250}
 
-    # incremental sync через syncToken. Если протух — Google вернёт 410 → полный ресинк.
     if acc.sync_token:
         request_kwargs["syncToken"] = acc.sync_token
     else:
-        # первая синхронизация — только события в диапазоне [-90d, +365d], иначе годы истории.
-        from datetime import timedelta
         now = datetime.now(timezone.utc)
         request_kwargs["timeMin"] = (now - timedelta(days=90)).isoformat()
         request_kwargs["timeMax"] = (now + timedelta(days=365)).isoformat()
@@ -216,7 +198,6 @@ def sync_account(db: Session, acc: GoogleCalendarAccount) -> Tuple[int, int, int
             resp = service.events().list(**request_kwargs).execute()
         except HttpError as e:
             if e.resp.status == 410:
-                # syncToken протух — сброс, попробуем в следующий раз full sync
                 acc.sync_token = None
                 db.flush()
                 raise RuntimeError("sync token expired, retry full sync next time")
@@ -301,7 +282,6 @@ def sync_account(db: Session, acc: GoogleCalendarAccount) -> Tuple[int, int, int
 
 
 def delete_account(db: Session, acc: GoogleCalendarAccount) -> None:
-    """Отключение: удаляем аккаунт и все связанные external события."""
     (
         db.query(CalendarEvent)
         .filter(
@@ -311,7 +291,6 @@ def delete_account(db: Session, acc: GoogleCalendarAccount) -> None:
         )
         .delete(synchronize_session=False)
     )
-    # Удаляем сам локальный «Google — email» календарь, если он пустой.
     cal_name = f"Google — {acc.google_email}"
     cal = (
         db.query(Calendar)

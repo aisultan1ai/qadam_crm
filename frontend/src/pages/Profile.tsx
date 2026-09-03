@@ -91,7 +91,6 @@ export default function Profile() {
   const [goalOpen, setGoalOpen] = useState<Goal | "new" | null>(null);
 
   const canEdit = isSelf || can("users.update");
-  // Скиллы и цели персональные — только владелец может их менять, даже админ только смотрит.
   const canManageSkills = isSelf;
   const canManageGoals = isSelf;
 

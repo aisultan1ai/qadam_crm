@@ -1,9 +1,3 @@
-"""Endpoints для интеграции с Google Calendar: OAuth flow, статус, sync, disconnect.
-
-Credentials — per-tenant. Управление через /api/integrations/google/tenant-config
-(доступно tenant owner). Само подключение (kнопка «Подключить Google») —
-каждый пользователь для себя.
-"""
 from __future__ import annotations
 
 import base64
@@ -39,7 +33,7 @@ class StatusOut(BaseModel):
     sync_enabled: bool = False
     last_sync_at: Optional[str] = None
     last_sync_error: Optional[str] = None
-    configured: bool  # заданы ли tenant-level credentials
+    configured: bool
 
 
 class TenantConfigOut(BaseModel):
@@ -50,7 +44,7 @@ class TenantConfigOut(BaseModel):
 
 class TenantConfigIn(BaseModel):
     client_id: str = Field(min_length=10, max_length=200)
-    client_secret: str = Field(min_length=10, max_length=200)
+    client_secret: Optional[str] = Field(default=None, max_length=200)
     redirect_uri: str = Field(min_length=10, max_length=500)
 
 
@@ -85,16 +79,11 @@ def _decode_state(state: str) -> tuple[int, int, str]:
     return int(data["t"]), int(data["u"]), str(data["n"])
 
 
-# ---------------------------------------------------------------------------
-# Tenant-level OAuth config (owner only)
-# ---------------------------------------------------------------------------
-
 @router.get("/tenant-config", response_model=TenantConfigOut)
 def get_tenant_config(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    """Возвращает текущие OAuth credentials компании. Секрет НЕ отдаём — только флаг."""
     _require_owner(ctx)
     t = ctx.tenant
     return TenantConfigOut(
@@ -115,7 +104,13 @@ def put_tenant_config(
     if not t:
         raise HTTPException(404, "Tenant not found")
     t.google_client_id = payload.client_id.strip()
-    t.google_client_secret_enc = encrypt(payload.client_secret.strip())
+    if payload.client_secret is not None and payload.client_secret.strip():
+        secret = payload.client_secret.strip()
+        if len(secret) < 10:
+            raise HTTPException(422, "client_secret слишком короткий")
+        t.google_client_secret_enc = encrypt(secret)
+    elif not t.google_client_secret_enc:
+        raise HTTPException(422, "client_secret обязателен при первом сохранении")
     t.google_redirect_uri = payload.redirect_uri.strip()
     log_action(db, tenant_id=t.id, user_id=ctx.user.id,
                action="update", entity="tenant_google_config", entity_id=t.id)
@@ -145,10 +140,6 @@ def delete_tenant_config(
     db.commit()
     return Message(message="Настройки Google очищены")
 
-
-# ---------------------------------------------------------------------------
-# Personal Google account (each user)
-# ---------------------------------------------------------------------------
 
 @router.get("/status", response_model=StatusOut)
 def status(
@@ -192,7 +183,6 @@ def callback(
     error: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Google OAuth redirect_uri. tenant_id/user_id из state (cookie ненадёжна из-за SameSite)."""
     if error:
         return RedirectResponse(url=f"/settings/integrations?google_error={error}", status_code=302)
     if not code or not state:
@@ -219,7 +209,6 @@ def callback(
                action="connect", entity="google_calendar_account", entity_id=acc.id, detail=email)
     db.commit()
 
-    # Триггер первой синхронизации сразу — небольшой batch, чтобы юзер увидел события
     try:
         gcal.sync_account(db, acc)
         db.commit()

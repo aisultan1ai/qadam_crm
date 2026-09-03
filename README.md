@@ -1,162 +1,137 @@
-# Qadam CRM — трекинг задач компании
+# Qadam CRM
 
-**Qadam CRM** — современная CRM с гибкой ролевой моделью (RBAC), Kanban / таблица / список / календарь, комментариями, вложениями, аналитикой и realtime-уведомлениями.
+Полноценная SaaS-CRM: RBAC, задачи/проекты, лиды и роутинг, омниканал (Telegram/WhatsApp/Instagram), почта, база знаний, календарь, букинг, тайм-трекинг, HR-профили, автоматизации и интеграция с Google Calendar.
 
-Stack: **React + TypeScript + Tailwind CSS** • **FastAPI + SQLAlchemy 2.0 + Alembic** • **PostgreSQL 16** • **Redis 7** • **JWT (access + refresh)** • **WebSocket** • **Docker Compose**.
+**Stack:** React + TypeScript + Tailwind • FastAPI + SQLAlchemy 2 + Alembic • PostgreSQL • Redis + Celery • WebSocket • Nginx • Docker Compose.
 
-## Быстрый старт
+Мульти-тенант, per-user WebSocket, Celery Beat, шифрование секретов (Fernet), HTTPS через Let's Encrypt.
 
-```bash
-# 1. создайте .env в корне (см. переменные ниже)
-cp .env.example .env  # если файл-примера ещё нет, создайте вручную
+## Быстрый старт (Docker)
 
-# 2. поднимите стек
-docker compose up --build
-```
-
-- Frontend: http://localhost:5173
-- Backend / Swagger: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- PostgreSQL: `localhost:5432` (qadam_crm / qadam_crm / qadam_crm)
-- Redis: `localhost:6379`
-
-При первом запуске backend автоматически:
-1. Ждёт готовности БД.
-2. Приводит схему БД к актуальному состоянию:
-   - пустая БД → `Base.metadata.create_all` + `alembic stamp head`;
-   - БД без `alembic_version` → `stamp head`;
-   - иначе → `alembic upgrade head` (если уже head — no-op).
-3. Синхронизирует каталог разрешений (`PERMISSIONS`) в таблицу.
-4. Создаёт роли `Администратор`, `Менеджер`, `Сотрудник` (только если их ещё нет).
-5. Создаёт **единственного суперпользователя** из `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Если пароль не задан — генерируется случайный и **однократно** печатается в логи backend-контейнера.
-
-Дополнительных демо-пользователей `manager@…` / `employee@…` **не создаётся** — заводите их через раздел «Пользователи» под администратором.
-
-### Переменные окружения
-
-Полный список (со значениями по умолчанию) — в `backend/app/config.py`. Наиболее важные:
-
-| Переменная | По умолчанию | Назначение |
-|---|---|---|
-| `DATABASE_URL` | `postgresql+psycopg://qadam_crm:qadam_crm@db:5432/qadam_crm` | Подключение к Postgres |
-| `REDIS_URL` | `redis://redis:6379/0` | Redis для rate limit, JWT blacklist, WS pub/sub |
-| `JWT_SECRET` | — (**обязательно**, ≥ 32 символов) | Подпись JWT |
-| `JWT_ACCESS_MINUTES` | `30` | TTL access-токена |
-| `JWT_REFRESH_DAYS` | `30` | TTL refresh-токена |
-| `LOGIN_RATE_LIMIT` | `5/minute` | Лимит попыток `/api/auth/login` |
-| `CORS_ORIGINS` | `http://localhost:5173` | Через запятую |
-| `UPLOAD_DIR` | `/app/uploads` | Каталог вложений (в контейнере) |
-| `MAX_UPLOAD_BYTES` | `10 MiB` | Лимит на файл |
-| `MAX_AVATAR_BYTES` | `5 MiB` | Лимит на аватар |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@qadam.local` / `None` | Начальный супер-админ |
-
-### Первый вход
-
-Если `ADMIN_PASSWORD` был задан — используйте его. Иначе смотрите в логи backend:
+Проект запускается только в Docker — локальный dev-режим не поддерживается.
 
 ```bash
-docker compose logs backend | grep -A3 "Создан администратор"
+# 1. Скопировать шаблон окружения и сгенерировать сильные секреты
+cp .env.example .env
+python scripts/gen_secrets.py --merge .env
+
+# 2. Открыть .env и задать значения (CORS_ORIGINS, ADMIN_EMAIL, APP_ENV и т.д.)
+#    — все нужные ключи и комментарии уже в .env.example
+
+# 3. Поднять стек
+docker compose -f docker-compose.prod.yml up -d
+
+# 4. Смотреть логи первого запуска (миграции + создание админа)
+docker compose -f docker-compose.prod.yml logs -f backend
 ```
 
-Дальше администратор создаёт пользователей и назначает им роли в веб-интерфейсе.
+После старта:
+- Приложение — `http://localhost` (nginx на 80)
+- Health-проба — `http://localhost/health`
+
+## Первый вход
+
+При первом старте backend автоматически:
+1. Ждёт готовности БД
+2. Прогоняет миграции Alembic до последней ревизии
+3. Сидит роли и permissions
+4. Создаёт единственного суперпользователя из `ADMIN_EMAIL` (пароль — из `ADMIN_PASSWORD`, либо генерируется и **один раз** печатается в лог)
+
+Если пароль не задавали — найдите его в логе:
+```bash
+docker compose -f docker-compose.prod.yml logs backend | grep -A3 "Создан администратор"
+```
+
+После первого входа смените пароль в UI и уберите `ADMIN_PASSWORD` из `.env`.
+
+## Обновление кода
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml build backend frontend
+docker compose -f docker-compose.prod.yml up -d
+# Миграции применятся автоматически при старте backend
+```
+
+## Production-развёртывание
+
+Полная инструкция (HTTPS через certbot, wildcard-домен для тенантов на поддоменах, апгрейд PostgreSQL 16→17, апгрейд Python, бэкапы) — в [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Возможности
 
-- **RBAC** — произвольные роли, чекбоксы прав по группам (Пользователи, Проекты, Задачи, Комментарии, Файлы, Аналитика, Настройки), копирование ролей, удаление только неиспользуемых.
-- **Пользователи** — имя, email, пароль, несколько ролей, отдел, аватар, активация.
-- **Проекты** — описание, ответственный, участники, дедлайн, архивирование.
-- **Задачи** — статус (Новая / В работе / На проверке / Завершена / Отменена), приоритет (Низкий / Средний / Высокий / Критический), исполнитель, автор, дедлайн, чек-лист, комментарии, вложения, история изменений.
-- **Представления**: Kanban с drag & drop, таблица, список, календарь.
-- **Комментарии** с `@email` упоминаниями и уведомлениями, реакции-эмодзи.
-- **Realtime-уведомления** через WebSocket (Redis pub/sub): назначение задачи, смена статуса, новый комментарий, упоминание.
-- **Глобальный поиск** (`Ctrl+K`) по задачам, проектам, пользователям, комментариям.
-- **Фильтры** — исполнитель, проект, статус, приоритет, только просроченные.
-- **Аналитика** — общая сводка, задачи по статусам, эффективность сотрудников, экспорт CSV.
-- **Автосохранение** описания задачи (по потере фокуса), inline-редактирование статуса/приоритета/исполнителя/дедлайна.
-- **История действий** пользователя (activity log) — записывается для create/update/delete/bulk_update, отображается на Dashboard.
-- **JWT-безопасность** — access + refresh с ротацией, blacklist через Redis, rate limit на логине/refresh.
-- **HTTP security** — CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy.
-- **UI/UX** — минималистичный, тёмная и светлая темы, плавные анимации, круглые карточки, аккуратные таблицы.
-- **REST API + Swagger** — `/docs` (OpenAPI 3), `/redoc`.
+**Ядро (RBAC + задачи + проекты)**
+- Гибкая ролевая модель с чекбоксами прав по группам, копирование ролей
+- Мультитенант с поддоменами, приглашения, брендинг per-tenant (лого, primary color)
+- Задачи: Kanban / таблица / список / календарь, чек-листы, вложения, комментарии с @упоминаниями и реакциями
+- Realtime через WebSocket (Redis pub/sub)
+- Глобальный поиск (Ctrl+K), фильтры, аналитика с экспортом CSV
+- History/activity log
+
+**Модули**
+- **M1 Автоматизации** — визуальный конструктор (React Flow), 8 типов действий, отложенные шаги через Celery
+- **M2 Роутинг лидов** — 4 стратегии распределения, расписание менеджеров
+- **M3 Открытые линии** — Telegram / WhatsApp / Instagram: webhook, unified inbox, auto-reply, шаблоны
+- **M4 Почта** — IMAP + SMTP per-user, threading, шифрование паролей (Fernet)
+- **M6 База знаний** — Markdown-статьи, wiki-ссылки `[[…]]`, версии, комментарии, полнотекстовый поиск (tsvector). **Импорт из Excel/Word** с картинками
+- **M7 Календарь** — события, RRULE, участники, напоминания через Celery Beat, ICS-подписка
+- **M8 Букинг** — Calendly-style публичные страницы слотов, round-robin/least-busy команды
+- **M11 HR-профили** — скиллы / цели / 1-on-1 / кудос, OrgChart (React Flow), виджеты Dashboard. Скиллы и цели — строго персональные (только владелец редактирует)
+- **M12 Google Calendar** — OAuth2 per user, автосинхронизация через Celery Beat. **Credentials задаёт owner компании в UI** (per-tenant), не через env
 
 ## Структура
 
 ```
 qadam_crm/
-├── docker-compose.yml
-├── docker-compose.prod.yml
-├── nginx/
+├── docker-compose.prod.yml    — основной prod-стек (nginx + backend + celery + db + redis)
+├── docker-compose.tls.yml     — override для HTTPS (certbot)
+├── nginx/                     — конфиги (HTTP + HTTPS варианты)
+├── scripts/
+│   ├── gen_secrets.py             — генерация сильных секретов
+│   ├── init-letsencrypt.sh        — первичный TLS-сертификат
+│   └── migrate-pg16-to-pg17.sh    — апгрейд PostgreSQL
+├── docs/DEPLOY.md             — полная инструкция по деплою
 ├── backend/
 │   ├── Dockerfile
-│   ├── alembic.ini
-│   ├── alembic/               — миграции
+│   ├── alembic/versions/      — миграции 0001…0024
 │   ├── requirements.txt
 │   └── app/
-│       ├── main.py            — FastAPI, CORS, security headers (включая CSP), роутеры
-│       ├── bootstrap.py       — wait_for_db + миграции + seed permissions/roles/admin
-│       ├── config.py          — pydantic-settings
-│       ├── database.py        — SQLAlchemy Session
-│       ├── core/
-│       │   ├── security.py    — JWT access/refresh, bcrypt, blacklist
-│       │   ├── permissions.py — каталог прав + проверка
-│       │   ├── errors.py      — централизованные обработчики
-│       │   ├── limiter.py     — SlowAPI (Redis-backed)
-│       │   ├── redis_client.py
-│       │   ├── scheduler.py   — APScheduler (напоминания и т.п.)
-│       │   └── ws_hub.py      — WebSocket-хаб поверх Redis pub/sub
-│       ├── models/            — SQLAlchemy 2.0 модели
-│       ├── schemas/           — Pydantic-схемы
-│       └── api/
-│           ├── deps.py          — get_current_user, require(*codes), log_action
-│           ├── auth.py          — login, refresh, logout, /me
-│           ├── roles.py         — CRUD ролей, permissions, copy
-│           ├── users.py         — CRUD пользователей, отделы, аватары
-│           ├── projects.py      — CRUD проектов + архив
-│           ├── tasks.py         — CRUD задач, bulk, checklist
-│           ├── comments.py      — комментарии + @упоминания + реакции
-│           ├── attachments.py   — upload / download / delete
-│           ├── notifications.py — список / прочитано
-│           ├── analytics.py     — dashboard + сотрудники
-│           ├── search.py        — глобальный поиск
-│           └── ws.py            — WebSocket-эндпоинт
+│       ├── main.py, bootstrap.py, config.py, database.py
+│       ├── core/              — security, permissions, celery_app, ws_hub, secrets (Fernet), redis_client
+│       ├── models/            — SQLAlchemy 2.0 модели по всем модулям
+│       ├── schemas/           — Pydantic
+│       ├── services/          — бизнес-логика (mail, wiki, calendar, google_calendar, …)
+│       ├── tasks/             — Celery-задачи (email, mail sync, calendar reminders, google sync, …)
+│       └── api/               — REST endpoints (auth, users, tasks, wiki, calendar, integrations_google, …)
 └── frontend/
-    ├── Dockerfile
-    ├── package.json
-    ├── vite.config.ts
-    ├── tailwind.config.js
+    ├── Dockerfile.prod        — multi-stage build с nginx
+    ├── vite.config.ts, tailwind.config.js
     └── src/
-        ├── main.tsx / App.tsx     — lazy-роуты, Protected
-        ├── api/client.ts          — axios + JWT + авто-refresh
-        ├── store/{auth,theme}.ts  — zustand
-        ├── components/            — Layout, GlobalSearch, Toast, Skeleton, Logo, ui.tsx
-        └── pages/
-            ├── Login.tsx
-            ├── Dashboard.tsx
-            ├── Projects.tsx / ProjectDetail.tsx
-            ├── Tasks.tsx / TaskDetail.tsx (Kanban / Table / List / Calendar)
-            ├── Users.tsx
-            ├── Analytics.tsx
-            ├── Settings.tsx
-            └── Profile.tsx
+        ├── App.tsx            — lazy-роуты
+        ├── api/client.ts      — axios + JWT + авто-refresh
+        ├── store/             — zustand (auth, theme, sidebar)
+        ├── components/        — Layout, GlobalSearch, Toast, Confirm, ErrorBoundary, ui.tsx
+        └── pages/             — Dashboard, Tasks, Projects, Wiki, Calendar, Mail, Inbox, People, Settings, …
 ```
 
 ## Миграции
 
-Схема хранится в `backend/alembic/`. При обычном запуске `bootstrap.py` сам делает `upgrade head`. Для ручной работы:
+Автоматически применяются при старте backend. Для ручных операций (rare):
 
 ```bash
-cd backend
-alembic revision --autogenerate -m "add xyz"
-alembic upgrade head
-alembic downgrade -1
+# Создать новую миграцию (после изменения моделей)
+docker compose -f docker-compose.prod.yml exec backend alembic revision --autogenerate -m "add xyz"
+
+# Применить / откатить
+docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+docker compose -f docker-compose.prod.yml exec backend alembic downgrade -1
 ```
 
 ## Расширение
 
-- Список разрешений хранится в `backend/app/core/permissions.py` — добавьте код в `PERMISSIONS`, пересоберите — при старте новые пункты автоматически синхронизируются в БД.
-- Для продакшена: используйте `docker-compose.prod.yml` + `nginx/`, вынесите `JWT_SECRET` и `ADMIN_PASSWORD` в secrets manager, включите HTTPS, ужесточите CSP (убрать `'unsafe-inline'` после отключения Swagger UI в prod), настройте `CORS_ORIGINS`.
-- Хранение файлов вынесено в volume `qadam_crm_uploads`; можно легко заменить на S3/MinIO — трогается только `app/api/attachments.py`.
-- Realtime-уведомления уже реализованы через WebSocket + Redis pub/sub (`core/ws_hub.py`, `api/ws.py`).
+- **Разрешения:** каталог в `backend/app/core/permissions.py` — добавь код в `PERMISSIONS`, пересобери — синхронизируется в БД при старте
+- **Новые модули:** модель в `models/`, схемы в `schemas/`, endpoint в `api/`, регистрация в `main.py`, миграция в `alembic/versions/`
+- **Celery-задачи:** новый файл в `tasks/`, добавь модуль в `celery_app.include`, для периодических — в `beat_schedule`
+- **Storage:** файлы в volume `qadam_crm_uploads` (per-tenant подпапки). Замена на S3/MinIO — точечно в `app/api/attachments.py`
 
 ## Лицензия
 

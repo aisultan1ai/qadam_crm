@@ -1,4 +1,4 @@
-"""Google Calendar integration: accounts + external_* fields on calendar_events
+"""google calendar accounts + external fields
 
 Revision ID: 0023_google_calendar
 Revises: 0022_hr_profiles

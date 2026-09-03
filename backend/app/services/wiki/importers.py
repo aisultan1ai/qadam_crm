@@ -1,8 +1,3 @@
-"""Импорт из .xlsx и .docx в Markdown с извлечением картинок.
-
-Возвращают (markdown_content, [(image_name, image_bytes, content_type)]).
-Картинки сохраняет endpoint, подставляя URL вида /media/{tenant_id}/wiki/{article_id}/{name}.
-"""
 from __future__ import annotations
 
 import io
@@ -10,10 +5,10 @@ import re
 import uuid
 from typing import List, Tuple
 
-MAX_IMPORT_BYTES = 20 * 1024 * 1024  # 20 MB верхняя граница на исходник
+MAX_IMPORT_BYTES = 20 * 1024 * 1024
 
 
-ImageAsset = Tuple[str, bytes, str]  # (stored_name, data, content_type)
+ImageAsset = Tuple[str, bytes, str]
 
 
 def _safe_ext_from_content_type(ct: str) -> str:
@@ -36,11 +31,6 @@ def _md_escape(cell: str) -> str:
 
 
 def xlsx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
-    """Парсит xlsx-файл в Markdown. Каждый лист = раздел ##. Таблицы → md-tables.
-
-    Картинки: openpyxl хранит их как ws._images (OpenPyXL Image objects).
-    Вставляем ссылки под лист.
-    """
     from openpyxl import load_workbook
 
     wb = load_workbook(io.BytesIO(data), data_only=True)
@@ -57,8 +47,6 @@ def xlsx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
             if any(c is not None and str(c).strip() for c in row)
         ]
         if rows:
-            # Первая строка — заголовок таблицы (best-effort). Если все первые ячейки
-            # выглядят как данные — всё равно первая идёт в шапку.
             max_cols = max(len(r) for r in rows)
             for r in rows:
                 while len(r) < max_cols:
@@ -73,11 +61,9 @@ def xlsx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
                 md_parts.append("| " + " | ".join(_md_escape(c) for c in r) + " |")
             md_parts.append("")
 
-        # Картинки на листе
         ws_images = getattr(ws, "_images", []) or []
         for img in ws_images:
             try:
-                # openpyxl.drawing.image.Image._data() возвращает bytes
                 raw = img._data()  # type: ignore[attr-defined]
                 ct = getattr(img, "content_type", "") or "image/png"
                 ext = _safe_ext_from_content_type(ct)
@@ -94,9 +80,7 @@ def xlsx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
 
 
 def docx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
-    """Парсит docx в Markdown: заголовки, списки, параграфы, таблицы, картинки."""
     from docx import Document
-    from docx.document import Document as _Doc
     from docx.oxml.ns import qn
     from docx.table import Table
     from docx.text.paragraph import Paragraph
@@ -105,15 +89,11 @@ def docx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
     md_parts: List[str] = []
     images: List[ImageAsset] = []
 
-    # image relationship id -> saved name (для dedup)
     image_by_rid: dict[str, str] = {}
 
     def _extract_images_from_paragraph(p: Paragraph) -> List[str]:
-        """Возвращает список storage names картинок в порядке появления."""
         found: List[str] = []
-        blips = p._element.findall(
-            ".//" + qn("a:blip")
-        )
+        blips = p._element.findall(".//" + qn("a:blip"))
         for blip in blips:
             rid = blip.get(qn("r:embed"))
             if not rid:
@@ -133,6 +113,12 @@ def docx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
             found.append(name)
         return found
 
+    def _is_bullet(p: Paragraph) -> bool:
+        pPr = p._element.find(qn("w:pPr"))
+        if pPr is None:
+            return False
+        return pPr.find(qn("w:numPr")) is not None
+
     def _para_to_md(p: Paragraph) -> str:
         text = p.text or ""
         style = (p.style.name if p.style else "") or ""
@@ -148,26 +134,15 @@ def docx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
                 level = 2
             level = max(1, min(level, 6))
             base = f"{'#' * level} {text.strip()}" if text.strip() else ""
-        elif style_l in ("list bullet", "list bullet 2", "list bullet 3") or _is_bullet(p):
-            base = f"- {text.strip()}" if text.strip() else ""
-        elif style_l.startswith("list number") or _is_numbered(p):
+        elif style_l.startswith("list number"):
             base = f"1. {text.strip()}" if text.strip() else ""
+        elif style_l.startswith("list bullet") or _is_bullet(p):
+            base = f"- {text.strip()}" if text.strip() else ""
         else:
             base = text.strip()
 
         parts = [x for x in (base, img_md) if x]
         return "\n".join(parts)
-
-    def _is_bullet(p: Paragraph) -> bool:
-        numPr = p._element.find(qn("w:pPr"))
-        if numPr is None:
-            return False
-        numPr = numPr.find(qn("w:numPr"))
-        return numPr is not None
-
-    def _is_numbered(p: Paragraph) -> bool:
-        # best-effort — та же проверка, а различие bullet/number игнорируем
-        return False
 
     def _table_to_md(tbl: Table) -> str:
         rows = tbl.rows
@@ -185,7 +160,6 @@ def docx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
             lines.append("| " + " | ".join(cells[: len(header)]) + " |")
         return "\n".join(lines)
 
-    # docx хранит параграфы и таблицы вперемешку — итерируем по body в порядке
     body = doc.element.body
     for child in body.iterchildren():
         tag = child.tag.split("}")[-1]
@@ -206,5 +180,4 @@ def docx_to_markdown(data: bytes) -> Tuple[str, List[ImageAsset]]:
 
 
 def replace_image_placeholders(md: str, url_prefix: str) -> str:
-    """__IMG__name → {url_prefix}/name. url_prefix БЕЗ trailing slash."""
     return re.sub(r"__IMG__([A-Za-z0-9._-]+)", lambda m: f"{url_prefix}/{m.group(1)}", md)

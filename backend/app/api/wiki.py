@@ -422,7 +422,6 @@ def import_article_from_file(
     ctx: TenantContext = Depends(require("wiki.publish")),
     db: Session = Depends(get_db),
 ):
-    """Импорт .xlsx или .docx в новую статью с извлечением картинок."""
     filename = file.filename or "import"
     ext = Path(filename).suffix.lower()
     if ext not in (".xlsx", ".docx"):
@@ -456,7 +455,7 @@ def import_article_from_file(
         folder_id=folder_id,
         slug=slug,
         title=final_title,
-        content_md="",  # временно, обновим ниже после сохранения картинок
+        content_md="",
         is_published=False,
         author_id=ctx.user.id,
         last_editor_id=ctx.user.id,
@@ -465,8 +464,6 @@ def import_article_from_file(
     db.add(a)
     db.flush()
 
-    # Сохраняем картинки на диск в /uploads/{tenant_id}/wiki/{article_id}/
-    # и отдаём их как /media/{tenant_id}/wiki/{article_id}/{name}
     if images:
         target_dir = Path(settings.UPLOAD_DIR) / str(ctx.tenant.id) / "wiki" / str(a.id)
         target_dir.mkdir(parents=True, exist_ok=True)

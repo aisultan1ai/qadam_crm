@@ -151,7 +151,6 @@ def assign_user_skill(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    # Скиллы — персональные: только сам пользователь может их добавлять/менять.
     if user_id != ctx.user.id:
         raise HTTPException(403, "Скиллы может редактировать только владелец профиля")
 
@@ -243,7 +242,6 @@ def create_goal(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    # Цели — персональные: только владелец создаёт свои.
     if payload.user_id != ctx.user.id:
         raise HTTPException(403, "Цели может создавать только сам сотрудник")
     _assert_tenant_member(db, ctx.tenant.id, payload.user_id)
@@ -279,7 +277,6 @@ def update_goal(
     if not goal or goal.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Цель не найдена")
 
-    # Цели — персональные: только сам владелец может их менять.
     if goal.user_id != ctx.user.id:
         raise HTTPException(403, "Цели может редактировать только владелец")
 

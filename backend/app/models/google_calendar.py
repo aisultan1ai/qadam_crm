@@ -1,8 +1,7 @@
-"""Интеграция с Google Calendar: OAuth-аккаунт per user и sync-метаданные."""
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -20,13 +19,11 @@ class GoogleCalendarAccount(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
 
     google_email: Mapped[str] = mapped_column(String(255))
-    # Токены хранятся шифрованными (Fernet) через core.secrets
     access_token_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     refresh_token_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     access_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     primary_calendar_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    # incremental sync token от Google — если сохранён, следующий sync пойдёт быстрее
     sync_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     sync_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")

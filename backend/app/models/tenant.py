@@ -22,7 +22,6 @@ class Tenant(Base):
     subdomain: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True, index=True)
     company_display_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
-    # Google Calendar OAuth credentials — задаются tenant owner в /settings/integrations
     google_client_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     google_client_secret_enc: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     google_redirect_uri: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

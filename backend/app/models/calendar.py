@@ -94,7 +94,6 @@ class CalendarEvent(Base):
 
     creator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
-    # Внешний источник: NULL = локальное событие, "google" = из Google Calendar
     external_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     external_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
     external_calendar_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)

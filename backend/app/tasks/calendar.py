@@ -106,10 +106,6 @@ def _send_reminder(db, event: CalendarEvent, reminder: EventReminder, occ: dict,
 
 @celery_app.task(name="calendar.sync_google_all")
 def sync_google_all() -> dict:
-    """Синхронизирует все включённые Google-аккаунты по всем тенантам. Раз в 15 минут.
-
-    Пропускает аккаунты, чей tenant не сконфигурировал Google OAuth.
-    """
     from ..models import GoogleCalendarAccount, Tenant
     from ..services import google_calendar as gcal
 
