@@ -61,6 +61,12 @@ class User(Base):
     email_verification_token: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, unique=True, index=True)
     email_verification_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # --- P4: 2FA TOTP, bot users, password rotation ---
+    totp_secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # base32 TOTP secret
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_bot: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    password_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     roles: Mapped[List["Role"]] = relationship(  # type: ignore  # noqa: F821
         "Role", secondary=user_roles, back_populates="users", lazy="selectin"
     )

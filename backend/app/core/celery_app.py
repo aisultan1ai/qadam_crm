@@ -33,6 +33,7 @@ celery_app = Celery(
         "app.tasks.mail",
         "app.tasks.calendar",
         "app.tasks.time_tracking",
+        "app.tasks.p3",
     ],
 )
 
@@ -82,6 +83,26 @@ celery_app.conf.beat_schedule = {
     "time-tracking-auto-stop-idle-every-1min": {
         "task": "time_tracking.auto_stop_idle",
         "schedule": crontab(minute="*"),
+    },
+    # P3: генерация периодических задач
+    "p3-generate-recurring-tasks-every-15min": {
+        "task": "p3.generate_recurring_tasks",
+        "schedule": crontab(minute="*/15"),
+    },
+    # P3: доставка напоминаний
+    "p3-fire-reminders-every-1min": {
+        "task": "p3.fire_reminders",
+        "schedule": crontab(minute="*"),
+    },
+    # P3: запуск сохранённых отчётов по расписанию
+    "p3-run-scheduled-reports-every-5min": {
+        "task": "p3.run_scheduled_reports",
+        "schedule": crontab(minute="*/5"),
+    },
+    # P4: удаление старых логов согласно retention policy — раз в сутки в 4:00 UTC
+    "p4-purge-old-logs-daily": {
+        "task": "p4.purge_old_logs",
+        "schedule": crontab(hour=4, minute=0),
     },
 }
 

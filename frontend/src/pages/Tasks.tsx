@@ -29,6 +29,15 @@ const TASKS_VIEW_STORAGE_KEY = "tasks:view";
 type View = "kanban" | "table" | "list" | "calendar";
 const VIEWS: View[] = ["kanban", "table", "list", "calendar"];
 
+type TaskScope = "all" | "incoming" | "outgoing" | "audited";
+const TASK_SCOPES: TaskScope[] = ["all", "incoming", "outgoing", "audited"];
+const TASK_SCOPE_TABS: { key: TaskScope; label: string }[] = [
+  { key: "all", label: "Все" },
+  { key: "incoming", label: "Мне назначены" },
+  { key: "outgoing", label: "Я поставил" },
+  { key: "audited", label: "Наблюдаю" },
+];
+
 function readParam(sp: URLSearchParams, key: string) {
   const v = sp.get(key);
   return v ?? "";
@@ -61,6 +70,8 @@ export default function Tasks() {
   const assigneeId = readParam(sp, "assignee");
   const priority = readParam(sp, "priority");
   const status = readParam(sp, "status");
+  const rawScope = readParam(sp, "scope");
+  const scope: TaskScope = TASK_SCOPES.includes(rawScope as TaskScope) ? (rawScope as TaskScope) : "all";
 
   const [openNew, setOpenNew] = useState(false);
   const [openImport, setOpenImport] = useState(false);
@@ -102,8 +113,9 @@ export default function Tasks() {
       assignee_id: assigneeId ? Number(assigneeId) : undefined,
       priority: priority || undefined,
       status: status || undefined,
+      scope: scope === "all" ? undefined : scope,
     }),
-    [q, projectId, assigneeId, priority, status],
+    [q, projectId, assigneeId, priority, status, scope],
   );
 
   const { data: tasks, isPending } = useQuery({
@@ -291,6 +303,29 @@ export default function Tasks() {
             </button>
           )}
         </div>
+      </div>
+
+      <div
+        role="tablist"
+        aria-label="Область задач"
+        className="flex flex-wrap items-center gap-1 border-b border-neutral-200 dark:border-neutral-800"
+      >
+        {TASK_SCOPE_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            role="tab"
+            aria-selected={scope === tab.key}
+            onClick={() => updateParam("scope", tab.key === "all" ? "" : tab.key)}
+            className={clsx(
+              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
+              scope === tab.key
+                ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
+                : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">

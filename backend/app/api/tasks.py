@@ -84,6 +84,7 @@ def list_tasks(
     status: Optional[TaskStatus] = None,
     priority: Optional[TaskPriority] = None,
     overdue: Optional[bool] = None,
+    scope: Optional[str] = None,  # all | incoming | outgoing | audited
     pagination: PageParams = Depends(page_params),
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
@@ -115,6 +116,23 @@ def list_tasks(
             Task.deadline < _now_utc(),
             Task.status.notin_([TaskStatus.done, TaskStatus.cancelled]),
         ))
+
+    # Planfix-style scope: incoming = мне поставили, outgoing = я поставил,
+    # audited = я наблюдатель (модели watcher ещё нет — пока = задачи проектов,
+    # где я участник, но не автор и не исполнитель).
+    if scope == "incoming":
+        query = query.filter(Task.assignee_id == user.id)
+    elif scope == "outgoing":
+        query = query.filter(Task.author_id == user.id)
+    elif scope == "audited":
+        from ..models.project import project_members
+        my_pids = db.query(project_members.c.project_id).filter(project_members.c.user_id == user.id)
+        query = query.filter(
+            Task.project_id.in_(my_pids),
+            Task.assignee_id != user.id,
+            Task.author_id != user.id,
+        )
+
     query = query.order_by(Task.order_index.asc(), Task.created_at.desc())
     return paginate(query, pagination)
 
@@ -149,6 +167,11 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
         assignee_id=payload.assignee_id,
         deadline=payload.deadline,
         author_id=user.id,
+        parent_task_id=payload.parent_task_id,
+        recurrence_rule=payload.recurrence_rule,
+        recurrence_next_at=payload.deadline if payload.recurrence_rule else None,
+        custom_status_id=payload.custom_status_id,
+        custom_data=payload.custom_data or {},
     )
     for item in payload.checklist:
         task.checklist.append(ChecklistItem(text=item.text, done=item.done))
@@ -220,6 +243,24 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         task.deadline = payload.deadline
     if payload.order_index is not None:
         task.order_index = payload.order_index
+    if payload.parent_task_id is not None:
+        task.parent_task_id = payload.parent_task_id or None
+    if payload.recurrence_rule is not None:
+        task.recurrence_rule = payload.recurrence_rule or None
+        # если правило снято — сбрасываем next_at, иначе выставляем на deadline (если он есть)
+        if not payload.recurrence_rule:
+            task.recurrence_next_at = None
+        elif task.recurrence_next_at is None:
+            task.recurrence_next_at = task.deadline
+    if payload.recurrence_next_at is not None:
+        task.recurrence_next_at = payload.recurrence_next_at
+    if payload.custom_status_id is not None:
+        task.custom_status_id = payload.custom_status_id or None
+    if payload.custom_data is not None:
+        # merge — не затираем целиком
+        merged = dict(task.custom_data or {})
+        merged.update(payload.custom_data)
+        task.custom_data = merged
 
     if changes:
         log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="task", entity_id=task.id, task_id=task.id, detail=", ".join(changes))

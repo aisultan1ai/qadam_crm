@@ -4,8 +4,10 @@
 
 :root {
   color-scheme: light dark;
-  --page-bg: #fafaf9;
+  --page-bg: #F7F8FA;
   --page-bg-dark: #0F0F14;
+  --sidebar-bg: #2A2E38;
+  --sidebar-hover: #363B49;
   --brand: #7C5CFF;
   --brand-strong: #6B47F5;
 }
@@ -21,7 +23,7 @@ html, body {
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 dark:bg-[#0F0F14] dark:text-zinc-100;
+  @apply bg-[#F7F8FA] text-zinc-900 dark:bg-[#0F0F14] dark:text-zinc-100;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
   letter-spacing: -0.005em;
   scrollbar-width: thin;

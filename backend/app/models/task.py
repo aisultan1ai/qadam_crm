@@ -1,8 +1,10 @@
 import enum
 from datetime import datetime
+from typing import Any, List, Optional
+
 from sqlalchemy import String, Integer, ForeignKey, Boolean, DateTime, Text, Enum, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import List, Optional
+from sqlalchemy.dialects.postgresql import JSONB
 
 from ..database import Base
 
@@ -54,6 +56,24 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+    # --- P3 расширения ---
+    # Подзадачи: parent_task_id → Task.id той же таблицы.
+    parent_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Пользовательский статус (foreign key к task_status_defs; если NULL — используется enum status).
+    custom_status_id: Mapped[Optional[int]] = mapped_column(ForeignKey("task_status_defs.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Периодическая задача (iCal RRULE).
+    recurrence_rule: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    recurrence_parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    recurrence_next_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    # E-mail inbox токен для приёма писем в задачу.
+    inbox_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True, index=True)
+
+    # Пользовательские поля (значения). Ключи — code из custom_field_defs.
+    custom_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
 
     checklist: Mapped[List["ChecklistItem"]] = relationship(
         "ChecklistItem", back_populates="task", cascade="all, delete-orphan", lazy="selectin", order_by="ChecklistItem.id"

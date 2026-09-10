@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Text, Index, func
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Text, Boolean, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import List, Optional
 
@@ -19,6 +19,13 @@ class Comment(Base):
     body: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # --- P4 расширения ---
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_draft: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    edit_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     task: Mapped["Task"] = relationship("Task", back_populates="comments")  # type: ignore  # noqa: F821
     author: Mapped[Optional["User"]] = relationship("User", lazy="joined")  # type: ignore  # noqa: F821

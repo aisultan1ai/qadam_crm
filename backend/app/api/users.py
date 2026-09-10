@@ -123,6 +123,13 @@ def create_user(payload: UserCreate, ctx: TenantContext = Depends(require("users
         if not dep or dep.tenant_id != ctx.tenant.id:
             raise HTTPException(400, "Отдел не найден в этой компании")
 
+    # P4t.1: password policy для tenant'а
+    from ..core.security import validate_password, PasswordPolicyError
+    try:
+        validate_password(payload.password, tenant_id=ctx.tenant.id)
+    except PasswordPolicyError as e:
+        raise HTTPException(400, str(e))
+
     user = User(
         email=email,
         name=payload.name,
@@ -166,7 +173,14 @@ def update_me(payload: MeUpdate, ctx: TenantContext = Depends(get_current_contex
         changes.append("имя")
 
     if password_changing:
+        from ..core.security import validate_password, PasswordPolicyError
+        try:
+            validate_password(payload.new_password, tenant_id=ctx.tenant.id)
+        except PasswordPolicyError as e:
+            raise HTTPException(400, str(e))
         user.password_hash = hash_password(payload.new_password)
+        from datetime import datetime, timezone
+        user.password_changed_at = datetime.now(timezone.utc)
         changes.append("пароль")
 
     # M11 — свой HR-профиль
@@ -287,7 +301,14 @@ def update_user(user_id: int, payload: UserUpdate, ctx: TenantContext = Depends(
     if payload.name is not None:
         user.name = payload.name
     if payload.password:
+        from ..core.security import validate_password, PasswordPolicyError
+        try:
+            validate_password(payload.password, tenant_id=ctx.tenant.id)
+        except PasswordPolicyError as e:
+            raise HTTPException(400, str(e))
         user.password_hash = hash_password(payload.password)
+        from datetime import datetime, timezone
+        user.password_changed_at = datetime.now(timezone.utc)
     if payload.is_active is not None:
         user.is_active = payload.is_active
     if payload.avatar_url is not None:

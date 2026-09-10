@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from ..database import get_db
 from ..models import Project, User, Task, TenantMembership
+from ..models.project import project_members
 from ..core.events import fire_event, serialize_project
 from ..core.plans import check_project_limit
 from ..schemas.project import ProjectOut, ProjectCreate, ProjectUpdate
@@ -65,6 +66,7 @@ def _assert_user_in_tenant(db: Session, tenant_id: int, user_id: int, err: str =
 def list_projects(
     q: Optional[str] = None,
     archived: Optional[bool] = None,
+    scope: Optional[str] = None,  # all | participating | made_by_me | audited_by_me
     pagination: PageParams = Depends(page_params),
     ctx: TenantContext = Depends(require("projects.view")),
     db: Session = Depends(get_db),
@@ -75,6 +77,22 @@ def list_projects(
         query = query.filter(or_(Project.name.ilike(like), Project.description.ilike(like)))
     if archived is not None:
         query = query.filter(Project.is_archived == archived)
+
+    # Planfix-style scope-фильтры. Модели watcher/observer у проекта пока нет,
+    # поэтому "audited_by_me" временно совпадает с "participating" (в будущем
+    # заменить на project_watchers).
+    uid = ctx.user.id
+    if scope == "made_by_me":
+        query = query.filter(Project.owner_id == uid)
+    elif scope == "participating":
+        member_pids = db.query(project_members.c.project_id).filter(project_members.c.user_id == uid)
+        query = query.filter(or_(Project.owner_id == uid, Project.id.in_(member_pids)))
+    elif scope == "audited_by_me":
+        # TODO: заменить на watcher-модель когда добавим
+        member_pids = db.query(project_members.c.project_id).filter(project_members.c.user_id == uid)
+        query = query.filter(Project.id.in_(member_pids), Project.owner_id != uid)
+    # scope == "all" или None — без фильтра
+
     query = query.order_by(Project.created_at.desc())
 
     if pagination.page is None:
@@ -255,3 +273,65 @@ def delete_project(project_id: int, ctx: TenantContext = Depends(require("projec
     db.delete(project)
     db.commit()
     return Message(message="Проект удалён")
+
+
+# ============================================================================
+# Bulk operations (P3.8)
+# ============================================================================
+
+from pydantic import BaseModel
+
+
+class ProjectBulkPatch(BaseModel):
+    is_archived: Optional[bool] = None
+    owner_id: Optional[int] = None
+    color: Optional[str] = None
+
+
+class ProjectBulk(BaseModel):
+    ids: list[int]
+    patch: ProjectBulkPatch
+
+
+@router.post("/bulk", response_model=Message)
+def bulk_update_projects(
+    payload: ProjectBulk,
+    ctx: TenantContext = Depends(require("projects.update")),
+    db: Session = Depends(get_db),
+):
+    if not payload.ids:
+        return Message(message="Нет проектов для обновления")
+    projects = (
+        db.query(Project)
+        .filter(Project.tenant_id == ctx.tenant.id, Project.id.in_(payload.ids))
+        .all()
+    )
+    p = payload.patch
+    if p.owner_id is not None:
+        _assert_user_in_tenant(db, ctx.tenant.id, p.owner_id, "Владелец не является членом компании")
+    for prj in projects:
+        if p.is_archived is not None:
+            prj.is_archived = p.is_archived
+        if p.owner_id is not None:
+            prj.owner_id = p.owner_id
+        if p.color is not None:
+            prj.color = p.color
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="bulk_update", entity="project", detail=f"{len(projects)} проектов")
+    db.commit()
+    return Message(message=f"Обновлено проектов: {len(projects)}")
+
+
+@router.post("/bulk-delete", response_model=Message)
+def bulk_delete_projects(
+    payload: ProjectBulk,
+    ctx: TenantContext = Depends(require("projects.delete")),
+    db: Session = Depends(get_db),
+):
+    if not payload.ids:
+        return Message(message="Ничего не удалено")
+    q = db.query(Project).filter(Project.tenant_id == ctx.tenant.id, Project.id.in_(payload.ids))
+    count = q.count()
+    q.delete(synchronize_session=False)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="bulk_delete", entity="project", detail=f"{count} проектов")
+    db.commit()
+    return Message(message=f"Удалено проектов: {count}")

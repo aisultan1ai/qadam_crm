@@ -30,6 +30,48 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+class PasswordPolicyError(ValueError):
+    """Пароль не соответствует политике tenant'а (см. TenantSecurityPolicy)."""
+
+
+def validate_password(password: str, tenant_id: Optional[int] = None) -> None:
+    """P4: валидируем пароль по TenantSecurityPolicy.
+
+    Дефолт (без tenant или без policy): min_length=8.
+    Кидает PasswordPolicyError с человекочитаемым сообщением.
+    """
+    import re
+    min_length = 8
+    require_upper = False
+    require_number = False
+    require_special = False
+    if tenant_id is not None:
+        try:
+            from ..database import SessionLocal
+            from ..models import TenantSecurityPolicy
+            db = SessionLocal()
+            try:
+                p = db.query(TenantSecurityPolicy).filter(TenantSecurityPolicy.tenant_id == tenant_id).first()
+                if p:
+                    min_length = p.password_min_length or 8
+                    require_upper = p.password_require_upper
+                    require_number = p.password_require_number
+                    require_special = p.password_require_special
+            finally:
+                db.close()
+        except Exception as e:
+            log.warning("validate_password: could not load policy (%s)", e)
+
+    if len(password) < min_length:
+        raise PasswordPolicyError(f"Пароль должен быть не короче {min_length} символов")
+    if require_upper and not re.search(r"[A-ZА-ЯЁ]", password):
+        raise PasswordPolicyError("Пароль должен содержать заглавную букву")
+    if require_number and not re.search(r"\d", password):
+        raise PasswordPolicyError("Пароль должен содержать цифру")
+    if require_special and not re.search(r"[!@#$%^&*()_+\-={}\[\]:;\"'<>,.?/\\|~`]", password):
+        raise PasswordPolicyError("Пароль должен содержать спецсимвол")
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 

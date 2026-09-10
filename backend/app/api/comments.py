@@ -106,6 +106,8 @@ def create_comment(task_id: int, payload: CommentCreate, ctx: TenantContext = De
 
 @router.patch("/{comment_id}", response_model=CommentOut)
 def update_comment(task_id: int, comment_id: int, payload: CommentCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    from datetime import datetime, timezone
+    from ..models import CommentEditHistory
     user = ctx.user
     comment = db.get(Comment, comment_id)
     if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
@@ -115,6 +117,12 @@ def update_comment(task_id: int, comment_id: int, payload: CommentCreate, ctx: T
     can_edit_any = user_has(user, ["comments.update_any"])
     if not (can_edit_own or can_edit_any):
         raise HTTPException(403, "Нет права редактировать")
+
+    # P4: сохраняем историю правок
+    if payload.body != comment.body:
+        db.add(CommentEditHistory(comment_id=comment.id, old_body=comment.body, edited_by=user.id))
+        comment.edit_count = (comment.edit_count or 0) + 1
+        comment.edited_at = datetime.now(timezone.utc)
     comment.body = payload.body
     db.commit()
     db.refresh(comment)

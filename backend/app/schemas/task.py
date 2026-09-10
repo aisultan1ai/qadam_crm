@@ -34,6 +34,11 @@ class CommentOut(BaseModel):
     updated_at: datetime
     author: Optional[UserBrief] = None
     reactions: List[ReactionSummary] = []
+    is_pinned: bool = False
+    is_hidden: bool = False
+    is_draft: bool = False
+    edit_count: int = 0
+    edited_at: Optional[datetime] = None
 
     @field_validator("reactions", mode="before")
     @classmethod
@@ -90,6 +95,10 @@ class TaskBase(BaseModel):
 
 class TaskCreate(TaskBase):
     checklist: List[ChecklistItemCreate] = []
+    parent_task_id: Optional[int] = None
+    recurrence_rule: Optional[str] = None
+    custom_status_id: Optional[int] = None
+    custom_data: Optional[dict[str, Any]] = None
 
 
 class TaskUpdate(BaseModel):
@@ -101,6 +110,11 @@ class TaskUpdate(BaseModel):
     assignee_id: Optional[int] = None
     deadline: Optional[datetime] = None
     order_index: Optional[int] = None
+    parent_task_id: Optional[int] = None
+    recurrence_rule: Optional[str] = None
+    recurrence_next_at: Optional[datetime] = None
+    custom_status_id: Optional[int] = None
+    custom_data: Optional[dict[str, Any]] = None
 
 
 class TaskBulkUpdate(BaseModel):
@@ -129,3 +143,10 @@ class TaskOut(TaskListItem):
     attachments: List[AttachmentOut] = []
     activities: List[ActivityOut] = []
     updated_at: datetime
+    parent_task_id: Optional[int] = None
+    custom_status_id: Optional[int] = None
+    recurrence_rule: Optional[str] = None
+    recurrence_parent_id: Optional[int] = None
+    recurrence_next_at: Optional[datetime] = None
+    inbox_token: Optional[str] = None
+    custom_data: dict[str, Any] = {}

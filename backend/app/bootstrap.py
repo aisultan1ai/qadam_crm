@@ -159,6 +159,8 @@ def seed_roles(db) -> None:
             "time.use", "time.approve",
             "hr.view_profiles", "hr.manage_goals", "hr.manage_one_on_ones",
             "kudos.give",
+            "contacts.view", "contacts.create", "contacts.update", "contacts.delete",
+            "deals.view", "deals.create", "deals.update", "deals.delete",
         ],
     )
     ensure_role(
@@ -170,6 +172,8 @@ def seed_roles(db) -> None:
             "files.upload", "files.download",
             "messenger.use",
             "hr.view_profiles", "kudos.give",
+            "contacts.view",
+            "deals.view",
         ],
     )
     db.commit()
@@ -358,6 +362,100 @@ def migrate_uploads_to_tenant_dirs() -> None:
         db.commit()
 
 
+def seed_plans(db) -> None:
+    """Тарифы Planfix-стиля (Free / Plan A / Plan B / Plan X). Обновляем идемпотентно."""
+    from .models import Plan
+    plans_data = [
+        {
+            "key": "free", "title": "Free", "tagline": "Бесплатно навсегда для маленьких команд",
+            "price_month": 0, "currency": "USD", "max_users": 5, "max_projects": 10, "sort_order": 1,
+            "feature_export": True, "feature_import": True, "feature_invitations": True,
+            "feature_lead_forms": False, "feature_analytics_cache": False,
+            "feature_branding": False, "feature_custom_subdomain": False, "feature_priority_support": False,
+            "marketing_features": "До 5 пользователей;500 задач;10 проектов;Kanban/Таблица/Календарь;Мессенджер",
+        },
+        {
+            "key": "plan_a", "title": "Plan A", "tagline": "Мощная система управления задачами и проектами",
+            "price_month": 4, "currency": "USD", "max_users": 99, "max_projects": None, "sort_order": 2,
+            "feature_export": True, "feature_import": True, "feature_invitations": True,
+            "feature_lead_forms": True, "feature_analytics_cache": True,
+            "feature_branding": False, "feature_custom_subdomain": False, "feature_priority_support": False,
+            "marketing_features": (
+                "1–99 пользователей;Неограниченно задач/проектов;"
+                "Массовые операции;Связи и последовательные задачи;"
+                "Диаграмма Ганта;Расписание;Отчёты и графики;Таймер учёта времени"
+            ),
+        },
+        {
+            "key": "plan_b", "title": "Plan B", "tagline": "Система управления бизнесом для всей компании",
+            "price_month": 6, "currency": "USD", "max_users": 250, "max_projects": None, "sort_order": 3,
+            "feature_export": True, "feature_import": True, "feature_invitations": True,
+            "feature_lead_forms": True, "feature_analytics_cache": True,
+            "feature_branding": True, "feature_custom_subdomain": False, "feature_priority_support": True,
+            "marketing_features": (
+                "Всё из Plan A + расширенная автоматизация;"
+                "Вычисляемые поля, кнопки, группы кнопок;"
+                "Кастомный интерфейс: логотип и корпоративные цвета;"
+                "Доступ руководителя к задачам подчинённых;"
+                "Логирование операций сотрудников;"
+                "Автоматическая генерация отчётов по расписанию;"
+                "Телефония с распознаванием разговоров"
+            ),
+        },
+        {
+            "key": "plan_x", "title": "Plan X", "tagline": "Корпоративный уровень: безопасность и контроль",
+            "price_month": 8, "currency": "USD", "max_users": None, "max_projects": None, "sort_order": 4,
+            "feature_export": True, "feature_import": True, "feature_invitations": True,
+            "feature_lead_forms": True, "feature_analytics_cache": True,
+            "feature_branding": True, "feature_custom_subdomain": True, "feature_priority_support": True,
+            "marketing_features": (
+                "Всё из Plan B + максимальная кастомизация;"
+                "Технические администраторы без доступа к данным;"
+                "SSO SAML 2.0;"
+                "Ограничение доступа по IP;"
+                "Парольные политики;"
+                "Расширенное логирование просмотра и изменения данных"
+            ),
+        },
+    ]
+    for pd in plans_data:
+        p = db.query(Plan).filter(Plan.key == pd["key"]).first()
+        if not p:
+            db.add(Plan(**pd))
+        else:
+            for k, v in pd.items():
+                setattr(p, k, v)
+    db.commit()
+
+
+def seed_integration_providers(db) -> None:
+    """Витрина возможных интеграций (глобальные, tenant_id=NULL)."""
+    from .models import IntegrationProvider
+    providers = [
+        ("google_drive", "Google Drive", "storage", "coming_soon"),
+        ("dropbox", "Dropbox", "storage", "coming_soon"),
+        ("onedrive", "OneDrive", "storage", "coming_soon"),
+        ("google_forms", "Google Forms", "marketing", "coming_soon"),
+        ("mailchimp", "Mailchimp", "marketing", "coming_soon"),
+        ("unisender", "Unisender", "marketing", "coming_soon"),
+        ("viber", "Viber", "messenger", "coming_soon"),
+        ("tiktok", "TikTok", "social", "coming_soon"),
+        ("facebook_lead_ads", "Facebook Lead Ads", "marketing", "coming_soon"),
+        ("google_maps", "Google Maps", "other", "coming_soon"),
+        ("google_calendar", "Google Calendar", "storage", "available"),
+        ("twilio", "Twilio", "telephony", "beta"),
+    ]
+    for code, label, cat, status in providers:
+        p = db.query(IntegrationProvider).filter(IntegrationProvider.tenant_id.is_(None), IntegrationProvider.code == code).first()
+        if not p:
+            db.add(IntegrationProvider(tenant_id=None, code=code, label=label, category=cat, status=status))
+        else:
+            p.label = label
+            p.category = cat
+            p.status = status
+    db.commit()
+
+
 def main() -> None:
     wait_for_db()
     run_migrations()
@@ -365,6 +463,8 @@ def main() -> None:
     with SessionLocal() as db:
         sync_permissions(db)
         seed_roles(db)
+        seed_plans(db)
+        seed_integration_providers(db)
         tenant = seed_default_tenant(db)
         _ensure_tenant_roles(db, tenant.id)
         seed_admin(db, tenant)

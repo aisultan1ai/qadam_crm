@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api, extractApiError } from "@/api/client";
 import { Link } from "react-router-dom";
 import { Plus, Archive, ArchiveRestore, Trash2, Search, FolderKanban } from "lucide-react";
+import clsx from "clsx";
 import type { Project, UserBrief, Page, User } from "@/types";
 import { useAuth } from "@/store/auth";
 import { Modal, Avatar, EmptyState, FieldError, FormError } from "@/components/ui";
@@ -12,6 +13,15 @@ import { SkeletonCard } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { projectSchema, type ProjectForm } from "@/lib/validation";
+
+type ProjectScope = "all" | "participating" | "made_by_me" | "audited_by_me";
+
+const SCOPE_TABS: { key: ProjectScope; label: string }[] = [
+  { key: "all", label: "Все" },
+  { key: "participating", label: "Участвую" },
+  { key: "made_by_me", label: "Мои" },
+  { key: "audited_by_me", label: "Наблюдаю" },
+];
 
 export default function Projects() {
   const { can } = useAuth();
@@ -21,11 +31,14 @@ export default function Projects() {
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [openNew, setOpenNew] = useState(false);
+  const [scope, setScope] = useState<ProjectScope>("all");
 
   const { data, isPending } = useQuery({
-    queryKey: ["projects", q, showArchived],
+    queryKey: ["projects", q, showArchived, scope],
     queryFn: async () =>
-      (await api.get<Page<Project>>("/api/projects", { params: { q: q || undefined, archived: showArchived } })).data.items,
+      (await api.get<Page<Project>>("/api/projects", {
+        params: { q: q || undefined, archived: showArchived, scope: scope === "all" ? undefined : scope },
+      })).data.items,
   });
 
   const archive = useMutation({
@@ -56,6 +69,29 @@ export default function Projects() {
             <Plus size={16} /> Новый проект
           </button>
         )}
+      </div>
+
+      <div
+        role="tablist"
+        aria-label="Область проектов"
+        className="flex flex-wrap items-center gap-1 border-b border-neutral-200 dark:border-neutral-800"
+      >
+        {SCOPE_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            role="tab"
+            aria-selected={scope === tab.key}
+            onClick={() => setScope(tab.key)}
+            className={clsx(
+              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
+              scope === tab.key
+                ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
+                : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -57,6 +57,20 @@ class Settings(BaseSettings):
     # В dev — если пусто, генерится ephemeral (данные не сохранятся между рестартами).
     SECRETS_KEY: Optional[str] = None
 
+    # === Inbox (P3.6: e-mail адрес задачи/проекта) ===
+    # Домен для inbox-адресов, например: inbox.qadam.com
+    INBOX_DOMAIN: Optional[str] = "inbox.qadam.local"
+    # Shared-secret для входящего /api/inbox/email endpoint. Если пусто — inbox отключён.
+    INBOX_SECRET: Optional[str] = None
+
+    # === Document preview (P4t.4) ===
+    # OnlyOffice Document Server URL. Например: https://onlyoffice.example.com
+    # Если пусто — приватные документы не могут быть отредактированы онлайн
+    # (только скачивание). Публичные (is_public=true) идут через Google Docs Viewer.
+    ONLYOFFICE_URL: Optional[str] = None
+    # Секрет для подписи JWT-конфига OnlyOffice (обязательно если ONLYOFFICE_URL задан).
+    ONLYOFFICE_JWT_SECRET: Optional[str] = None
+
     # Считаем на 2 uvicorn workers: 2 * (POOL_SIZE + MAX_OVERFLOW) = 100 макс соединений.
     # Postgres по умолчанию max_connections=100 — оставляем запас для admin/psql/celery.
     DB_POOL_SIZE: int = 20

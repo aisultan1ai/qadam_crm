@@ -217,6 +217,12 @@ def accept_invitation(
         # Новый юзер — нужны пароль и имя.
         if not payload.password or not payload.full_name:
             raise HTTPException(400, "Заполните имя и пароль")
+        # P4t.1: password policy для tenant'а приглашения
+        from ..core.security import validate_password, PasswordPolicyError
+        try:
+            validate_password(payload.password, tenant_id=invite.tenant_id)
+        except PasswordPolicyError as e:
+            raise HTTPException(400, str(e))
         user = User(
             email=invite.email,
             name=payload.full_name.strip(),

@@ -79,10 +79,12 @@ export function Avatar({
   );
 }
 
+// Planfix-style: цветные пилюли по статусам (новые = розовый, в работе = голубой,
+// на проверке = янтарь, готово = зелёный, отменено = серый).
 const STATUS_STYLE: Record<TaskStatus, { chip: string; dot: string; icon: ReactNode }> = {
   new: {
-    chip: "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
-    dot: "bg-neutral-400",
+    chip: "bg-pink-100 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300",
+    dot: "bg-pink-500",
     icon: <Circle size={10} className="fill-current opacity-70" />,
   },
   in_progress: {
@@ -101,8 +103,8 @@ const STATUS_STYLE: Record<TaskStatus, { chip: string; dot: string; icon: ReactN
     icon: <CheckCircle2 size={11} />,
   },
   cancelled: {
-    chip: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
-    dot: "bg-rose-500",
+    chip: "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+    dot: "bg-neutral-400",
     icon: <XCircle size={11} />,
   },
 };

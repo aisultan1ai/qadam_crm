@@ -110,7 +110,86 @@ def get_current_context(
             "Этот поддомен принадлежит другой компании — переключите tenant или откройте прямой URL",
         )
 
+    # P5.2/P5.3: password rotation + session timeout enforcement
+    _enforce_security_policies(db, request, user, tenant.id, payload)
+
     return TenantContext(user=user, tenant=tenant, membership=membership)
+
+
+# ============================================================================
+# P5.2 + P5.3: Security policy enforcement (rotation + session timeout)
+# ============================================================================
+
+_SECURITY_BYPASS_PATHS = (
+    "/api/auth/logout",
+    "/api/auth/refresh",
+    "/api/auth/change-password",
+    "/api/users/me",
+    "/api/me/2fa",
+    "/health",
+)
+
+
+def _enforce_security_policies(db: Session, request: Request, user: "User", tenant_id: int, payload: dict) -> None:
+    """P5.2: если password_rotation_days задан и password_changed_at устарел → 403 password_expired.
+    P5.3: если session_timeout_minutes задан и последняя активность старше → 401 session_timeout.
+    Fail-open при отсутствии policy или ошибке БД/Redis.
+    """
+    from datetime import datetime, timezone
+    path = request.url.path or ""
+    if any(path.startswith(p) for p in _SECURITY_BYPASS_PATHS):
+        return
+
+    try:
+        from ..models import TenantSecurityPolicy
+        policy = (
+            db.query(TenantSecurityPolicy)
+            .filter(TenantSecurityPolicy.tenant_id == tenant_id)
+            .first()
+        )
+        if not policy:
+            return
+
+        now = datetime.now(timezone.utc)
+
+        if policy.password_rotation_days:
+            changed = user.password_changed_at or user.created_at
+            if changed:
+                age = (now - changed).days
+                if age >= policy.password_rotation_days:
+                    raise HTTPException(
+                        status.HTTP_403_FORBIDDEN,
+                        detail={"error": "password_expired", "message": f"Пароль устарел ({age} дн.). Смените в профиле."},
+                    )
+
+        if policy.session_timeout_minutes:
+            jti = payload.get("jti")
+            if jti:
+                from ..core.redis_client import get_redis
+                try:
+                    r = get_redis()
+                    key = f"session:last_seen:{user.id}:{jti}"
+                    prev = r.get(key)
+                    if prev:
+                        prev_iso = prev.decode() if isinstance(prev, bytes) else prev
+                        prev_dt = datetime.fromisoformat(prev_iso)
+                        idle_min = (now - prev_dt).total_seconds() / 60
+                        if idle_min >= policy.session_timeout_minutes:
+                            raise HTTPException(
+                                status.HTTP_401_UNAUTHORIZED,
+                                detail={"error": "session_timeout", "message": f"Сессия истекла из-за неактивности ({int(idle_min)} мин)"},
+                            )
+                    ttl = int(policy.session_timeout_minutes * 60 + 3600)
+                    r.set(key, now.isoformat(), ex=ttl)
+                except HTTPException:
+                    raise
+                except Exception:
+                    pass
+    except HTTPException:
+        raise
+    except Exception:
+        import logging
+        logging.getLogger("qadam.security").warning("policy enforcement failed", exc_info=True)
 
 
 def get_current_tenant(ctx: TenantContext = Depends(get_current_context)) -> Tenant:

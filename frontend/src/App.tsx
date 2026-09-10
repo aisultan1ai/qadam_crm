@@ -36,6 +36,22 @@ const BookingPublic = lazy(() => import("@/pages/BookingPublic"));
 const TimeTracking = lazy(() => import("@/pages/TimeTracking"));
 const People = lazy(() => import("@/pages/People"));
 const OrgChart = lazy(() => import("@/pages/OrgChart"));
+const Planner = lazy(() => import("@/pages/Planner"));
+const Contacts = lazy(() => import("@/pages/Contacts"));
+const ProfileSettings = lazy(() => import("@/pages/ProfileSettings"));
+const Activity = lazy(() => import("@/pages/Activity"));
+const TimeOff = lazy(() => import("@/pages/TimeOff"));
+const Deals = lazy(() => import("@/pages/Deals"));
+const Reports = lazy(() => import("@/pages/Reports"));
+const ProjectGantt = lazy(() => import("@/pages/ProjectGantt"));
+const Whiteboard = lazy(() => import("@/pages/Whiteboard"));
+const Calls = lazy(() => import("@/pages/Calls"));
+const ObjectsPage = lazy(() => import("@/pages/Objects"));
+const Documents = lazy(() => import("@/pages/Documents"));
+const Directories = lazy(() => import("@/pages/Directories"));
+const Holidays = lazy(() => import("@/pages/Holidays"));
+const SecurityPolicy = lazy(() => import("@/pages/SecurityPolicy"));
+const Integrations = lazy(() => import("@/pages/Integrations"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function HomeGate() {
@@ -138,6 +154,7 @@ export default function App() {
         <Route path="users/*" element={<Users />} />
         <Route path="settings/*" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="profile/settings" element={<ProfileSettings />} />
         <Route path="admin" element={<Admin />} />
         <Route path="leads" element={<Leads />} />
         <Route path="messenger" element={<Messenger />} />
@@ -154,6 +171,21 @@ export default function App() {
         <Route path="people" element={<People />} />
         <Route path="people/:id" element={<Profile />} />
         <Route path="org-chart" element={<OrgChart />} />
+        <Route path="planner" element={<Planner />} />
+        <Route path="contacts" element={<Contacts />} />
+        <Route path="activity" element={<Activity />} />
+        <Route path="timeoff" element={<TimeOff />} />
+        <Route path="deals" element={<Deals />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="projects/:id/gantt" element={<ProjectGantt />} />
+        <Route path="whiteboard" element={<Whiteboard />} />
+        <Route path="calls" element={<Calls />} />
+        <Route path="objects" element={<ObjectsPage />} />
+        <Route path="documents" element={<Documents />} />
+        <Route path="directories" element={<Directories />} />
+        <Route path="holidays" element={<Holidays />} />
+        <Route path="integrations" element={<Integrations />} />
+        <Route path="settings/security" element={<SecurityPolicy />} />
         {/* 404 внутри Layout — авторизованный юзер видит sidebar/header */}
         <Route path="*" element={<NotFound />} />
       </Route>

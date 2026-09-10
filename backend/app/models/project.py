@@ -1,7 +1,9 @@
 from datetime import datetime, date
+from typing import Any, List, Optional
+
 from sqlalchemy import String, Integer, ForeignKey, Boolean, DateTime, Date, Column, Table, func, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import List, Optional
+from sqlalchemy.dialects.postgresql import JSONB
 
 from ..database import Base
 
@@ -38,3 +40,13 @@ class Project(Base):
     members: Mapped[List["User"]] = relationship(  # type: ignore  # noqa: F821
         "User", secondary=project_members, lazy="selectin"
     )
+
+    # --- P3 расширения ---
+    inbox_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True, index=True)
+    custom_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+
+    # --- P4 расширения ---
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("project_groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    baseline_start: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    baseline_end: Mapped[Optional[date]] = mapped_column(Date, nullable=True)

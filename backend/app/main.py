@@ -14,6 +14,7 @@ from .core.limiter import limiter
 from .core.errors import install_error_handlers
 from .core.redis_client import get_redis
 from .core.subdomain import SubdomainTenantMiddleware
+from .core.ip_allowlist import IPAllowlistMiddleware
 from .database import engine
 from .api import (
     auth, roles, users, projects, tasks, comments, attachments,
@@ -25,6 +26,25 @@ from .api import (
     time_tracking,
     hr as hr_api,
     integrations_google,
+    contacts as contacts_api,
+    activity as activity_api,
+    time_off as time_off_api,
+    deals as deals_api,
+    user_prefs as user_prefs_api,
+    reports as reports_api,
+    whiteboards as whiteboards_api,
+    telephony as telephony_api,
+    custom_objects as custom_objects_api,
+    ai as ai_api,
+    task_links as task_links_api,
+    reminders as reminders_api,
+    task_statuses as task_statuses_api,
+    templates as templates_api,
+    custom_fields as custom_fields_api,
+    saved_reports as saved_reports_api,
+    mail_rules as mail_rules_api,
+    task_inbox as task_inbox_api,
+    p4 as p4_api,
 )
 
 
@@ -91,6 +111,11 @@ def create_app() -> FastAPI:
 
     app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
+    # Порядок middleware: сначала subdomain (устанавливает forced_tenant_slug),
+    # потом IP-allowlist (использует slug для lookup policy).
+    # Starlette выполняет middleware в обратном порядке добавления, поэтому
+    # IPAllowlistMiddleware добавляем ПЕРВЫМ (снаружи), Subdomain — вторым (внутри).
+    app.add_middleware(IPAllowlistMiddleware)
     app.add_middleware(SubdomainTenantMiddleware)
 
     install_error_handlers(app)
@@ -154,6 +179,27 @@ def create_app() -> FastAPI:
         time_tracking.router,
         hr_api.router,
         integrations_google.router,
+        contacts_api.router,
+        activity_api.router,
+        time_off_api.router,
+        deals_api.router,
+        user_prefs_api.router,
+        reports_api.router,
+        whiteboards_api.router,
+        telephony_api.router,
+        telephony_api.webhook_router,
+        custom_objects_api.router,
+        ai_api.router,
+        task_links_api.router,
+        reminders_api.router,
+        task_statuses_api.router,
+        templates_api.router,
+        custom_fields_api.router,
+        saved_reports_api.router,
+        mail_rules_api.router,
+        task_inbox_api.router,
+        p4_api.router,
+        p4_api.public_router,
     ):
         app.include_router(r)
 

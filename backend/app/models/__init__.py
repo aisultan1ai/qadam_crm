@@ -39,6 +39,28 @@ from .hr_profiles import (
 )
 from .lead import Lead
 from .lead_form import LeadForm, TenantLead
+from .contact import Contact, Company
+from .time_off import TimeOff, TimeOffKind, TimeOffStatus
+from .deal import Deal, DealStage, DealStatus
+from .user_prefs import UserSession, UserNotificationPref, LinkedAccount
+from .whiteboard import Whiteboard
+from .telephony import Call
+from .custom_object import CustomObjectSchema, CustomObjectRecord
+from .task_link import TaskLink, LINK_KINDS
+from .reminder import Reminder
+from .task_status_def import TaskStatusDef, STATUS_CATEGORIES
+from .entity_template import EntityTemplate, ENTITY_TYPES as TEMPLATE_ENTITY_TYPES
+from .custom_field import CustomFieldDef, CUSTOM_FIELD_ENTITY_TYPES, CUSTOM_FIELD_TYPES
+from .saved_report import SavedReport, ReportGroup
+from .mail_rule import MailRule, MailTemplate
+from .p4 import (
+    CommentEditHistory,
+    ProjectGroup, ProjectRoleAssignment,
+    Directory, DirectoryEntry,
+    DocumentFolder, Document, DocumentVersion,
+    TenantLogRetention, TenantHoliday, TenantSecurityPolicy,
+    IntegrationProvider,
+)
 from .channel import (
     Channel, ChannelMember, Message, MessageAttachment, MessageReaction,
     Poll, PollOption, PollVote,
@@ -130,6 +152,47 @@ __all__ = [
     "Lead",
     "LeadForm",
     "TenantLead",
+    "Contact",
+    "Company",
+    "TimeOff",
+    "TimeOffKind",
+    "TimeOffStatus",
+    "Deal",
+    "DealStage",
+    "DealStatus",
+    "UserSession",
+    "UserNotificationPref",
+    "LinkedAccount",
+    "Whiteboard",
+    "Call",
+    "CustomObjectSchema",
+    "CustomObjectRecord",
+    "TaskLink",
+    "LINK_KINDS",
+    "Reminder",
+    "TaskStatusDef",
+    "STATUS_CATEGORIES",
+    "EntityTemplate",
+    "TEMPLATE_ENTITY_TYPES",
+    "CustomFieldDef",
+    "CUSTOM_FIELD_ENTITY_TYPES",
+    "CUSTOM_FIELD_TYPES",
+    "SavedReport",
+    "ReportGroup",
+    "MailRule",
+    "MailTemplate",
+    "CommentEditHistory",
+    "ProjectGroup",
+    "ProjectRoleAssignment",
+    "Directory",
+    "DirectoryEntry",
+    "DocumentFolder",
+    "Document",
+    "DocumentVersion",
+    "TenantLogRetention",
+    "TenantHoliday",
+    "TenantSecurityPolicy",
+    "IntegrationProvider",
     "Channel",
     "ChannelMember",
     "Message",

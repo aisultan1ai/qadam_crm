@@ -184,6 +184,13 @@ def register(
     if db.query(User.id).filter(User.email == email).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пользователь с таким email уже существует")
 
+    # P4t.1: password policy — на регистрации применяется дефолт (без tenant policy)
+    from ..core.security import validate_password, PasswordPolicyError
+    try:
+        validate_password(payload.password, tenant_id=None)
+    except PasswordPolicyError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
     user = User(
         email=email,
         name=payload.full_name.strip(),

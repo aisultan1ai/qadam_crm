@@ -5,7 +5,10 @@ import {
   Sun, Moon, LogOut, Search, Bell, Menu, X, PanelLeftClose, PanelLeftOpen,
   Shield, Zap, MessageSquare, Workflow, Inbox as InboxIcon, Mail as MailIcon,
   BookOpen, Calendar as CalendarIcon, Timer as TimerIcon,
-  Network, Contact2,
+  Network, Contact2, CalendarClock, BookUser,
+  Activity as ActivityIcon, PalmtreeIcon, Coins, PieChart,
+  PenSquare, Phone, Boxes,
+  FileText, BookText, Palmtree, Puzzle,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
@@ -39,24 +42,74 @@ type NavItem = {
   platformAdminOnly?: boolean;
 };
 
-const NAV: NavItem[] = [
-  { to: "/", label: t.nav.dashboard, icon: LayoutDashboard, exact: true },
-  { to: "/projects", label: t.nav.projects, icon: FolderKanban, code: "projects.view" },
-  { to: "/tasks", label: t.nav.tasks, icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
-  { to: "/messenger", label: "Мессенджер", icon: MessageSquare, code: "messenger.use" },
-  { to: "/inbox", label: "Открытые линии", icon: InboxIcon, code: "messengers.reply" },
-  { to: "/mail", label: "Почта", icon: MailIcon, code: "mail.use" },
-  { to: "/wiki", label: "База знаний", icon: BookOpen, code: "wiki.use" },
-  { to: "/calendar", label: "Календарь", icon: CalendarIcon, code: "calendar.use" },
-  { to: "/time", label: "Время", icon: TimerIcon, code: "time.use" },
-  { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
-  { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
-  { to: "/analytics", label: t.nav.analytics, icon: BarChart3, code: "analytics.reports" },
-  { to: "/people", label: "Люди", icon: Contact2, code: "hr.view_profiles" },
-  { to: "/org-chart", label: "Оргструктура", icon: Network, code: "hr.view_profiles" },
-  { to: "/users", label: t.nav.users, icon: Users, code: "users.view" },
-  { to: "/settings", label: t.nav.settings, icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
-  { to: "/admin", label: t.nav.platform, icon: Shield, platformAdminOnly: true },
+type NavSection = {
+  title?: string;
+  items: NavItem[];
+};
+
+// Структура навигации в стиле Planfix: сгруппирована по секциям —
+// Основное (Planner, Projects, Tasks), Коммуникации, Знания/Время, Люди, Настройки.
+const NAV_SECTIONS: NavSection[] = [
+  {
+    items: [
+      { to: "/", label: t.nav.dashboard, icon: LayoutDashboard, exact: true },
+      { to: "/planner", label: "Планировщик", icon: CalendarClock },
+      { to: "/projects", label: t.nav.projects, icon: FolderKanban, code: "projects.view" },
+      { to: "/tasks", label: t.nav.tasks, icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
+    ],
+  },
+  {
+    title: "Коммуникации",
+    items: [
+      { to: "/messenger", label: "Мессенджер", icon: MessageSquare, code: "messenger.use" },
+      { to: "/inbox", label: "Открытые линии", icon: InboxIcon, code: "messengers.reply" },
+      { to: "/mail", label: "Почта", icon: MailIcon, code: "mail.use" },
+    ],
+  },
+  {
+    title: "Работа",
+    items: [
+      { to: "/calendar", label: "Календарь", icon: CalendarIcon, code: "calendar.use" },
+      { to: "/time", label: "Время", icon: TimerIcon, code: "time.use" },
+      { to: "/wiki", label: "База знаний", icon: BookOpen, code: "wiki.use" },
+      { to: "/documents", label: "Документы", icon: FileText },
+      { to: "/whiteboard", label: "Доски", icon: PenSquare },
+      { to: "/objects", label: "Объекты", icon: Boxes },
+      { to: "/directories", label: "Справочники", icon: BookText },
+      { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
+      { to: "/activity", label: "Хроника", icon: ActivityIcon },
+      { to: "/reports", label: "Отчёты", icon: PieChart, code: "analytics.reports" },
+      { to: "/analytics", label: t.nav.analytics, icon: BarChart3, code: "analytics.reports" },
+    ],
+  },
+  {
+    title: "CRM",
+    items: [
+      { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
+      { to: "/deals", label: "Сделки", icon: Coins, code: "deals.view" },
+      { to: "/contacts", label: "Контакты", icon: BookUser },
+      { to: "/calls", label: "Звонки", icon: Phone },
+    ],
+  },
+  {
+    title: "Команда",
+    items: [
+      { to: "/people", label: "Сотрудники", icon: Contact2, code: "hr.view_profiles" },
+      { to: "/org-chart", label: "Оргструктура", icon: Network, code: "hr.view_profiles" },
+      { to: "/timeoff", label: "Отпуска", icon: PalmtreeIcon },
+      { to: "/holidays", label: "Календарь праздников", icon: Palmtree },
+      { to: "/users", label: t.nav.users, icon: Users, code: "users.view" },
+    ],
+  },
+  {
+    title: "Система",
+    items: [
+      { to: "/settings", label: t.nav.settings, icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
+      { to: "/settings/security", label: "Безопасность", icon: Shield, code: ["settings.system"] },
+      { to: "/integrations", label: "Интеграции", icon: Puzzle },
+      { to: "/admin", label: t.nav.platform, icon: Shield, platformAdminOnly: true },
+    ],
+  },
 ];
 
 export default function Layout() {
@@ -385,7 +438,8 @@ function Sidebar({
   return (
     <aside
       className={clsx(
-        "flex shrink-0 flex-col border-r border-neutral-200 bg-white text-neutral-900 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-800 dark:bg-[#0F0F14] dark:text-neutral-100",
+        // Planfix-style: сайдбар всегда тёмно-серый (#2A2E38), даже в light mode.
+        "flex shrink-0 flex-col border-r border-black/20 bg-[#2A2E38] text-neutral-200 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-800/80 dark:bg-[#1E2028]",
         desktop
           ? clsx(
               "sticky top-0 hidden h-screen self-start overflow-hidden md:flex",
@@ -415,56 +469,73 @@ function Sidebar({
           </span>
         )}
         {!desktop && onClose && (
-          <button className="btn-ghost ml-auto !p-1.5" onClick={onClose} aria-label="Закрыть меню">
+          <button className="ml-auto rounded-lg p-1.5 text-neutral-300 hover:bg-white/10 hover:text-white" onClick={onClose} aria-label="Закрыть меню">
             <X size={16} />
           </button>
         )}
       </div>
 
-      <nav className={clsx("flex-1 space-y-0.5 overflow-y-auto", showLabels ? "px-2" : "px-1.5")}>
-        {NAV.map((n) => {
-          if (n.platformAdminOnly && !me?.is_platform_admin) return null;
-          if (n.code && !can(n.code)) return null;
-          const Icon = n.icon;
+      <nav className={clsx("flex-1 overflow-y-auto", showLabels ? "px-2 py-1" : "px-1.5 py-1")}>
+        {NAV_SECTIONS.map((section, sIdx) => {
+          const visible = section.items.filter((n) => {
+            if (n.platformAdminOnly && !me?.is_platform_admin) return false;
+            if (n.code && !can(n.code)) return false;
+            return true;
+          });
+          if (visible.length === 0) return null;
           return (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.exact}
-              onClick={onLinkClick}
-              title={showLabels ? undefined : n.label}
-              className={({ isActive }) =>
-                clsx(
-                  "relative flex items-center rounded-lg text-sm transition-all duration-[180ms] ease-out-soft",
-                  showLabels ? "gap-2.5 px-3 py-2" : "justify-center px-2 py-2",
-                  isActive
-                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                    : "text-neutral-700 hover:translate-x-0.5 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800/60 dark:hover:text-white",
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <span
-                    aria-hidden
-                    className={clsx(
-                      "absolute inset-y-1 left-0 w-0.5 origin-center rounded-full bg-brand-600 transition-all duration-300 ease-out-soft dark:bg-brand-400",
-                      isActive ? "scale-y-100 opacity-100" : "scale-y-50 opacity-0",
-                    )}
-                  />
-                  <Icon size={16} />
-                  {showLabels && <span className="transition-opacity duration-150">{n.label}</span>}
-                  {n.to === "/messenger" && <MessengerUnreadBadge collapsed={!showLabels} />}
-                </>
+            <div key={sIdx} className={clsx(sIdx > 0 && "mt-2 pt-2 border-t border-white/10")}>
+              {section.title && showLabels && (
+                <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                  {section.title}
+                </div>
               )}
-            </NavLink>
+              <div className="space-y-0.5">
+                {visible.map((n) => {
+                  const Icon = n.icon;
+                  return (
+                    <NavLink
+                      key={n.to}
+                      to={n.to}
+                      end={n.exact}
+                      onClick={onLinkClick}
+                      title={showLabels ? undefined : n.label}
+                      className={({ isActive }) =>
+                        clsx(
+                          "relative flex items-center rounded-lg text-sm transition-all duration-[180ms] ease-out-soft",
+                          showLabels ? "gap-2.5 px-3 py-2" : "justify-center px-2 py-2",
+                          isActive
+                            ? "bg-white/10 font-medium text-white"
+                            : "text-neutral-300 hover:translate-x-0.5 hover:bg-white/5 hover:text-white",
+                        )
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <span
+                            aria-hidden
+                            className={clsx(
+                              "absolute inset-y-1 left-0 w-0.5 origin-center rounded-full bg-brand-400 transition-all duration-300 ease-out-soft",
+                              isActive ? "scale-y-100 opacity-100" : "scale-y-50 opacity-0",
+                            )}
+                          />
+                          <Icon size={16} />
+                          {showLabels && <span className="transition-opacity duration-150">{n.label}</span>}
+                          {n.to === "/messenger" && <MessengerUnreadBadge collapsed={!showLabels} />}
+                        </>
+                      )}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </nav>
 
       <div
         className={clsx(
-          "border-t border-neutral-200 dark:border-neutral-800",
+          "border-t border-white/10",
           showLabels ? "p-3" : "p-2",
         )}
       >
@@ -475,10 +546,10 @@ function Sidebar({
               onClick={onLinkClick}
               className={({ isActive }) =>
                 clsx(
-                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors text-neutral-900 dark:text-neutral-100",
+                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors text-white",
                   isActive
-                    ? "bg-neutral-100 dark:bg-neutral-800/70"
-                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                    ? "bg-white/10"
+                    : "hover:bg-white/5",
                 )
               }
               title="Открыть профиль"
@@ -486,10 +557,14 @@ function Sidebar({
               <Avatar name={me?.name} url={me?.avatar_url} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{me?.name}</div>
-                <div className="truncate text-xs text-neutral-500 dark:text-neutral-400">{me?.email}</div>
+                <div className="truncate text-xs text-neutral-400">{me?.email}</div>
               </div>
             </NavLink>
-            <button className="btn-ghost !p-1.5 text-neutral-700 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white" onClick={logout} title="Выйти">
+            <button
+              className="rounded-lg p-1.5 text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+              onClick={logout}
+              title="Выйти"
+            >
               <LogOut size={16} />
             </button>
           </div>
@@ -500,17 +575,22 @@ function Sidebar({
               onClick={onLinkClick}
               className={({ isActive }) =>
                 clsx(
-                  "flex items-center justify-center rounded-lg p-1 transition-colors text-neutral-900 dark:text-neutral-100",
+                  "flex items-center justify-center rounded-lg p-1 transition-colors text-white",
                   isActive
-                    ? "bg-neutral-100 dark:bg-neutral-800/70"
-                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+                    ? "bg-white/10"
+                    : "hover:bg-white/5",
                 )
               }
               title={me?.name ? `${me.name} — открыть профиль` : "Открыть профиль"}
             >
               <Avatar name={me?.name} url={me?.avatar_url} />
             </NavLink>
-            <button className="btn-ghost !p-1.5" onClick={logout} title="Выйти" aria-label="Выйти">
+            <button
+              className="rounded-lg p-1.5 text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+              onClick={logout}
+              title="Выйти"
+              aria-label="Выйти"
+            >
               <LogOut size={16} />
             </button>
           </div>
