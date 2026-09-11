@@ -26,6 +26,10 @@ class Tenant(Base):
     google_client_secret_enc: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     google_redirect_uri: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
+    dropbox_app_key: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    dropbox_app_secret_enc: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    dropbox_redirect_uri: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     memberships: Mapped[List["TenantMembership"]] = relationship(

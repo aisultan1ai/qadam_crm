@@ -432,8 +432,8 @@ def seed_integration_providers(db) -> None:
     """Витрина возможных интеграций (глобальные, tenant_id=NULL)."""
     from .models import IntegrationProvider
     providers = [
-        ("google_drive", "Google Drive", "storage", "coming_soon"),
-        ("dropbox", "Dropbox", "storage", "coming_soon"),
+        ("google_drive", "Google Drive", "storage", "available"),
+        ("dropbox", "Dropbox", "storage", "available"),
         ("onedrive", "OneDrive", "storage", "coming_soon"),
         ("google_forms", "Google Forms", "marketing", "coming_soon"),
         ("mailchimp", "Mailchimp", "marketing", "coming_soon"),

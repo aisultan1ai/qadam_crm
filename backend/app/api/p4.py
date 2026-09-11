@@ -746,13 +746,38 @@ class OAuthStartOut(BaseModel):
 def integration_oauth_start(code: str, ctx: TenantContext = Depends(get_current_context)):
     """Возвращает URL для перехода на consent-экран провайдера.
 
-    Для google_drive — переиспользуем существующий Google OAuth (calendar scope +
-    drive.readonly). Для остальных — MVP-ссылки на официальные страницы.
+    Для google_drive и dropbox — генерируем реальный consent URL с state (P5.4/P5.5).
+    Для остальных — заглушки на официальные страницы.
     """
-    from ..config import settings
+    import secrets as _secrets
+    import base64 as _b64
+    import json as _json
+
+    if code in ("google_drive", "dropbox"):
+        from ..services import google_drive as gdrive
+        from ..services import dropbox_service as dbx_svc
+        from ..services import google_calendar as gcal
+        configured = (
+            gcal.tenant_configured(ctx.tenant) if code == "google_drive"
+            else dbx_svc.tenant_configured(ctx.tenant)
+        )
+        if not configured:
+            raise HTTPException(
+                503,
+                f"{code} не настроен: owner должен ввести client credentials в /settings/integrations",
+            )
+        nonce = _secrets.token_urlsafe(16)
+        state_payload = _json.dumps(
+            {"t": ctx.tenant.id, "u": ctx.user.id, "p": code, "n": nonce}
+        ).encode("utf-8")
+        state = _b64.urlsafe_b64encode(state_payload).decode("ascii").rstrip("=")
+        if code == "google_drive":
+            url = gdrive.build_auth_url(ctx.tenant, state)
+        else:
+            url = dbx_svc.build_auth_url(ctx.tenant, state)
+        return OAuthStartOut(provider=code, consent_url=url)
+
     base_urls = {
-        "google_drive": "/api/integrations/google/auth?scopes=drive",
-        "dropbox": "https://www.dropbox.com/oauth2/authorize?response_type=code&client_id=YOUR_APP_KEY&redirect_uri=YOUR_URL",
         "onedrive": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=YOUR_APP&response_type=code",
         "slack": "https://slack.com/oauth/v2/authorize?client_id=YOUR_APP&scope=chat:write,channels:read",
         "mailchimp": "https://login.mailchimp.com/oauth2/authorize?response_type=code&client_id=YOUR_APP",
