@@ -139,6 +139,13 @@ def create_app() -> FastAPI:
         path = request.url.path
         csp = DOCS_CSP if path.startswith(DOCS_PATHS) else API_CSP_STRICT
         response.headers.setdefault("Content-Security-Policy", csp)
+        # HSTS ставим только когда приложение реально работает по HTTPS,
+        # иначе браузер запомнит для локальных доменов и dev-режим сломается.
+        if settings.is_prod and settings.COOKIE_SECURE:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
         return response
 
     uploads_dir = Path(settings.UPLOAD_DIR)

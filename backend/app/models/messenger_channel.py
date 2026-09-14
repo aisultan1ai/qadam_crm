@@ -7,8 +7,12 @@
 - ExternalMessage — сообщения внутри диалога
 
 provider_config хранит секреты провайдера (bot_token у Telegram, api_key у WhatsApp).
-Secrets стоит шифровать на диске — сейчас хранятся plain, шифрование добавим отдельным
-модулем на security-этапе (todo: symmetric encryption).
+Секретные ключи шифруются через services.messenger_secrets (Fernet).
+
+Тела ExternalMessage.body, AutoReplyRule.response_text и MessageTemplate.body хранятся
+через EncryptedText (application-level Fernet). Это защищает переписку в случае
+компрометации дампа БД. Поиск по этим колонкам через SQL LIKE перестаёт работать —
+но inbox фильтрует по last_message_at/preview/status, не по body.
 """
 from datetime import datetime
 from enum import Enum
@@ -20,6 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from ..core.encrypted_type import EncryptedText
 from ..database import Base
 
 
@@ -165,7 +170,7 @@ class ExternalMessage(Base):
     # ID сообщения у провайдера (для идемпотентности и статус-callback'ов)
     external_message_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
 
-    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    body: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
     media: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -195,7 +200,7 @@ class AutoReplyRule(Base):
 
     kind: Mapped[AutoReplyKind] = mapped_column(SAEnum(AutoReplyKind, name="auto_reply_kind"))
     trigger_config: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
-    response_text: Mapped[str] = mapped_column(Text)
+    response_text: Mapped[str] = mapped_column(EncryptedText)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
@@ -215,7 +220,7 @@ class MessageTemplate(Base):
 
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(40), default="text", server_default="text")
-    body: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(EncryptedText)
     language: Mapped[str] = mapped_column(String(10), default="ru", server_default="ru")
 
     # Для WhatsApp — ID/имя утверждённого HSM-шаблона у BSP

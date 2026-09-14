@@ -192,7 +192,7 @@ def patch_availability(
 ):
     """Владелец компании и юзер с users.update могут менять чужие часы."""
     if ctx.user.id != user_id and not (
-        ctx.membership.is_owner or user_has(ctx.user, ["users.update"])
+        ctx.membership.is_owner or user_has(ctx.user, ["users.update"], tenant_id=ctx.tenant.id)
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Только владелец или админ могут менять расписание другого пользователя")
     _assert_user_in_tenant(db, ctx.tenant.id, user_id)

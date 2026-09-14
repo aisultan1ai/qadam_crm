@@ -20,7 +20,7 @@ def dashboard(ctx: TenantContext = Depends(get_current_context), db: Session = D
     tenant_id = ctx.tenant.id
     # Scope: юзер с tasks.view_own видит только свою статистику. Иначе агрегаты
     # раскрывают чужую производительность даже без прямого доступа к задачам.
-    view_all = user_has(ctx.user, ["tasks.view_all"])
+    view_all = user_has(ctx.user, ["tasks.view_all"], tenant_id=ctx.tenant.id)
     scope_uid = None if view_all else ctx.user.id
     key = make_key(tenant_id, "dashboard", "all" if view_all else f"u{scope_uid}")
 
@@ -92,7 +92,7 @@ def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: 
     tenant_id = ctx.tenant.id
     # Scope: если у юзера нет tasks.view_all — показываем только его собственную
     # статистику. Иначе аналитика могла бы утечь чужую производительность.
-    view_all = user_has(ctx.user, ["tasks.view_all"])
+    view_all = user_has(ctx.user, ["tasks.view_all"], tenant_id=ctx.tenant.id)
     scope_uid = None if view_all else ctx.user.id
     key = make_key(tenant_id, "employees", "all" if view_all else f"u{scope_uid}")
 
@@ -152,7 +152,7 @@ def leads_by_manager(ctx: TenantContext = Depends(require("analytics.reports")),
     user_id=None, name='Не назначен' — чтобы owner видел объём неразобранного.
     """
     tenant_id = ctx.tenant.id
-    view_all = user_has(ctx.user, ["tasks.view_all"])
+    view_all = user_has(ctx.user, ["tasks.view_all"], tenant_id=ctx.tenant.id)
     scope_uid = None if view_all else ctx.user.id
     key = make_key(tenant_id, "leads_by_manager", "all" if view_all else f"u{scope_uid}")
 

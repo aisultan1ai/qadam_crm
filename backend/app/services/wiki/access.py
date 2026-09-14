@@ -54,19 +54,19 @@ def _user_role_ids(user) -> list[int]:
 
 def effective_level(db: Session, tenant_id: int, user, article: Article) -> Optional[WikiAccessLevel]:
     """Возвращает максимально доступный уровень доступа к статье или None."""
-    if getattr(user, "is_superuser", False) or getattr(user, "is_platform_admin", False):
+    if getattr(user, "is_platform_admin", False) or getattr(user, "is_superuser", False):
         return WikiAccessLevel.admin
-    if user_has(user, ["wiki.admin"]):
+    if user_has(user, ["wiki.admin"], tenant_id=tenant_id):
         return WikiAccessLevel.admin
 
     # Опубликованная статья видна всем с wiki.use
-    if article.is_published and user_has(user, ["wiki.use"]):
+    if article.is_published and user_has(user, ["wiki.use"], tenant_id=tenant_id):
         base = WikiAccessLevel.view
     else:
         base = None
 
     # Если есть wiki.publish — минимум edit на любую статью в tenant
-    if user_has(user, ["wiki.publish"]):
+    if user_has(user, ["wiki.publish"], tenant_id=tenant_id):
         base = max_level(base, WikiAccessLevel.edit)
 
     # Явные ArticlePermission

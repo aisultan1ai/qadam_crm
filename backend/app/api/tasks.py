@@ -26,17 +26,17 @@ def _now_utc() -> datetime:
 
 
 def _user_can_view_task(user: User, task: Task) -> bool:
-    if user_has(user, ["tasks.view_all"]):
+    if user_has(user, ["tasks.view_all"], tenant_id=task.tenant_id):
         return True
-    if user_has(user, ["tasks.view_own"]):
+    if user_has(user, ["tasks.view_own"], tenant_id=task.tenant_id):
         return task.assignee_id == user.id or task.author_id == user.id
     return False
 
 
-def _apply_view_scope(query, user: User):
-    if user_has(user, ["tasks.view_all"]):
+def _apply_view_scope(query, user: User, tenant_id: int):
+    if user_has(user, ["tasks.view_all"], tenant_id=tenant_id):
         return query
-    if user_has(user, ["tasks.view_own"]):
+    if user_has(user, ["tasks.view_own"], tenant_id=tenant_id):
         return query.filter(or_(Task.assignee_id == user.id, Task.author_id == user.id))
     return query.filter(Task.id == -1)
 
@@ -90,7 +90,7 @@ def list_tasks(
     db: Session = Depends(get_db),
 ):
     user = ctx.user
-    if not user_has(user, ["tasks.view_all", "tasks.view_own"]):
+    if not user_has(user, ["tasks.view_all", "tasks.view_own"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нет доступа к задачам")
     query = db.query(Task).filter(Task.tenant_id == ctx.tenant.id).options(
         noload(Task.checklist),
@@ -98,7 +98,7 @@ def list_tasks(
         noload(Task.attachments),
         noload(Task.activities),
     )
-    query = _apply_view_scope(query, user)
+    query = _apply_view_scope(query, user, ctx.tenant.id)
     if q:
         like = f"%{q.strip()}%"
         query = query.filter(or_(Task.title.ilike(like), Task.description.ilike(like)))
@@ -151,7 +151,7 @@ def get_task(task_id: int, ctx: TenantContext = Depends(get_current_context), db
 @router.post("", response_model=TaskOut, status_code=201)
 def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks.create")), db: Session = Depends(get_db)):
     user = ctx.user
-    if payload.assignee_id and not user_has(user, ["tasks.assign"]) and payload.assignee_id != user.id:
+    if payload.assignee_id and not user_has(user, ["tasks.assign"], tenant_id=ctx.tenant.id) and payload.assignee_id != user.id:
         raise HTTPException(403, "Нет права назначать исполнителей")
     if payload.assignee_id:
         _assert_user_in_tenant(db, ctx.tenant.id, payload.assignee_id, "Исполнитель не является членом компании")
@@ -196,7 +196,7 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
     task = db.get(Task, task_id)
     if not task or task.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Задача не найдена")
-    if not user_has(user, ["tasks.update"]):
+    if not user_has(user, ["tasks.update"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нет права редактировать")
 
     changes: list[str] = []
@@ -212,7 +212,7 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         task.description = payload.description
         changes.append("описание")
     if payload.status is not None and payload.status != task.status:
-        if not user_has(user, ["tasks.change_status"]):
+        if not user_has(user, ["tasks.change_status"], tenant_id=ctx.tenant.id):
             raise HTTPException(403, "Нет права менять статус")
         old = task.status.value
         old_status = old
@@ -222,7 +222,7 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         if task.assignee_id and task.assignee_id != user.id:
             _notify(db, ctx.tenant.id, task.assignee_id, "status", f"Статус изменён: {task.title}", f"{old} → {payload.status.value}", task.id)
     if payload.priority is not None and payload.priority != task.priority:
-        if not user_has(user, ["tasks.change_priority"]):
+        if not user_has(user, ["tasks.change_priority"], tenant_id=ctx.tenant.id):
             raise HTTPException(403, "Нет права менять приоритет")
         old = task.priority.value
         task.priority = payload.priority
@@ -231,7 +231,7 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         _assert_project_in_tenant(db, ctx.tenant.id, payload.project_id)
         task.project_id = payload.project_id
     if payload.assignee_id is not None and payload.assignee_id != task.assignee_id:
-        if not user_has(user, ["tasks.assign"]):
+        if not user_has(user, ["tasks.assign"], tenant_id=ctx.tenant.id):
             raise HTTPException(403, "Нет права назначать исполнителей")
         if payload.assignee_id:
             _assert_user_in_tenant(db, ctx.tenant.id, payload.assignee_id, "Исполнитель не является членом компании")

@@ -148,3 +148,6 @@ class TenantBrief(BaseModel):
 class MeOut(UserOut):
     permissions: List[str] = []
     current_tenant: Optional[TenantBrief] = None
+    # Показываем UI что смена email ещё ожидает подтверждения — юзер видит
+    # плашку «Мы отправили письмо на X, кликните ссылку чтобы завершить».
+    pending_email: Optional[str] = None

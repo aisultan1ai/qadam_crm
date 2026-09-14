@@ -122,8 +122,9 @@ def ingest_payload(channel_id: int, payload: dict) -> dict:
             log.info("ingest: канал %s недоступен", channel_id)
             return {"processed": 0, "channel_id": channel_id, "reason": "channel_missing_or_inactive"}
         try:
+            from .messenger_secrets import decrypt_config
             provider = get_provider(channel.kind.value if hasattr(channel.kind, "value") else channel.kind,
-                                    channel.provider_config or {}, channel.webhook_secret)
+                                    decrypt_config(channel.provider_config), channel.webhook_secret)
             messages = provider.parse_incoming(payload)
         except ProviderError as e:
             log.warning("ingest: parse error: %s", e)
@@ -296,9 +297,10 @@ def send_and_persist_message(
     db.add(msg)
     db.flush()
 
+    from .messenger_secrets import decrypt_config
     provider = get_provider(
         channel.kind.value if hasattr(channel.kind, "value") else channel.kind,
-        channel.provider_config or {},
+        decrypt_config(channel.provider_config),
         channel.webhook_secret,
     )
     try:

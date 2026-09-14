@@ -18,6 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from ..core.encrypted_type import EncryptedText
 from ..database import Base
 
 
@@ -142,8 +143,11 @@ class MailMessage(Base):
     cc_addrs: Mapped[Any] = mapped_column(JSON, default=list, server_default="[]")
     subject: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
-    body_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    body_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Тела писем шифруются на диске тем же ключом что и IMAP-пароли (Fernet).
+    # Полнотекстовый поиск по body_* через SQL LIKE перестаёт работать; поиск
+    # по subject/from_addr остаётся plain.
+    body_text: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
+    body_html: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
 
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

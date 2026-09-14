@@ -1,4 +1,7 @@
-from typing import Iterable
+import logging
+from typing import Iterable, Optional
+
+_log = logging.getLogger("qadam.security.permissions")
 
 PERMISSIONS: dict[str, list[tuple[str, str]]] = {
     "Пользователи": [
@@ -114,8 +117,31 @@ def all_permission_codes() -> list[str]:
     return [code for group in PERMISSIONS.values() for code, _ in group]
 
 
-def user_has(user, codes: Iterable[str]) -> bool:
-    if getattr(user, "is_superuser", False):
+def user_has(user, codes: Iterable[str], tenant_id: Optional[int] = None) -> bool:
+    """Проверка permissions пользователя в контексте конкретного tenant'а.
+
+    Раньше функция перебирала ВСЕ user.roles без фильтра, из-за чего
+    роль-админ в компании C давала админские права в компании A. Теперь
+    учитываются только роли текущего tenant'а плюс системные роли
+    (Role.tenant_id IS NULL).
+
+    is_platform_admin/is_superuser — сквозной bypass, но это ПЛАТФОРМЕННЫЕ
+    роли, не путать с tenant-owner (последний резолвится через
+    TenantContext.membership.is_owner в require()).
+
+    tenant_id=None оставлен для обратной совместимости с местами, где вызов
+    делается вне tenant-контекста; в таком случае выводится warning в лог,
+    т.к. это потенциальный cross-tenant leak.
+    """
+    if getattr(user, "is_platform_admin", False) or getattr(user, "is_superuser", False):
         return True
-    granted = {p.code for role in user.roles for p in role.permissions}
+    if tenant_id is None:
+        _log.warning("user_has(): tenant_id не передан — cross-tenant риск. Обновите call-site.")
+        roles_iter = list(user.roles or [])
+    else:
+        roles_iter = [
+            r for r in (user.roles or [])
+            if r.tenant_id is None or r.tenant_id == tenant_id
+        ]
+    granted = {p.code for role in roles_iter for p in role.permissions}
     return any(c in granted for c in codes)

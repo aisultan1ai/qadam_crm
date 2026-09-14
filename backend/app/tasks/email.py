@@ -90,6 +90,35 @@ def send_password_reset_email(to: str, reset_url: str) -> str:
     return send_email.run(to=to, subject=subject, html=html)
 
 
+@celery_app.task(name="email.change_confirm")
+def send_email_change_confirmation(to: str, confirm_url: str, old_email: str) -> str:
+    """Ссылка подтверждения на НОВЫЙ email при смене адреса."""
+    subject = "Подтвердите новый email — Qadam CRM"
+    html = f"""
+      <p>Здравствуйте!</p>
+      <p>Вы запросили смену email в Qadam CRM: <b>{old_email}</b> → <b>{to}</b>.</p>
+      <p>Подтвердите новый адрес, чтобы завершить смену:</p>
+      <p><a href="{confirm_url}">Подтвердить смену email</a></p>
+      <p>Если ссылка не открывается, скопируйте её вручную:<br>{confirm_url}</p>
+      <p>Ссылка действует 24 часа. Если это были не вы — просто проигнорируйте письмо.</p>
+    """
+    return send_email.run(to=to, subject=subject, html=html)
+
+
+@celery_app.task(name="email.change_notify_old")
+def send_email_change_notify_old(to: str, new_email: str) -> str:
+    """Уведомление на СТАРЫЙ email о запросе смены (защита от захвата аккаунта)."""
+    subject = "Запрос на смену email — Qadam CRM"
+    html = f"""
+      <p>Здравствуйте!</p>
+      <p>В вашем аккаунте Qadam CRM запросили смену email на <b>{new_email}</b>.</p>
+      <p>Если это были вы — подтвердите ссылку в письме, отправленном на новый адрес.</p>
+      <p>Если вы не делали этого запроса — немедленно смените пароль и обратитесь в поддержку:
+      возможно, кто-то получил доступ к вашей учётной записи.</p>
+    """
+    return send_email.run(to=to, subject=subject, html=html)
+
+
 @celery_app.task(name="email.notification")
 def send_notification_email(to: str, title: str, body: str, link_url: Optional[str] = None) -> str:
     subject = title

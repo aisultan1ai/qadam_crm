@@ -113,8 +113,8 @@ def update_comment(task_id: int, comment_id: int, payload: CommentCreate, ctx: T
     if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
         raise HTTPException(404, "Комментарий не найден")
     is_own = comment.author_id == user.id
-    can_edit_own = is_own and user_has(user, ["comments.update_own"])
-    can_edit_any = user_has(user, ["comments.update_any"])
+    can_edit_own = is_own and user_has(user, ["comments.update_own"], tenant_id=ctx.tenant.id)
+    can_edit_any = user_has(user, ["comments.update_any"], tenant_id=ctx.tenant.id)
     if not (can_edit_own or can_edit_any):
         raise HTTPException(403, "Нет права редактировать")
 

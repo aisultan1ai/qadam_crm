@@ -53,27 +53,6 @@ const SUCCESS_WITHOUT = [
   "Ручная сборка отчётов и потерянные лиды",
 ];
 
-const TESTIMONIALS = [
-  {
-    quote:
-      "За неделю перенесли из чатов и Excel всё в Qadam. Kanban с реал-таймом убрал хаос — теперь видно кто что делает.",
-    name: "Айгерим Нурланова",
-    role: "Product Manager, ACME",
-  },
-  {
-    quote:
-      "Формы захвата с сайта падают прямо в CRM — менеджеры не пропускают ни одной заявки. Конверсия выросла на 30%.",
-    name: "Данияр Абаев",
-    role: "Founder, Startup KZ",
-  },
-  {
-    quote:
-      "Ролевая модель и изоляция данных — то что искали для нашего SaaS. Внедрили за 3 дня без разработчиков.",
-    name: "Мария Ким",
-    role: "Head of Ops, Digital Studio",
-  },
-];
-
 const FAQ_ITEMS = [
   {
     q: "Сколько стоит Qadam CRM?",
@@ -188,7 +167,6 @@ export default function Landing() {
       <Benefits />
       <HowItWorks />
       <SuccessStories />
-      <Testimonials />
       <Pricing />
       <FAQ />
       <CTASection />
@@ -708,62 +686,6 @@ function FakeChart({ color, up }: { color: string; up: boolean }) {
       <path d={`${path} L 100,100 L 0,100 Z`} fill={`url(#grad-${color})`} />
       <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
     </svg>
-  );
-}
-
-// =========================================================================
-// Testimonials — dark, 3 карточки отзывов
-// =========================================================================
-
-function Testimonials() {
-  return (
-    <section className="qadam-reveal py-[120px]" style={{ background: "#F7F7FA" }}>
-      <div className="qadam-container">
-        <div className="mb-14 text-center">
-          <div className="qadam-eyebrow mb-3">Отзывы</div>
-          <h2
-            className="mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
-            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
-          >
-            Что говорят пользователи
-          </h2>
-          <p className="mx-auto mt-4 max-w-lg text-base" style={{ color: "#52596E" }}>
-            Команды разных размеров — от 5 до 200 человек — уже упорядочили работу.
-          </p>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-3">
-          {TESTIMONIALS.map((t, i) => (
-            <div
-              key={i}
-              className="rounded-2xl p-6 transition-all hover:-translate-y-1"
-              style={{
-                background: "#ffffff",
-                border: "1px solid rgba(10,10,18,0.06)",
-                boxShadow: "0 4px 14px -8px rgba(10,10,18,0.08)",
-              }}
-            >
-              <p className="text-[15px] leading-relaxed" style={{ color: "#3F4457" }}>"{t.quote}"</p>
-              <div
-                className="mt-6 flex items-center gap-3 border-t pt-4"
-                style={{ borderColor: "rgba(10,10,18,0.06)" }}
-              >
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white"
-                  style={{ background: `hsl(${255 + i * 15}, 65%, 65%)` }}
-                >
-                  {t.name.split(" ").map((s) => s[0]).slice(0, 2).join("")}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold" style={{ color: "#0A0A12" }}>{t.name}</div>
-                  <div className="text-xs" style={{ color: "#6B7280" }}>{t.role}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
 

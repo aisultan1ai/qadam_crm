@@ -722,7 +722,7 @@ def update_channel(
         raise HTTPException(400, "DM нельзя редактировать")
     if ch.kind == "project":
         raise HTTPException(400, "Канал проекта редактируется через проект")
-    if me.role != "owner" and not user_has(ctx.user, ["messenger.manage_any"]):
+    if me.role != "owner" and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Только владелец может изменять группу")
 
     if payload.name is not None:
@@ -768,7 +768,7 @@ def delete_channel(
     ch, me = _require_member(db, ctx, channel_id)
     if ch.kind == "project":
         raise HTTPException(400, "Канал проекта нельзя удалить отдельно от проекта")
-    if ch.kind == "group" and me.role != "owner" and not user_has(ctx.user, ["messenger.manage_any"]):
+    if ch.kind == "group" and me.role != "owner" and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Только владелец может удалить группу")
     tenant_id = ch.tenant_id
     cid = ch.id
@@ -890,7 +890,7 @@ def edit_message(
     msg = db.get(Message, message_id)
     if not msg or msg.channel_id != ch.id or msg.deleted_at:
         raise HTTPException(404, "Сообщение не найдено")
-    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"]):
+    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Можно редактировать только свои сообщения")
 
     msg.body = payload.body.strip()
@@ -913,7 +913,7 @@ def delete_message(
     msg = db.get(Message, message_id)
     if not msg or msg.channel_id != ch.id or msg.deleted_at:
         raise HTTPException(404, "Сообщение не найдено")
-    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"]):
+    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Можно удалять только свои сообщения")
 
     msg.deleted_at = datetime.now(timezone.utc)
@@ -1007,7 +1007,7 @@ def create_poll(
     msg = db.get(Message, message_id)
     if not msg or msg.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Сообщение не найдено")
-    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"]):
+    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Опрос может создать только автор сообщения")
     if msg.poll:
         raise HTTPException(400, "Опрос уже привязан к сообщению")
@@ -1079,7 +1079,7 @@ def close_poll(
     msg = db.get(Message, poll.message_id)
     if not msg:
         raise HTTPException(404, "Опрос не найден")
-    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"]):
+    if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Закрыть может только автор")
     poll.closed_at = datetime.now(timezone.utc)
     db.commit()

@@ -254,7 +254,12 @@ def list_entries(
     if project_id:
         q = q.join(Task, Task.id == TimeEntry.task_id).filter(Task.project_id == project_id)
     # Не-approver'ы видят только свои
-    can_view_all = any(p.code == "time.approve" for r in ctx.user.roles for p in r.permissions) or ctx.user.is_superuser
+    can_view_all = ctx.membership.is_owner or any(
+        p.code == "time.approve"
+        for r in ctx.user.roles
+        if r.tenant_id is None or r.tenant_id == ctx.tenant.id
+        for p in r.permissions
+    )
     if user_id:
         if user_id != ctx.user.id and not can_view_all:
             raise HTTPException(403, "Только свои записи")
@@ -330,7 +335,7 @@ def patch_entry(
     e = db.get(TimeEntry, entry_id)
     if not e or e.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Запись не найдена")
-    if e.user_id != ctx.user.id and not ctx.user.is_superuser:
+    if e.user_id != ctx.user.id and not ctx.membership.is_owner:
         raise HTTPException(403, "Только свои записи")
     if e.approval_status == ApprovalStatus.approved:
         raise HTTPException(409, "Утверждённые записи не редактируются")
@@ -360,7 +365,7 @@ def delete_entry(
     e = db.get(TimeEntry, entry_id)
     if not e or e.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Запись не найдена")
-    if e.user_id != ctx.user.id and not ctx.user.is_superuser:
+    if e.user_id != ctx.user.id and not ctx.membership.is_owner:
         raise HTTPException(403, "Только свои записи")
     if e.approval_status == ApprovalStatus.approved:
         raise HTTPException(409, "Утверждённые записи не удаляются")
@@ -383,7 +388,12 @@ def report_summary(
     db: Session = Depends(get_db),
 ):
     """Суммарные часы за период с группировкой."""
-    can_view_all = any(p.code == "time.approve" for r in ctx.user.roles for p in r.permissions) or ctx.user.is_superuser
+    can_view_all = ctx.membership.is_owner or any(
+        p.code == "time.approve"
+        for r in ctx.user.roles
+        if r.tenant_id is None or r.tenant_id == ctx.tenant.id
+        for p in r.permissions
+    )
 
     q = db.query(TimeEntry).filter(
         TimeEntry.tenant_id == ctx.tenant.id,
@@ -438,7 +448,12 @@ def list_timesheets(
     db: Session = Depends(get_db),
 ):
     q = db.query(TimesheetApproval).filter(TimesheetApproval.tenant_id == ctx.tenant.id)
-    can_approve = any(p.code == "time.approve" for r in ctx.user.roles for p in r.permissions) or ctx.user.is_superuser
+    can_approve = ctx.membership.is_owner or any(
+        p.code == "time.approve"
+        for r in ctx.user.roles
+        if r.tenant_id is None or r.tenant_id == ctx.tenant.id
+        for p in r.permissions
+    )
     if only_mine or not can_approve:
         q = q.filter(TimesheetApproval.user_id == ctx.user.id)
     if status_filter:

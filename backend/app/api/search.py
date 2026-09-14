@@ -20,18 +20,18 @@ def search(q: str, ctx: TenantContext = Depends(get_current_context), db: Sessio
     like = f"%{q}%"
 
     tasks: list = []
-    if user_has(user, ["tasks.view_all", "tasks.view_own"]):
+    if user_has(user, ["tasks.view_all", "tasks.view_own"], tenant_id=tenant_id):
         tq = (
             db.query(Task)
             .filter(Task.tenant_id == tenant_id)
             .filter(or_(Task.title.ilike(like), Task.description.ilike(like)))
         )
-        if not user_has(user, ["tasks.view_all"]):
+        if not user_has(user, ["tasks.view_all"], tenant_id=tenant_id):
             tq = tq.filter(or_(Task.assignee_id == user.id, Task.author_id == user.id))
         tasks = [{"id": t.id, "title": t.title, "status": t.status.value, "project_id": t.project_id} for t in tq.limit(20).all()]
 
     projects: list = []
-    if user_has(user, ["projects.view"]):
+    if user_has(user, ["projects.view"], tenant_id=tenant_id):
         pq = (
             db.query(Project)
             .filter(Project.tenant_id == tenant_id)
@@ -40,7 +40,7 @@ def search(q: str, ctx: TenantContext = Depends(get_current_context), db: Sessio
         projects = [{"id": p.id, "name": p.name, "is_archived": p.is_archived} for p in pq.limit(20).all()]
 
     users: list = []
-    if user_has(user, ["users.view"]):
+    if user_has(user, ["users.view"], tenant_id=tenant_id):
         uq = (
             db.query(User)
             .join(TenantMembership, TenantMembership.user_id == User.id)
@@ -50,7 +50,7 @@ def search(q: str, ctx: TenantContext = Depends(get_current_context), db: Sessio
         users = [{"id": u.id, "name": u.name, "email": u.email} for u in uq.limit(20).all()]
 
     comments: list = []
-    if user_has(user, ["comments.view"]):
+    if user_has(user, ["comments.view"], tenant_id=tenant_id):
         cq = (
             db.query(Comment)
             .filter(Comment.tenant_id == tenant_id)

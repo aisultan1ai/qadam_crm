@@ -87,7 +87,7 @@ def create_timeoff(
 
     # За другого сотрудника — только HR/admin
     target_user_id = payload.user_id or ctx.user.id
-    if target_user_id != ctx.user.id and not user_has(ctx.user, ["hr.manage_goals", "users.view"]):
+    if target_user_id != ctx.user.id and not user_has(ctx.user, ["hr.manage_goals", "users.view"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нельзя оформить отпуск за другого сотрудника")
 
     row = TimeOff(
@@ -117,7 +117,7 @@ def update_timeoff(
     row = db.get(TimeOff, tid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Заявка не найдена")
-    if row.user_id != ctx.user.id and not user_has(ctx.user, ["hr.manage_goals"]):
+    if row.user_id != ctx.user.id and not user_has(ctx.user, ["hr.manage_goals"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нельзя редактировать чужую заявку")
     if row.status != TimeOffStatus.pending.value:
         raise HTTPException(400, "Одобренную/отклонённую заявку менять нельзя")
@@ -137,7 +137,7 @@ def update_timeoff(
 
 @router.post("/{tid}/approve", response_model=TimeOffOut)
 def approve_timeoff(tid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    if not user_has(ctx.user, ["hr.manage_goals", "users.view"]):
+    if not user_has(ctx.user, ["hr.manage_goals", "users.view"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нет права одобрять отпуска")
     row = db.get(TimeOff, tid)
     if not row or row.tenant_id != ctx.tenant.id:
@@ -153,7 +153,7 @@ def approve_timeoff(tid: int, ctx: TenantContext = Depends(get_current_context),
 
 @router.post("/{tid}/reject", response_model=TimeOffOut)
 def reject_timeoff(tid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    if not user_has(ctx.user, ["hr.manage_goals", "users.view"]):
+    if not user_has(ctx.user, ["hr.manage_goals", "users.view"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нет права одобрять отпуска")
     row = db.get(TimeOff, tid)
     if not row or row.tenant_id != ctx.tenant.id:
@@ -171,7 +171,7 @@ def delete_timeoff(tid: int, ctx: TenantContext = Depends(get_current_context), 
     row = db.get(TimeOff, tid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Заявка не найдена")
-    if row.user_id != ctx.user.id and not user_has(ctx.user, ["hr.manage_goals"]):
+    if row.user_id != ctx.user.id and not user_has(ctx.user, ["hr.manage_goals"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нельзя удалить чужую заявку")
     db.delete(row)
     db.commit()

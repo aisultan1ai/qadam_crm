@@ -224,7 +224,7 @@ def list_goals(
     # По умолчанию — свои цели. Чужие — только с permission hr.view_profiles.
     if user_id is not None and user_id != ctx.user.id:
         from ..core.permissions import user_has
-        if not user_has(ctx.user, ("hr.view_profiles",)):
+        if not user_has(ctx.user, ("hr.view_profiles",), tenant_id=ctx.tenant.id):
             raise HTTPException(403, "Forbidden")
         query = query.filter(Goal.user_id == user_id)
     elif user_id == ctx.user.id or user_id is None:

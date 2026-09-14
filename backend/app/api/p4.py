@@ -813,13 +813,16 @@ def totp_setup(ctx: TenantContext = Depends(get_current_context), db: Session = 
         import pyotp
     except ImportError:
         raise HTTPException(501, "pyotp не установлен")
+    from ..core.totp_crypto import decrypt_totp, encrypt_totp
     user = ctx.user
-    if not user.totp_secret:
-        user.totp_secret = pyotp.random_base32()
+    plain_secret = decrypt_totp(user.totp_secret)
+    if not plain_secret:
+        plain_secret = pyotp.random_base32()
+        user.totp_secret = encrypt_totp(plain_secret)
     db.commit()
-    totp = pyotp.TOTP(user.totp_secret)
+    totp = pyotp.TOTP(plain_secret)
     otpauth = totp.provisioning_uri(name=user.email, issuer_name=f"Qadam CRM ({ctx.tenant.name})")
-    return TotpSetupOut(secret=user.totp_secret, otpauth_url=otpauth)
+    return TotpSetupOut(secret=plain_secret, otpauth_url=otpauth)
 
 
 class TotpVerifyIn(BaseModel):
@@ -832,13 +835,18 @@ def totp_verify(payload: TotpVerifyIn, ctx: TenantContext = Depends(get_current_
         import pyotp
     except ImportError:
         raise HTTPException(501, "pyotp не установлен")
+    from ..core.totp_crypto import decrypt_totp, encrypt_totp
     user = ctx.user
-    if not user.totp_secret:
+    plain_secret = decrypt_totp(user.totp_secret)
+    if not plain_secret:
         raise HTTPException(400, "Сначала /2fa/setup")
-    totp = pyotp.TOTP(user.totp_secret)
+    totp = pyotp.TOTP(plain_secret)
     if not totp.verify(payload.code, valid_window=1):
         raise HTTPException(400, "Неверный код")
     user.totp_enabled = True
+    # На случай если секрет был legacy plain — перезапишем зашифрованным.
+    if user.totp_secret and not user.totp_secret.startswith("enc:v1:"):
+        user.totp_secret = encrypt_totp(plain_secret)
     db.commit()
     return Message(message="2FA включена")
 
@@ -849,9 +857,11 @@ def totp_disable(payload: TotpVerifyIn, ctx: TenantContext = Depends(get_current
         import pyotp
     except ImportError:
         raise HTTPException(501, "pyotp не установлен")
+    from ..core.totp_crypto import decrypt_totp
     user = ctx.user
-    if user.totp_secret:
-        totp = pyotp.TOTP(user.totp_secret)
+    plain_secret = decrypt_totp(user.totp_secret)
+    if plain_secret:
+        totp = pyotp.TOTP(plain_secret)
         if not totp.verify(payload.code, valid_window=1):
             raise HTTPException(400, "Неверный код")
     user.totp_secret = None

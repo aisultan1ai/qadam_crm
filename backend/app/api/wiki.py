@@ -236,7 +236,7 @@ def get_tree(
         .order_by(Article.folder_id.nullsfirst(), Article.title)
         .all()
     )
-    is_admin = user_has(ctx.user, ["wiki.admin"]) or ctx.membership.is_owner
+    is_admin = user_has(ctx.user, ["wiki.admin"], tenant_id=ctx.tenant.id) or ctx.membership.is_owner
     visible_articles = []
     for a in articles:
         if is_admin or can_view(db, ctx.tenant.id, ctx.user, a):
@@ -349,7 +349,7 @@ def list_articles(
     if only_published:
         q = q.filter(Article.is_published.is_(True))
     rows = q.order_by(Article.title).all()
-    is_admin = user_has(ctx.user, ["wiki.admin"]) or ctx.membership.is_owner
+    is_admin = user_has(ctx.user, ["wiki.admin"], tenant_id=ctx.tenant.id) or ctx.membership.is_owner
     result = []
     for a in rows:
         if is_admin or can_view(db, ctx.tenant.id, ctx.user, a):
@@ -517,7 +517,7 @@ def patch_article(
             a.folder_id = folder.id
         changes.append("folder")
     if payload.is_published is not None and payload.is_published != a.is_published:
-        if payload.is_published and not user_has(ctx.user, ["wiki.publish", "wiki.admin"]):
+        if payload.is_published and not user_has(ctx.user, ["wiki.publish", "wiki.admin"], tenant_id=ctx.tenant.id):
             raise HTTPException(403, "Нет права публиковать")
         a.is_published = payload.is_published
         changes.append("publish" if payload.is_published else "unpublish")
@@ -735,7 +735,7 @@ def delete_comment(
     c = db.get(ArticleComment, comment_id)
     if not c or c.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Комментарий не найден")
-    if c.author_id != ctx.user.id and not user_has(ctx.user, ["wiki.admin"]):
+    if c.author_id != ctx.user.id and not user_has(ctx.user, ["wiki.admin"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Только автор или wiki.admin может удалить")
     db.delete(c)
     db.commit()

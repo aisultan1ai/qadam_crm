@@ -88,6 +88,23 @@ class VerifyEmailRequest(BaseModel):
     token: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class ConfirmEmailChangeRequest(BaseModel):
+    token: str
+
+
+PASSWORD_RESET_TTL_HOURS = 1
+EMAIL_CHANGE_TTL_HOURS = 24
+
+
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -221,6 +238,126 @@ def register(
     return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
 
 
+@router.post("/forgot-password", response_model=Message)
+@limiter.limit("5/hour")
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Инициирует сброс пароля: генерит токен и шлёт письмо со ссылкой.
+
+    В ответе НЕ выдаём информацию о существовании email (защита от enumeration):
+    возвращаем одинаковое сообщение независимо от того, найден пользователь или нет.
+    Токен действует PASSWORD_RESET_TTL_HOURS часов, одноразовый.
+    """
+    email = (payload.email or "").lower().strip()
+    if email:
+        user = db.query(User).filter(User.email == email).first()
+        if user and user.is_active:
+            user.password_reset_token = _new_verification_token()
+            user.password_reset_sent_at = _now_utc()
+            db.commit()
+            try:
+                from ..tasks.email import send_password_reset_email
+                reset_url = f"{settings.APP_BASE_URL.rstrip('/')}/reset-password?token={user.password_reset_token}"
+                send_password_reset_email.delay(to=user.email, reset_url=reset_url)
+            except Exception as exc:
+                log.warning("Failed to enqueue password reset email for %s: %s", user.email, exc)
+    return Message(message="Если email зарегистрирован, мы отправили инструкции по сбросу пароля.")
+
+
+@router.post("/reset-password", response_model=Message)
+@limiter.limit("10/hour")
+def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Применяет новый пароль по токену из письма.
+
+    Токен одноразовый: после успешной смены очищаем поля password_reset_*.
+    Также устанавливаем password_changed_at → все ранее выданные токены
+    инвалидируются через _assert_token_not_stale.
+    """
+    token = (payload.token or "").strip()
+    if not token:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Токен не передан")
+
+    user = db.query(User).filter(User.password_reset_token == token).first()
+    if not user or not user.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ссылка недействительна или уже использована")
+
+    sent_at = user.password_reset_sent_at
+    if not sent_at or _now_utc() - sent_at > timedelta(hours=PASSWORD_RESET_TTL_HOURS):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Срок действия ссылки истёк. Запросите новую.")
+
+    from ..core.security import validate_password, PasswordPolicyError
+    try:
+        validate_password(payload.new_password, tenant_id=None)
+    except PasswordPolicyError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+    user.password_hash = hash_password(payload.new_password)
+    user.password_changed_at = _now_utc()
+    user.password_reset_token = None
+    user.password_reset_sent_at = None
+    log_action(db, tenant_id=None, user_id=user.id, action="password_reset", entity="user", entity_id=user.id)
+    db.commit()
+    return Message(message="Пароль изменён. Войдите с новым паролем.")
+
+
+@router.post("/confirm-email-change", response_model=Message)
+@limiter.limit("20/hour")
+def confirm_email_change(
+    request: Request,
+    payload: ConfirmEmailChangeRequest,
+    db: Session = Depends(get_db),
+):
+    """Подтверждает смену email по токену из письма (получено на новый адрес).
+
+    Переносит pending_email → email, очищает поля токена. Email должен быть
+    свободен на момент подтверждения (кто-то мог занять его пока пользователь
+    тянул с подтверждением — тогда ошибка и надо запросить смену заново).
+    """
+    token = (payload.token or "").strip()
+    if not token:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Токен не передан")
+
+    user = db.query(User).filter(User.email_change_token == token).first()
+    if not user:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ссылка недействительна или уже использована")
+
+    sent_at = user.email_change_sent_at
+    if not sent_at or _now_utc() - sent_at > timedelta(hours=EMAIL_CHANGE_TTL_HOURS):
+        # Чистим просроченный токен, чтобы не висел.
+        user.email_change_token = None
+        user.pending_email = None
+        user.email_change_sent_at = None
+        db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Срок действия ссылки истёк. Запросите новую.")
+
+    new_email = (user.pending_email or "").lower().strip()
+    if not new_email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нет ожидающего email")
+
+    if db.query(User).filter(User.email == new_email, User.id != user.id).first():
+        # Кто-то занял адрес пока висело подтверждение — сбрасываем и просим повторить.
+        user.email_change_token = None
+        user.pending_email = None
+        user.email_change_sent_at = None
+        db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email уже используется, запросите смену повторно.")
+
+    user.email = new_email
+    user.pending_email = None
+    user.email_change_token = None
+    user.email_change_sent_at = None
+    log_action(db, tenant_id=None, user_id=user.id, action="email_changed", entity="user", entity_id=user.id, detail=new_email)
+    db.commit()
+    return Message(message="Email изменён. Используйте новый адрес для входа.")
+
+
 @router.post("/verify-email", response_model=Message)
 @limiter.limit("30/hour")
 def verify_email(
@@ -313,6 +450,10 @@ def refresh(
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
 
+    # Отклоняем refresh-токен, выданный до последней смены пароля.
+    from .deps import _assert_token_not_stale
+    _assert_token_not_stale(user, data)
+
     # ротируем refresh: старый попадает в blacklist
     old_exp = datetime.fromtimestamp(data["exp"], tz=timezone.utc)
     blacklist_token(data.get("jti"), old_exp)
@@ -376,12 +517,9 @@ def me(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if user.is_superuser:
-        perms = all_permission_codes()
-    else:
-        perms = sorted({p.code for r in user.roles for p in r.permissions})
-
     current_tenant = None
+    current_tenant_id: int | None = None
+    current_is_owner = False
     # Читаем tid из access-cookie/Bearer напрямую, чтобы не тащить get_current_context в /me
     tok = request.cookies.get(settings.AUTH_COOKIE_NAME)
     if not tok:
@@ -405,6 +543,8 @@ def me(
                 )
                 if membership:
                     t = membership.tenant
+                    current_tenant_id = t.id
+                    current_is_owner = membership.is_owner
                     current_tenant = {
                         "id": t.id,
                         "name": t.name,
@@ -417,6 +557,21 @@ def me(
                     }
         except JWTError:
             pass
+
+    # Permissions ограничиваем контекстом текущего tenant'а: платформенный админ
+    # видит всё, owner компании — все permissions компании, остальные — только
+    # permissions ролей, привязанных к текущему tenant'у (либо системных).
+    if user.is_platform_admin or user.is_superuser:
+        perms = all_permission_codes()
+    elif current_is_owner:
+        perms = all_permission_codes()
+    else:
+        perms = sorted({
+            p.code
+            for r in user.roles
+            if current_tenant_id is None or r.tenant_id is None or r.tenant_id == current_tenant_id
+            for p in r.permissions
+        })
 
     data = MeOut.model_validate(user).model_copy(update={
         "permissions": perms,

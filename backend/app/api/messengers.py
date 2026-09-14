@@ -29,6 +29,7 @@ from ..models import (
     MessageTemplate, TenantLead, User,
 )
 from ..schemas.common import Message
+from ..services.messenger_secrets import decrypt_config, encrypt_config, masked_config
 from ..services.messenger_service import _serialize_message, send_and_persist_message
 from ..services.messengers import ProviderError, get_provider, known_kinds
 from .deps import TenantContext, log_action, require
@@ -112,13 +113,12 @@ class LinkLeadBody(BaseModel):
 
 
 def _channel_out(c: ExternalChannel, extra: Optional[dict] = None) -> dict:
-    """Возвращает безопасное представление канала (без секретов в открытом виде)."""
-    cfg = dict(c.provider_config or {})
-    # Маскируем секреты: показываем только суффикс
-    for secret_key in ("bot_token", "api_key", "app_secret", "page_access_token"):
-        if cfg.get(secret_key):
-            val = str(cfg[secret_key])
-            cfg[secret_key] = ("****" + val[-4:]) if len(val) > 4 else "****"
+    """Возвращает безопасное представление канала (без секретов в открытом виде).
+
+    Секреты шифруются на диске (см. services.messenger_secrets). В API мы
+    их не возвращаем даже суффиксом — только флаг «задано ли значение».
+    """
+    cfg = masked_config(c.provider_config)
     result = {
         "id": c.id,
         "kind": c.kind.value if hasattr(c.kind, "value") else c.kind,
@@ -259,7 +259,7 @@ def create_channel(
         tenant_id=ctx.tenant.id,
         kind=ChannelKind(payload.kind),
         name=payload.name.strip(),
-        provider_config=payload.provider_config or {},
+        provider_config=encrypt_config(payload.provider_config or {}),
         external_identifier=payload.external_identifier,
         webhook_secret=webhook_secret,
         is_active=payload.is_active,
@@ -287,13 +287,15 @@ def patch_channel(
     if payload.name is not None:
         ch.name = payload.name.strip()
     if payload.provider_config is not None:
-        # Merge: пустые значения (в т.ч. масked "****") — не перезаписываем
+        # Merge: пустые значения (в т.ч. масked "****") — не перезаписываем.
+        # Сначала сливаем сырые входящие с существующей зашифрованной конфигурацией,
+        # затем шифруем результат целиком (encrypt_config идемпотентна).
         merged = dict(ch.provider_config or {})
         for k, v in payload.provider_config.items():
             if v is None or (isinstance(v, str) and v.startswith("****")):
                 continue
             merged[k] = v
-        ch.provider_config = merged
+        ch.provider_config = encrypt_config(merged)
     if payload.external_identifier is not None:
         ch.external_identifier = payload.external_identifier or None
     if payload.is_active is not None:
@@ -335,7 +337,7 @@ def test_channel(
     try:
         provider = get_provider(
             ch.kind.value if hasattr(ch.kind, "value") else ch.kind,
-            ch.provider_config or {}, ch.webhook_secret,
+            decrypt_config(ch.provider_config), ch.webhook_secret,
         )
         info = provider.get_info()
         ch.last_error = None
@@ -364,7 +366,7 @@ def set_webhook(
     try:
         provider = get_provider(
             ch.kind.value if hasattr(ch.kind, "value") else ch.kind,
-            ch.provider_config or {}, ch.webhook_secret,
+            decrypt_config(ch.provider_config), ch.webhook_secret,
         )
         result = provider.set_webhook(public_url)
         ch.last_error = None
@@ -402,7 +404,7 @@ async def receive_webhook(
     try:
         provider = get_provider(
             ch.kind.value if hasattr(ch.kind, "value") else ch.kind,
-            ch.provider_config or {}, ch.webhook_secret,
+            decrypt_config(ch.provider_config), ch.webhook_secret,
         )
         provider.verify_webhook(headers, raw_body)
     except ValueError as e:

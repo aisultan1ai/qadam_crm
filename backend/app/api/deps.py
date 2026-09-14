@@ -33,6 +33,38 @@ def _decode_and_validate(token: str) -> dict:
     return payload
 
 
+def _assert_token_not_stale(user: "User", payload: dict) -> None:
+    """Отклоняет токен, выданный ДО последней смены пароля пользователя.
+
+    Без этой проверки сессии, полученные ранее (с чужого устройства/украденные),
+    продолжали работать после смены пароля вплоть до истечения токена.
+    """
+    changed_at = getattr(user, "password_changed_at", None)
+    if not changed_at:
+        return
+    iat = payload.get("iat")
+    if iat is None:
+        # Старый токен без iat — считаем что был выдан до всех текущих правок,
+        # если пароль когда-либо менялся → он уже устарел.
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Пароль был изменён — войдите заново",
+        )
+    from datetime import datetime, timezone
+    if isinstance(iat, (int, float)):
+        iat_dt = datetime.fromtimestamp(int(iat), tz=timezone.utc)
+    else:
+        # jose кодирует datetime как unix-timestamp, поэтому сюда почти не попадаем.
+        return
+    # Даём 5 секунд запаса на возможный дрифт clock'а сервера.
+    from datetime import timedelta as _td
+    if iat_dt + _td(seconds=5) < changed_at:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Пароль был изменён — войдите заново",
+        )
+
+
 def get_current_user(
     request: Request,
     token: str | None = Depends(oauth2_scheme),
@@ -50,6 +82,7 @@ def get_current_user(
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
+    _assert_token_not_stale(user, payload)
     return user
 
 
@@ -83,6 +116,7 @@ def get_current_context(
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
+    _assert_token_not_stale(user, payload)
 
     tenant_id = payload.get("tid")
     if tenant_id is None:
@@ -233,9 +267,15 @@ def require(*codes: str) -> Callable[..., TenantContext]:
 
     Возвращает TenantContext — эндпоинты, которым важен tenant_id, берут user/tenant из него.
     Для endpoint'ов, где нужен только User (например /me), используем get_current_user.
+
+    Владелец компании (membership.is_owner=True) получает bypass — он имеет все
+    права в своей компании независимо от Role.permissions. Проверка permissions
+    делается с учётом tenant_id, чтобы роли из других компаний не влияли.
     """
     def _dep(ctx: TenantContext = Depends(get_current_context)) -> TenantContext:
-        if not user_has(ctx.user, codes):
+        if ctx.membership.is_owner:
+            return ctx
+        if not user_has(ctx.user, codes, tenant_id=ctx.tenant.id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
         return ctx
     return _dep

@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -151,7 +151,12 @@ def create_user(payload: UserCreate, ctx: TenantContext = Depends(require("users
 
 
 @router.patch("/users/me", response_model=UserOut)
-def update_me(payload: MeUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def update_me(
+    payload: MeUpdate,
+    response: Response,
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
     user = ctx.user
     changes: list[str] = []
     email_changing = payload.email is not None and payload.email.lower() != user.email
@@ -161,12 +166,22 @@ def update_me(payload: MeUpdate, ctx: TenantContext = Depends(get_current_contex
         if not payload.current_password or not verify_password(payload.current_password, user.password_hash):
             raise HTTPException(400, "Неверный текущий пароль")
 
+    email_confirmation_dispatch: tuple[str, str, str] | None = None
     if email_changing:
-        new_email = payload.email.lower()
+        new_email = payload.email.lower().strip()
         if db.query(User).filter(User.email == new_email, User.id != user.id).first():
             raise HTTPException(400, "Email уже используется")
-        user.email = new_email
-        changes.append("email")
+        # Не переносим email сразу — сначала подтверждение с нового адреса.
+        # Основной email остаётся прежним, чтобы восстановить доступ, если
+        # новый адрес указан с ошибкой или это попытка захвата аккаунта.
+        import secrets as _secrets
+        from datetime import datetime, timezone
+        user.pending_email = new_email
+        user.email_change_token = _secrets.token_urlsafe(32)
+        user.email_change_sent_at = datetime.now(timezone.utc)
+        confirm_url = f"{settings.APP_BASE_URL.rstrip('/')}/confirm-email-change?token={user.email_change_token}"
+        email_confirmation_dispatch = (new_email, confirm_url, user.email)
+        changes.append("email (ожидает подтверждения)")
 
     if payload.name is not None and payload.name != user.name:
         user.name = payload.name
@@ -182,6 +197,15 @@ def update_me(payload: MeUpdate, ctx: TenantContext = Depends(get_current_contex
         from datetime import datetime, timezone
         user.password_changed_at = datetime.now(timezone.utc)
         changes.append("пароль")
+        # Все выданные ранее access/refresh-токены станут stale по password_changed_at
+        # и получат 401. Чтобы текущий клиент не разлогинился прямо в момент смены,
+        # выдаём новую пару и обновляем cookies. Сессии на других устройствах
+        # закроются на следующем запросе.
+        from ..core.security import create_access_token, create_refresh_token
+        from ..core.cookies import set_auth_cookies
+        access, _, _ = create_access_token(user.id, tenant_id=ctx.tenant.id)
+        refresh, _, _ = create_refresh_token(user.id, tenant_id=ctx.tenant.id)
+        set_auth_cookies(response, access, refresh)
 
     # M11 — свой HR-профиль
     if payload.position is not None and payload.position != (user.position or ""):
@@ -201,6 +225,17 @@ def update_me(payload: MeUpdate, ctx: TenantContext = Depends(get_current_contex
         log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail=", ".join(changes))
     db.commit()
     db.refresh(user)
+
+    if email_confirmation_dispatch is not None:
+        new_email, confirm_url, old_email = email_confirmation_dispatch
+        try:
+            from ..tasks.email import send_email_change_confirmation, send_email_change_notify_old
+            send_email_change_confirmation.delay(to=new_email, confirm_url=confirm_url, old_email=old_email)
+            send_email_change_notify_old.delay(to=old_email, new_email=new_email)
+        except Exception:
+            import logging
+            logging.getLogger("qadam.users").warning("Не удалось поставить письма о смене email в очередь", exc_info=True)
+
     return user
 
 
