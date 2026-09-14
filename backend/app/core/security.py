@@ -80,22 +80,34 @@ def _encode(payload: dict[str, Any]) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_access_token(subject: str | int, tenant_id: Optional[int] = None) -> Tuple[str, str, datetime]:
+def create_access_token(
+    subject: str | int,
+    tenant_id: Optional[int] = None,
+    session_id: Optional[int] = None,
+) -> Tuple[str, str, datetime]:
     jti = uuid.uuid4().hex
     now = _now()
     expire = now + timedelta(minutes=settings.JWT_ACCESS_MINUTES)
     # iat нужен чтобы инвалидировать все выданные ранее токены при смене пароля:
     # сравниваем iat с User.password_changed_at.
+    # sid связывает access-токен с записью UserSession — при revoke сессии
+    # соответствующий access перестаёт работать (deps.py::_assert_session_active).
     payload: dict[str, Any] = {
         "sub": str(subject), "exp": expire, "iat": now, "jti": jti, "typ": TOKEN_TYPE_ACCESS,
     }
     if tenant_id is not None:
         payload["tid"] = tenant_id
+    if session_id is not None:
+        payload["sid"] = session_id
     token = _encode(payload)
     return token, jti, expire
 
 
-def create_refresh_token(subject: str | int, tenant_id: Optional[int] = None) -> Tuple[str, str, datetime]:
+def create_refresh_token(
+    subject: str | int,
+    tenant_id: Optional[int] = None,
+    session_id: Optional[int] = None,
+) -> Tuple[str, str, datetime]:
     jti = uuid.uuid4().hex
     now = _now()
     expire = now + timedelta(days=settings.JWT_REFRESH_DAYS)
@@ -104,8 +116,22 @@ def create_refresh_token(subject: str | int, tenant_id: Optional[int] = None) ->
     }
     if tenant_id is not None:
         payload["tid"] = tenant_id
+    if session_id is not None:
+        payload["sid"] = session_id
     token = _encode(payload)
     return token, jti, expire
+
+
+def hash_token(raw_token: str) -> str:
+    """SHA-256 отпечаток refresh-токена — храним в UserSession.token_hash.
+
+    Использовать HMAC/bcrypt не нужно: раскрытая колонка позволила бы
+    злоумышленнику восстановить refresh только через brute-force всех выданных
+    JTI, что нереалистично. SHA-256 достаточно для lookup + защиты от того,
+    чтобы дампом БД можно было сразу использовать refresh.
+    """
+    import hashlib
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
 def decode_token(token: str) -> dict:

@@ -7,6 +7,9 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Invite from "@/pages/Invite";
 import VerifyEmail from "@/pages/VerifyEmail";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import ConfirmEmailChange from "@/pages/ConfirmEmailChange";
 import { Loader } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -112,6 +115,9 @@ export default function App() {
         }
       />
       <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/confirm-email-change" element={<ConfirmEmailChange />} />
       <Route
         path="/f/:slug/:formId"
         element={

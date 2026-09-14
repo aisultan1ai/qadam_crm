@@ -220,6 +220,12 @@ export default function Login() {
           </button>
         </div>
 
+        <div className="mt-3 text-center text-sm">
+          <Link to="/forgot-password" className="link text-neutral-500 hover:text-brand-600">
+            Забыли пароль?
+          </Link>
+        </div>
+
         <div className="mt-4 text-center text-sm text-neutral-500">
           Нет аккаунта?{" "}
           <Link to="/register" className="link">

@@ -7,7 +7,7 @@ import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import {
   Mail, Shield, Layers, Clock, CheckCircle2, Camera, Trash2, KeyRound, Check, Pencil,
-  Cake, Phone, Briefcase, User as UserIcon, Award, Target, X, Plus, Trophy,
+  Cake, Phone, Briefcase, User as UserIcon, Award, Target, X, Plus, Trophy, AlertCircle,
 } from "lucide-react";
 
 type Role = { id: number; name: string };
@@ -107,6 +107,10 @@ export default function Profile() {
           {isSelf ? "Данные вашего аккаунта и профиля" : "Профиль сотрудника"}
         </p>
       </div>
+
+      {isSelf && me?.pending_email && (
+        <PendingEmailBanner pendingEmail={me.pending_email} />
+      )}
 
       <ProfileHeader user={user} isSelf={isSelf} canEdit={canEdit} onEdit={() => setEditOpen(true)} refetch={fetchMe} />
 
@@ -209,6 +213,28 @@ export default function Profile() {
     </div>
   );
 }
+
+// ============================================================================
+// Pending email banner
+// ============================================================================
+
+function PendingEmailBanner({ pendingEmail }: { pendingEmail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+      <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-amber-900 dark:text-amber-200">
+          Ожидает подтверждения смена email
+        </div>
+        <div className="mt-0.5 text-amber-800 dark:text-amber-300">
+          Мы отправили письмо на <b className="break-all">{pendingEmail}</b>. Кликните ссылку
+          из письма, чтобы завершить смену. Пока используйте текущий email для входа.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // ============================================================================
 // Header card

@@ -36,7 +36,7 @@ from ..models import (
     ProjectGroup, ProjectRoleAssignment, Project, CommentEditHistory, Comment, Task, TenantMembership,
     Directory, DirectoryEntry, DocumentFolder, Document, DocumentVersion,
     TenantLogRetention, TenantHoliday, TenantSecurityPolicy, IntegrationProvider,
-    Contact, Company, User,
+    Contact, Company, User, TotpBackupCode,
 )
 from ..schemas.common import Message
 from .deps import TenantContext, get_current_context, log_action
@@ -866,8 +866,144 @@ def totp_disable(payload: TotpVerifyIn, ctx: TenantContext = Depends(get_current
             raise HTTPException(400, "Неверный код")
     user.totp_secret = None
     user.totp_enabled = False
+    # Backup-коды становятся бесполезными без TOTP — чистим сразу, чтобы не
+    # висели «неиспользованные» в списке при повторном включении.
+    db.query(TotpBackupCode).filter(TotpBackupCode.user_id == user.id).delete(synchronize_session=False)
     db.commit()
     return Message(message="2FA выключена")
+
+
+# =============================================================================
+# 10a. 2FA backup codes
+# =============================================================================
+
+BACKUP_CODE_COUNT = 10
+
+
+def _generate_backup_code() -> str:
+    """Формат XXXX-XXXX: 8 hex-символов через дефис, ~32 бита энтропии.
+
+    Достаточно для одноразового кода — bruteforce за ~2 млрд попыток с rate-limit
+    в 10/hour нереалистичен. Формат легко читать/вводить вручную.
+    """
+    raw = secrets.token_hex(4).upper()  # 8 hex chars
+    return f"{raw[:4]}-{raw[4:]}"
+
+
+def _hash_backup_code(code: str) -> str:
+    from ..core.security import hash_password
+    return hash_password(code.strip().upper())
+
+
+def _verify_backup_code(plain: str, hashed: str) -> bool:
+    from ..core.security import verify_password
+    return verify_password(plain.strip().upper(), hashed)
+
+
+class BackupCodesOut(BaseModel):
+    codes: list[str]
+    message: str
+
+
+class BackupCodesStatus(BaseModel):
+    total: int
+    unused: int
+    generated_at: Optional[datetime] = None
+
+
+@router.post("/api/me/2fa/backup-codes/regenerate", response_model=BackupCodesOut)
+def regenerate_backup_codes(
+    payload: TotpVerifyIn,
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    """Генерирует новые backup-коды. Требует валидный TOTP-код: без него любой
+    угнавший access-токен смог бы сгенерить новые коды и обойти 2FA.
+
+    Возвращает plain-коды один раз — UI обязан показать их пользователю и
+    предложить сохранить/распечатать. При повторном вызове старые коды удаляются.
+    """
+    try:
+        import pyotp
+    except ImportError:
+        raise HTTPException(501, "pyotp не установлен")
+    from ..core.totp_crypto import decrypt_totp
+    user = ctx.user
+    if not user.totp_enabled:
+        raise HTTPException(400, "2FA не включена — сначала /2fa/verify")
+    plain_secret = decrypt_totp(user.totp_secret)
+    if not plain_secret:
+        raise HTTPException(400, "TOTP-секрет недоступен, переустановите 2FA")
+    totp = pyotp.TOTP(plain_secret)
+    if not totp.verify((payload.code or "").strip(), valid_window=1):
+        raise HTTPException(400, "Неверный TOTP-код")
+
+    # Удаляем старые (все — used и unused). Пользователь при взгляде на список
+    # должен видеть только актуальные коды.
+    db.query(TotpBackupCode).filter(TotpBackupCode.user_id == user.id).delete(synchronize_session=False)
+
+    plain_codes: list[str] = []
+    for _ in range(BACKUP_CODE_COUNT):
+        code = _generate_backup_code()
+        plain_codes.append(code)
+        db.add(TotpBackupCode(user_id=user.id, code_hash=_hash_backup_code(code)))
+    db.commit()
+
+    return BackupCodesOut(
+        codes=plain_codes,
+        message="Сохраните коды в надёжном месте. Мы больше не покажем их — только пересгенерируем новые.",
+    )
+
+
+@router.get("/api/me/2fa/backup-codes/status", response_model=BackupCodesStatus)
+def backup_codes_status(
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    """Сводка по backup-кодам: сколько всего, сколько неиспользованных."""
+    rows = db.query(TotpBackupCode).filter(TotpBackupCode.user_id == ctx.user.id).all()
+    total = len(rows)
+    unused = sum(1 for r in rows if r.used_at is None)
+    latest = max((r.created_at for r in rows), default=None)
+    return BackupCodesStatus(total=total, unused=unused, generated_at=latest)
+
+
+class BackupCodeConsumeIn(BaseModel):
+    code: str
+
+
+@router.post("/api/me/2fa/backup-codes/consume", response_model=Message)
+def consume_backup_code(
+    payload: BackupCodeConsumeIn,
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    """Использует backup-код (вместо TOTP). Одноразово — помечает used_at.
+
+    Отдельный endpoint (не в /2fa/verify) даёт чётко читаемое разделение и
+    отдельный лимит на попытки brute-force.
+    """
+    code = (payload.code or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "Код не передан")
+    rows = (
+        db.query(TotpBackupCode)
+        .filter(
+            TotpBackupCode.user_id == ctx.user.id,
+            TotpBackupCode.used_at.is_(None),
+        )
+        .all()
+    )
+    matched: Optional[TotpBackupCode] = None
+    for row in rows:
+        if _verify_backup_code(code, row.code_hash):
+            matched = row
+            break
+    if not matched:
+        raise HTTPException(400, "Код недействителен или уже использован")
+    matched.used_at = datetime.now(timezone.utc)
+    db.commit()
+    return Message(message="Код принят")
 
 
 # =============================================================================

@@ -1,6 +1,7 @@
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from ..core.security import (
     decode_token,
     blacklist_token,
     is_blacklisted,
+    hash_token,
     TOKEN_TYPE_REFRESH,
 )
 from ..core.captcha import verify_captcha
@@ -24,7 +26,7 @@ from ..core.permissions import all_permission_codes
 from ..core.redis_client import get_redis
 from ..core.security import hash_password
 from ..core.tenant_setup import create_sample_project, create_tenant_with_owner
-from ..models import User, Tenant, TenantMembership
+from ..models import User, Tenant, TenantMembership, UserSession
 from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshRequest
 from ..schemas.user import MeOut
 from ..schemas.common import Message
@@ -90,6 +92,7 @@ class VerifyEmailRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: str
+    captcha_token: Optional[str] = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -139,11 +142,58 @@ def _pick_default_tenant(db: Session, user_id: int) -> int | None:
     return row.tenant_id if row else None
 
 
-def _issue_pair(user_id: int, tenant_id: int | None) -> tuple[str, str, int]:
-    access, _access_jti, access_exp = create_access_token(user_id, tenant_id=tenant_id)
-    refresh, _refresh_jti, _ = create_refresh_token(user_id, tenant_id=tenant_id)
+def _issue_pair(
+    user_id: int,
+    tenant_id: int | None,
+    session_id: int | None = None,
+) -> tuple[str, str, int]:
+    access, _access_jti, access_exp = create_access_token(
+        user_id, tenant_id=tenant_id, session_id=session_id,
+    )
+    refresh, _refresh_jti, _ = create_refresh_token(
+        user_id, tenant_id=tenant_id, session_id=session_id,
+    )
     ttl = int((access_exp - datetime.now(timezone.utc)).total_seconds())
     return access, refresh, ttl
+
+
+def _create_session(
+    db: Session,
+    *,
+    request: Request,
+    user_id: int,
+    tenant_id: int | None,
+) -> UserSession:
+    """Создаёт запись UserSession с заглушкой token_hash — реальный хэш вписываем
+    после выпуска refresh-токена. tenant_id не обязателен (пока не выбран).
+    """
+    ua = request.headers.get("user-agent")
+    ip = request.client.host if request.client else None
+    expires = datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_DAYS)
+    session = UserSession(
+        user_id=user_id,
+        tenant_id=tenant_id,
+        token_hash="",  # проставим ниже, когда узнаем refresh
+        user_agent=(ua or "")[:500] or None,
+        ip_address=(ip or "")[:64] or None,
+        expires_at=expires,
+    )
+    db.add(session)
+    db.flush()
+    return session
+
+
+def _issue_pair_with_session(
+    db: Session,
+    request: Request,
+    user_id: int,
+    tenant_id: int | None,
+) -> tuple[str, str, int, int]:
+    """Создаёт сессию и выпускает access+refresh, связанные с ней через sid."""
+    session = _create_session(db, request=request, user_id=user_id, tenant_id=tenant_id)
+    access, refresh, ttl = _issue_pair(user_id, tenant_id, session_id=session.id)
+    session.token_hash = hash_token(refresh)
+    return access, refresh, ttl, session.id
 
 
 def _read_refresh(request: Request, body: RefreshRequest | None) -> str | None:
@@ -177,9 +227,10 @@ def login(
     user.last_login_at = datetime.now(timezone.utc)
     tenant_id = _pick_default_tenant(db, user.id)
     log_action(db, tenant_id=tenant_id, user_id=user.id, action="login", entity="user", entity_id=user.id)
+
+    access, refresh, ttl, _sid = _issue_pair_with_session(db, request, user.id, tenant_id)
     db.commit()
 
-    access, refresh, ttl = _issue_pair(user.id, tenant_id)
     set_auth_cookies(response, access, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
 
@@ -229,11 +280,11 @@ def register(
     create_sample_project(db, tenant=tenant, owner=user)
 
     log_action(db, tenant_id=tenant.id, user_id=user.id, action="register", entity="tenant", entity_id=tenant.id, detail=tenant.name)
+    access, refresh, ttl, _sid = _issue_pair_with_session(db, request, user.id, tenant.id)
     db.commit()
 
     _dispatch_verification_email(user)
 
-    access, refresh, ttl = _issue_pair(user.id, tenant.id)
     set_auth_cookies(response, access, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
 
@@ -250,7 +301,14 @@ def forgot_password(
     В ответе НЕ выдаём информацию о существовании email (защита от enumeration):
     возвращаем одинаковое сообщение независимо от того, найден пользователь или нет.
     Токен действует PASSWORD_RESET_TTL_HOURS часов, одноразовый.
+
+    CAPTCHA (Cloudflare Turnstile) обязательна если задан TURNSTILE_SECRET_KEY —
+    без неё rate-limit 5/hour можно обходить сменой IP и слать волны фишинговых
+    писем на существующие email'ы.
     """
+    client_ip = request.client.host if request.client else None
+    if not verify_captcha(payload.captcha_token, remote_ip=client_ip):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Проверка CAPTCHA не пройдена")
     email = (payload.email or "").lower().strip()
     if email:
         user = db.query(User).filter(User.email == email).first()
@@ -451,8 +509,9 @@ def refresh(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
 
     # Отклоняем refresh-токен, выданный до последней смены пароля.
-    from .deps import _assert_token_not_stale
+    from .deps import _assert_token_not_stale, _assert_session_active
     _assert_token_not_stale(user, data)
+    _assert_session_active(db, data)
 
     # ротируем refresh: старый попадает в blacklist
     old_exp = datetime.fromtimestamp(data["exp"], tz=timezone.utc)
@@ -475,7 +534,25 @@ def refresh(
     else:
         tenant_id = _pick_default_tenant(db, user.id)
 
-    access, new_refresh, ttl = _issue_pair(user.id, tenant_id)
+    # Сессия: если старый refresh имеет sid — используем ту же запись, иначе
+    # (legacy без sid) — создаём новую. Обновляем token_hash под новый refresh.
+    sid = data.get("sid")
+    session: UserSession | None = None
+    if sid is not None:
+        session = db.get(UserSession, int(sid))
+        if session and session.user_id == user.id and session.revoked_at is None:
+            session.last_seen_at = datetime.now(timezone.utc)
+        else:
+            session = None
+    if session is None:
+        session = _create_session(db, request=request, user_id=user.id, tenant_id=tenant_id)
+
+    access, new_refresh, ttl = _issue_pair(user.id, tenant_id, session_id=session.id)
+    session.token_hash = hash_token(new_refresh)
+    if tenant_id is not None:
+        session.tenant_id = tenant_id
+    db.commit()
+
     set_auth_cookies(response, access, new_refresh)
     return TokenResponse(access_token=access, refresh_token=new_refresh, expires_in=ttl)
 
@@ -489,11 +566,14 @@ def logout(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # blacklist access
+    # blacklist access + revoke session (sid из access-токена)
+    session_ids: set[int] = set()
     if token:
         try:
             data = decode_token(token)
             blacklist_token(data.get("jti"), datetime.fromtimestamp(data["exp"], tz=timezone.utc))
+            if data.get("sid") is not None:
+                session_ids.add(int(data["sid"]))
         except JWTError:
             pass
     # blacklist refresh — из cookie или body
@@ -502,8 +582,17 @@ def logout(
         try:
             data = decode_token(refresh_tok)
             blacklist_token(data.get("jti"), datetime.fromtimestamp(data["exp"], tz=timezone.utc))
+            if data.get("sid") is not None:
+                session_ids.add(int(data["sid"]))
         except JWTError:
             pass
+
+    if session_ids:
+        now = datetime.now(timezone.utc)
+        for sid in session_ids:
+            s = db.get(UserSession, sid)
+            if s and s.user_id == user.id and s.revoked_at is None:
+                s.revoked_at = now
 
     clear_auth_cookies(response)
     log_action(db, tenant_id=None, user_id=user.id, action="logout", entity="user", entity_id=user.id)
@@ -610,6 +699,7 @@ def list_my_tenants(
 @router.post("/switch-tenant/{tenant_id}", response_model=TokenResponse)
 def switch_tenant(
     tenant_id: int,
+    request: Request,
     response: Response,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -627,6 +717,29 @@ def switch_tenant(
     if not membership:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к компании")
 
-    access, refresh, ttl = _issue_pair(user.id, tenant_id)
+    # Переиспользуем текущую сессию (только меняем tenant_id внутри). Так UI
+    # «Активные сессии» покажет одну запись на устройство, а не по одной на
+    # переключение компании.
+    tok = request.cookies.get(settings.AUTH_COOKIE_NAME)
+    session: UserSession | None = None
+    if tok:
+        try:
+            data = decode_token(tok)
+            sid = data.get("sid")
+            if sid is not None:
+                candidate = db.get(UserSession, int(sid))
+                if candidate and candidate.user_id == user.id and candidate.revoked_at is None:
+                    session = candidate
+        except JWTError:
+            session = None
+    if session is None:
+        session = _create_session(db, request=request, user_id=user.id, tenant_id=tenant_id)
+
+    access, refresh, ttl = _issue_pair(user.id, tenant_id, session_id=session.id)
+    session.tenant_id = tenant_id
+    session.token_hash = hash_token(refresh)
+    session.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+
     set_auth_cookies(response, access, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)

@@ -33,6 +33,23 @@ def _decode_and_validate(token: str) -> dict:
     return payload
 
 
+def _assert_session_active(db: Session, payload: dict) -> None:
+    """Отклоняет access-токен, чья сессия отозвана пользователем.
+
+    Токены выданные до включения session-tracking не имеют `sid` — их пропускаем
+    как legacy (следующий refresh запишет их в user_sessions с новым sid).
+    """
+    sid = payload.get("sid")
+    if sid is None:
+        return
+    from ..models import UserSession
+    session = db.get(UserSession, int(sid))
+    if session is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия не найдена")
+    if session.revoked_at is not None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия отозвана")
+
+
 def _assert_token_not_stale(user: "User", payload: dict) -> None:
     """Отклоняет токен, выданный ДО последней смены пароля пользователя.
 
@@ -83,6 +100,7 @@ def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
     _assert_token_not_stale(user, payload)
+    _assert_session_active(db, payload)
     return user
 
 
@@ -117,6 +135,7 @@ def get_current_context(
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
     _assert_token_not_stale(user, payload)
+    _assert_session_active(db, payload)
 
     tenant_id = payload.get("tid")
     if tenant_id is None:

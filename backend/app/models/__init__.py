@@ -44,6 +44,7 @@ from .contact import Contact, Company
 from .time_off import TimeOff, TimeOffKind, TimeOffStatus
 from .deal import Deal, DealStage, DealStatus
 from .user_prefs import UserSession, UserNotificationPref, LinkedAccount
+from .totp_backup import TotpBackupCode
 from .whiteboard import Whiteboard
 from .telephony import Call
 from .custom_object import CustomObjectSchema, CustomObjectRecord
@@ -166,6 +167,7 @@ __all__ = [
     "UserSession",
     "UserNotificationPref",
     "LinkedAccount",
+    "TotpBackupCode",
     "Whiteboard",
     "Call",
     "CustomObjectSchema",

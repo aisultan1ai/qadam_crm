@@ -43,6 +43,7 @@ export type Tenant = {
 export type Me = User & {
   permissions: string[];
   current_tenant?: Tenant | null;
+  pending_email?: string | null;
 };
 
 export type Project = {
