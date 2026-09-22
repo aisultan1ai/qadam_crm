@@ -1,10 +1,15 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Trash2, Pencil, Coins, TrendingUp } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
-import { EmptyState, Modal, Avatar, FieldError, FormError } from "@/components/ui";
+import { EmptyState, Modal, Avatar, FormError } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
+import { FormField } from "@/components/lib/FormField";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import type { Page } from "@/types";
@@ -153,9 +158,9 @@ export default function DealsPage() {
           <p className="text-sm text-neutral-500">Воронка продаж</p>
         </div>
         {canCreate && (
-          <button className="btn-primary" onClick={() => setOpenDeal("new")}>
-            <Plus size={16} /> Новая сделка
-          </button>
+          <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>
+            Новая сделка
+          </Button>
         )}
       </div>
 
@@ -191,13 +196,15 @@ export default function DealsPage() {
                         <div className="flex-1 font-medium">{d.title}</div>
                         <div className="opacity-0 transition-opacity group-hover:opacity-100 flex gap-0.5">
                           {canUpdate && (
-                            <button className="btn-ghost !p-1" onClick={() => setOpenDeal(d)} title="Редактировать">
+                            <Button variant="ghost" size="icon" onClick={() => setOpenDeal(d)} title="Редактировать">
                               <Pencil size={12} />
-                            </button>
+                            </Button>
                           )}
                           {canDelete && (
-                            <button
-                              className="btn-ghost !p-1 text-rose-500"
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-rose-500"
                               onClick={() =>
                                 confirm({
                                   title: "Удалить сделку?",
@@ -209,7 +216,7 @@ export default function DealsPage() {
                               }
                             >
                               <Trash2 size={12} />
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -270,80 +277,91 @@ function ForecastCard({ label, value, sub, icon, accent }: { label: string; valu
   );
 }
 
+const dealModalSchema = z.object({
+  title: z.string().trim().min(2, "Минимум 2 символа").max(200),
+  amount: z.coerce.number().min(0, "Не может быть отрицательным"),
+  currency: z.enum(["KZT", "USD", "EUR", "RUB"]).default("KZT"),
+  stage: z.enum(["new", "qualified", "proposal", "negotiation", "won", "lost"]).default("new"),
+  probability: z.coerce.number().int().min(0).max(100).default(50),
+  close_date: z.string().optional(),
+  note: z.string().max(5000).optional(),
+});
+type DealModalForm = z.infer<typeof dealModalSchema>;
+
 function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => void }) {
   const qc = useQueryClient();
-  const [formError, setFormError] = useState<string | null>(null);
-  const [title, setTitle] = useState(initial?.title || "");
-  const [amount, setAmount] = useState(initial ? String(initial.amount_cents / 100) : "0");
-  const [currency, setCurrency] = useState(initial?.currency || "KZT");
-  const [stage, setStage] = useState<DealStage>(initial?.stage || "new");
-  const [probability, setProbability] = useState<number>(initial?.probability ?? STAGE_PROBABILITY[stage]);
-  const [closeDate, setCloseDate] = useState(initial?.close_date || "");
-  const [note, setNote] = useState(initial?.note || "");
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const save = useMutation({
-    mutationFn: async () => {
-      const body = {
-        title,
-        amount_cents: Math.round(parseFloat(amount || "0") * 100),
-        currency,
-        stage,
-        probability,
-        close_date: closeDate || null,
-        note: note || null,
-      };
-      if (initial) return api.patch(`/api/deals/${initial.id}`, body);
-      return api.post(`/api/deals`, body);
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<DealModalForm>({
+    resolver: zodResolver(dealModalSchema),
+    defaultValues: {
+      title: initial?.title || "",
+      amount: initial ? initial.amount_cents / 100 : 0,
+      currency: (initial?.currency as any) || "KZT",
+      stage: initial?.stage || "new",
+      probability: initial?.probability ?? STAGE_PROBABILITY[initial?.stage || "new"],
+      close_date: initial?.close_date || "",
+      note: initial?.note || "",
     },
-    onSuccess: () => {
+  });
+  const currentStage = watch("stage");
+
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    const body = {
+      title: data.title,
+      amount_cents: Math.round(data.amount * 100),
+      currency: data.currency,
+      stage: data.stage,
+      probability: data.probability,
+      close_date: data.close_date || null,
+      note: data.note || null,
+    };
+    try {
+      if (initial) await api.patch(`/api/deals/${initial.id}`, body);
+      else await api.post(`/api/deals`, body);
       qc.invalidateQueries({ queryKey: ["deals"] });
       qc.invalidateQueries({ queryKey: ["deals-forecast"] });
       onClose();
-    },
-    onError: (e) => setFormError(extractApiError(e).message),
+    } catch (e) {
+      setServerError(extractApiError(e).message);
+    }
   });
-
-  const invalid = !title.trim();
 
   return (
     <Modal open onClose={onClose} title={initial ? "Редактировать сделку" : "Новая сделка"} size="md">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!invalid) save.mutate();
-        }}
-        className="space-y-3"
-      >
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название *</span>
-          <input className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
-          <FieldError msg={invalid ? "Обязательно" : undefined} />
-        </label>
+      <form onSubmit={onSubmit} className="space-y-3" noValidate>
+        <FormField label="Название" required error={errors.title?.message}>
+          <input className="input" autoFocus {...register("title")} />
+        </FormField>
         <div className="grid grid-cols-3 gap-3">
-          <label className="col-span-2 block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Сумма</span>
-            <input className="input tabular-nums" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Валюта</span>
-            <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+          <FormField label="Сумма" error={errors.amount?.message} className="col-span-2">
+            <input className="input tabular-nums" type="number" step="0.01" {...register("amount", { valueAsNumber: true })} />
+          </FormField>
+          <FormField label="Валюта" error={errors.currency?.message}>
+            <select className="input" {...register("currency")}>
               <option value="KZT">KZT</option>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
               <option value="RUB">RUB</option>
             </select>
-          </label>
+          </FormField>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Стадия</span>
+          <FormField label="Стадия" error={errors.stage?.message}>
             <select
               className="input"
-              value={stage}
+              value={currentStage}
               onChange={(e) => {
                 const s = e.target.value as DealStage;
-                setStage(s);
-                setProbability(STAGE_PROBABILITY[s]);
+                setValue("stage", s, { shouldDirty: true });
+                setValue("probability", STAGE_PROBABILITY[s], { shouldDirty: true });
               }}
             >
               {STAGE_ORDER.map((s) => (
@@ -352,26 +370,29 @@ function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => 
                 </option>
               ))}
             </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Вероятность %</span>
-            <input className="input tabular-nums" type="number" min={0} max={100} value={probability} onChange={(e) => setProbability(Number(e.target.value))} />
-          </label>
+          </FormField>
+          <FormField label="Вероятность %" error={errors.probability?.message}>
+            <input
+              className="input tabular-nums"
+              type="number"
+              min={0}
+              max={100}
+              {...register("probability", { valueAsNumber: true })}
+            />
+          </FormField>
         </div>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дата закрытия</span>
-          <input className="input" type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Заметка</span>
-          <textarea className="input min-h-[80px]" value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-        <FormError msg={formError} />
+        <FormField label="Дата закрытия" error={errors.close_date?.message}>
+          <input className="input" type="date" {...register("close_date")} />
+        </FormField>
+        <FormField label="Заметка" error={errors.note?.message}>
+          <textarea className="input min-h-[80px]" {...register("note")} />
+        </FormField>
+        <FormError msg={serverError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={invalid || save.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>
             {initial ? "Сохранить" : "Создать"}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

@@ -12,6 +12,7 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 
 // ============================================================================
 // Types
@@ -119,19 +120,19 @@ export default function Wiki() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            className="btn-secondary"
+          <Button
+            variant="secondary"
             onClick={() => setSearchOpen(true)}
             title="Поиск (Ctrl+K)"
           >
             <Search size={14} /> Поиск
-          </button>
-          <button className="btn-secondary" onClick={() => setImportOpen(true)} title="Импорт Excel/Word">
+          </Button>
+          <Button variant="secondary" onClick={() => setImportOpen(true)} title="Импорт Excel/Word">
             <Upload size={14} /> Импорт
-          </button>
-          <button className="btn-primary" onClick={() => navigate("/wiki/new")}>
+          </Button>
+          <Button variant="primary" onClick={() => navigate("/wiki/new")}>
             <Plus size={14} /> Новая статья
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -251,10 +252,10 @@ function ImportModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!file || importMut.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!file || importMut.isPending}>
             {importMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Импортировать
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -390,13 +391,15 @@ function TreeSidebar({ activeSlug }: { activeSlug?: string }) {
     <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
       <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2 dark:border-neutral-800">
         <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Дерево</span>
-        <button
-          className="btn-ghost !p-1"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="!p-1"
           title="Новая папка"
           onClick={() => setFolderModalOpen({ parent: null })}
         >
           <FolderPlus size={13} />
-        </button>
+        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
         {isPending && <div className="p-4 text-center text-neutral-500"><Loader2 size={14} className="animate-spin" /></div>}
@@ -438,14 +441,14 @@ function FolderCreateModal({
           }}
         />
         <div className="flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button
-            className="btn-primary"
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button
+            variant="primary"
             disabled={!name.trim() || isPending}
             onClick={() => onSave(name.trim(), parentId)}
           >
             Создать
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -546,28 +549,30 @@ function ArticleView({ article, onEdit }: { article: ArticleFull; onEdit: () => 
           )}
         </div>
         <div className="flex flex-wrap gap-1">
-          <button className="btn-ghost !py-1 !px-2 text-sm" onClick={() => setShowVersions((v) => !v)}>
+          <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => setShowVersions((v) => !v)}>
             <History size={13} /> Версии
-          </button>
+          </Button>
           {canEdit && (
-            <button className="btn-ghost !py-1 !px-2 text-sm" onClick={() => publish.mutate()}>
+            <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => publish.mutate()}>
               {article.is_published ? <><Lock size={13} /> Снять</> : <><Globe size={13} /> Опубликовать</>}
-            </button>
+            </Button>
           )}
           {canEdit && (
-            <button className="btn-primary" onClick={onEdit}>
+            <Button variant="primary" onClick={onEdit}>
               <Edit size={14} /> Редактировать
-            </button>
+            </Button>
           )}
           {canAdmin && (
-            <button
-              className="btn-ghost !py-1 !px-2 text-sm text-rose-600"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="!py-1 !px-2 text-rose-600"
               onClick={() => {
                 if (confirm("Удалить статью?")) del.mutate();
               }}
             >
               <Trash2 size={13} />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -621,15 +626,17 @@ function VersionsPanel({ articleId, currentVersion }: { articleId: number; curre
             </span>
             <span className="flex-1 truncate">{v.comment || "—"}</span>
             {v.version !== currentVersion && (
-              <button
-                className="btn-ghost !p-1"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="!p-1"
                 title="Откатить к этой версии"
                 onClick={() => {
                   if (confirm(`Откатить к v${v.version}?`)) revert.mutate(v.version);
                 }}
               >
                 <RotateCcw size={11} />
-              </button>
+              </Button>
             )}
           </div>
         ))}
@@ -705,13 +712,15 @@ function CommentsPanel({ articleId }: { articleId: number }) {
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
-      <button
-        className="btn-primary mt-1 w-full"
+      <Button
+        variant="primary"
+        className="mt-1"
+        fullWidth
         disabled={!text.trim() || post.isPending}
         onClick={() => post.mutate()}
       >
         {post.isPending ? <Loader2 size={13} className="animate-spin" /> : "Отправить"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -782,23 +791,25 @@ function ArticleEditor({
           placeholder="Заголовок статьи"
         />
         <div className="flex gap-1">
-          <button
-            className={clsx("btn-ghost !py-1 !px-2 text-sm", showPreview && "bg-neutral-100 dark:bg-neutral-800")}
+          <Button
+            variant="ghost"
+            size="sm"
+            className={clsx("!py-1 !px-2", showPreview && "bg-neutral-100 dark:bg-neutral-800")}
             onClick={() => setShowPreview((v) => !v)}
           >
             <Eye size={13} /> Превью
-          </button>
+          </Button>
           {onCancel && (
-            <button className="btn-ghost" onClick={onCancel}>Отмена</button>
+            <Button variant="ghost" onClick={onCancel}>Отмена</Button>
           )}
-          <button
-            className="btn-primary"
+          <Button
+            variant="primary"
             disabled={!title.trim() || save.isPending}
             onClick={() => save.mutate()}
           >
             {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {mode === "create" ? "Создать" : "Сохранить"}
-          </button>
+          </Button>
         </div>
       </div>
 

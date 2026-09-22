@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Users2, Award, Send, Cake, Building2 } from "lucide-react";
 import { api, extractApiError } from "@/api/client";
 import { useAuth } from "@/store/auth";
-import { Avatar, Modal } from "@/components/ui";
+import { Avatar, Modal, EmptyState } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { useToast } from "@/components/Toast";
 
 type Department = { id: number; name: string };
@@ -149,8 +150,12 @@ export default function People() {
           />
         ))}
         {!usersQ.isPending && filtered.length === 0 && (
-          <div className="col-span-full rounded-xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700">
-            Ничего не найдено
+          <div className="col-span-full">
+            <EmptyState
+              icon={<Users2 size={32} />}
+              title="Никого не найдено"
+              description="Попробуйте изменить фильтры или поисковой запрос."
+            />
           </div>
         )}
       </div>
@@ -223,13 +228,16 @@ function PersonCard({
         </div>
       )}
       {!isSelf && canGiveKudos && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
+          fullWidth
+          className="mt-3 !justify-center"
           onClick={onGiveKudos}
-          className="btn-ghost mt-3 !w-full !justify-center text-xs"
+          leftIcon={<Award size={13} />}
         >
-          <Award size={13} /> Дать кудос
-        </button>
+          Дать кудос
+        </Button>
       )}
     </div>
   );
@@ -300,14 +308,16 @@ function KudosModal({ target, onClose }: { target: User; onClose: () => void }) 
         </label>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button
             type="submit"
-            className="btn-primary"
-            disabled={message.trim().length === 0 || save.isPending}
+            variant="primary"
+            leftIcon={<Send size={14} />}
+            isLoading={save.isPending}
+            disabled={message.trim().length === 0}
           >
-            <Send size={14} /> Отправить
-          </button>
+            Отправить
+          </Button>
         </div>
       </form>
     </Modal>

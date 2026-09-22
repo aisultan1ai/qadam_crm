@@ -1,48 +1,62 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import clsx from "clsx";
 
 import { api, extractApiError } from "@/api/client";
 import { LogoMark, Wordmark } from "@/components/Logo";
 import { Turnstile, isCaptchaEnabled } from "@/components/Turnstile";
+import { emailSchema } from "@/lib/validation";
+import { FormError } from "@/components/ui";
+import { FormField } from "@/components/lib/FormField";
+import { Button } from "@/components/lib/Button";
+
+const schema = z.object({ email: emailSchema });
+type ForgotForm = z.infer<typeof schema>;
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [loading, setLoading] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!email.trim()) {
-      setError("Введите email");
-      return;
-    }
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ForgotForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: "" },
+  });
+
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    setCaptchaError(null);
     if (isCaptchaEnabled() && !captchaToken) {
-      setError("Пожалуйста, пройдите проверку CAPTCHA");
+      setCaptchaError("Пожалуйста, пройдите проверку CAPTCHA");
       return;
     }
-    setLoading(true);
     try {
       await api.post("/api/auth/forgot-password", {
-        email: email.trim().toLowerCase(),
+        email: data.email.trim().toLowerCase(),
         captcha_token: captchaToken || undefined,
       });
       setDone(true);
     } catch (err) {
-      setError(extractApiError(err).message || "Не удалось отправить письмо");
-    } finally {
-      setLoading(false);
+      setServerError(extractApiError(err).message || "Не удалось отправить письмо");
     }
-  };
+  });
+
+  const anyError = serverError || captchaError || Object.keys(errors).length > 0;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] p-4 dark:bg-[#0F0F14]">
       <form
-        onSubmit={submit}
-        className={clsx("card relative w-full max-w-sm p-8 animate-rise", error && "animate-shake")}
+        onSubmit={onSubmit}
+        className={clsx("card relative w-full max-w-sm p-8 animate-rise", anyError && "animate-shake")}
+        noValidate
       >
         <Link
           to="/"
@@ -68,35 +82,31 @@ export default function ForgotPassword() {
               Введите email, к которому привязан аккаунт. Мы пришлём ссылку для установки нового пароля.
             </p>
 
-            <label className="mb-3 block">
-              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                Email
-              </span>
+            <FormField label="Email" error={errors.email?.message} className="mb-3">
               <input
                 className="input"
                 type="email"
                 autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 autoFocus
+                {...register("email")}
               />
-            </label>
+            </FormField>
 
             <Turnstile onToken={setCaptchaToken} />
 
-            {error && (
-              <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                {error}
-              </div>
-            )}
+            {captchaError && <FormError msg={captchaError} />}
+            {serverError && <FormError msg={serverError} />}
 
-            <button
+            <Button
               type="submit"
-              disabled={loading || (isCaptchaEnabled() && !captchaToken)}
-              className="btn-primary w-full disabled:opacity-60"
+              variant="primary"
+              fullWidth
+              isLoading={isSubmitting}
+              disabled={isCaptchaEnabled() && !captchaToken}
+              className="mt-3 disabled:opacity-60"
             >
-              {loading ? "Отправляем…" : "Отправить ссылку"}
-            </button>
+              {isSubmitting ? "Отправляем…" : "Отправить ссылку"}
+            </Button>
 
             <div className="mt-4 text-center text-sm text-neutral-500">
               Вспомнили пароль?{" "}

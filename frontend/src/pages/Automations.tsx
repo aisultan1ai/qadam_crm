@@ -8,6 +8,7 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 
 type Automation = {
   id: number;
@@ -136,29 +137,30 @@ export default function Automations() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 dark:bg-neutral-900/40 text-left text-xs uppercase tracking-wide text-neutral-500">
+      <div className="table-container">
+       <div className="table-scroll">
+        <table className="w-full">
+          <thead className="table-head">
             <tr>
-              <th className="px-3 py-2">Название</th>
-              <th className="px-3 py-2">Триггер</th>
-              <th className="px-3 py-2 text-right">Запусков (7 дн.)</th>
-              <th className="px-3 py-2">Последний запуск</th>
-              <th className="px-3 py-2">Статус</th>
-              <th className="px-3 py-2 text-right w-32">Действия</th>
+              <th className="table-head-cell">Название</th>
+              <th className="table-head-cell">Триггер</th>
+              <th className="table-head-cell text-right">Запусков (7 дн.)</th>
+              <th className="table-head-cell">Последний запуск</th>
+              <th className="table-head-cell">Статус</th>
+              <th className="table-head-cell text-right w-32">Действия</th>
             </tr>
           </thead>
           <tbody>
             {isPending && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-neutral-500">
+                <td colSpan={6} className="table-cell text-center">
                   <Loader2 size={16} className="mx-auto animate-spin" />
                 </td>
               </tr>
             )}
             {!isPending && data?.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-10 text-center text-neutral-500">
+                <td colSpan={6} className="table-cell py-10 text-center">
                   <Workflow size={28} className="mx-auto mb-2 text-neutral-400" />
                   <div>Автоматизаций ещё нет</div>
                   <Link to="/automations/new" className="link text-sm">Создать первую</Link>
@@ -168,10 +170,7 @@ export default function Automations() {
             {data?.map((a) => {
               const nodesCount = (a.graph.nodes || []).length;
               return (
-                <tr
-                  key={a.id}
-                  className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20"
-                >
+                <tr key={a.id} className="table-row">
                   <td className="px-3 py-2">
                     <Link to={`/automations/${a.id}`} className="font-medium hover:text-brand-600">
                       {a.name}
@@ -206,13 +205,15 @@ export default function Automations() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex justify-end gap-1">
-                      <button
-                        className="btn-ghost !py-1 !px-1.5"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!py-1 !px-1.5"
                         title="История запусков"
                         onClick={() => setViewingRuns(a)}
                       >
                         <History size={14} />
-                      </button>
+                      </Button>
                       <Link
                         to={`/automations/${a.id}`}
                         className="btn-ghost !py-1 !px-1.5"
@@ -220,13 +221,15 @@ export default function Automations() {
                       >
                         <Pencil size={14} />
                       </Link>
-                      <button
-                        className="btn-ghost !py-1 !px-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!py-1 !px-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                         title="Удалить"
                         onClick={() => setDeleting(a)}
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -234,6 +237,7 @@ export default function Automations() {
             })}
           </tbody>
         </table>
+       </div>
       </div>
 
       {deleting && (
@@ -243,14 +247,15 @@ export default function Automations() {
               «{deleting.name}» будет удалена вместе со всей историей запусков.
             </div>
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => setDeleting(null)}>Отмена</button>
-              <button
-                className="btn-primary bg-rose-600 hover:bg-rose-700"
+              <Button variant="ghost" onClick={() => setDeleting(null)}>Отмена</Button>
+              <Button
+                variant="primary"
+                className="bg-rose-600 hover:bg-rose-700"
                 disabled={del.isPending}
                 onClick={() => del.mutate(deleting.id)}
               >
                 Удалить
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>

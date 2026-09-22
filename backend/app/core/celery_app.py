@@ -94,6 +94,11 @@ celery_app.conf.beat_schedule = {
         "task": "p3.fire_reminders",
         "schedule": crontab(minute="*"),
     },
+    # Planfix-style: напоминания по задачам (offset до deadline/start_date)
+    "p3-fire-task-reminders-every-1min": {
+        "task": "p3.fire_task_reminders",
+        "schedule": crontab(minute="*"),
+    },
     # P3: запуск сохранённых отчётов по расписанию
     "p3-run-scheduled-reports-every-5min": {
         "task": "p3.run_scheduled_reports",

@@ -9,6 +9,7 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 
 type MailboxRow = {
   id: number;
@@ -160,17 +161,17 @@ export default function Mail() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            className="btn-secondary"
+          <Button
+            variant="secondary"
             onClick={() => syncMut.mutate()}
             disabled={syncMut.isPending}
           >
             {syncMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Синхронизировать
-          </button>
-          <button className="btn-primary" onClick={() => setComposeOpen(true)}>
+          </Button>
+          <Button variant="primary" onClick={() => setComposeOpen(true)}>
             <Plus size={14} /> Новое письмо
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -369,16 +370,18 @@ function ThreadView({ thread, onChanged }: { thread: ThreadRow; onChanged: () =>
           </div>
         </div>
         <div className="flex shrink-0 gap-1">
-          <button className="btn-ghost !py-1 !px-2 text-sm" onClick={() => setLinkOpen(true)}>
+          <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => setLinkOpen(true)}>
             <Link2 size={14} /> Связать
-          </button>
-          <button
-            className="btn-ghost !py-1 !px-2 text-sm"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!py-1 !px-2"
             onClick={() => archiveMut.mutate()}
             disabled={archiveMut.isPending}
           >
             {thread.is_archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -395,9 +398,9 @@ function ThreadView({ thread, onChanged }: { thread: ThreadRow; onChanged: () =>
 
       <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
         {!replying ? (
-          <button className="btn-secondary" onClick={() => setReplying(true)}>
+          <Button variant="secondary" onClick={() => setReplying(true)}>
             <Reply size={14} /> Ответить
-          </button>
+          </Button>
         ) : (
           <div className="space-y-2">
             <textarea
@@ -408,15 +411,15 @@ function ThreadView({ thread, onChanged }: { thread: ThreadRow; onChanged: () =>
               autoFocus
             />
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => setReplying(false)}>Отмена</button>
-              <button
-                className="btn-primary"
+              <Button variant="ghost" onClick={() => setReplying(false)}>Отмена</Button>
+              <Button
+                variant="primary"
                 disabled={!replyText.trim() || reply.isPending}
                 onClick={() => reply.mutate()}
               >
                 {reply.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 Отправить
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -554,10 +557,10 @@ function LinkModal({
           <input type="number" className="input" value={taskId} onChange={(e) => setTaskId(e.target.value)} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={mut.isPending} onClick={() => mut.mutate()}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" disabled={mut.isPending} onClick={() => mut.mutate()}>
             Сохранить
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -608,15 +611,15 @@ function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: () => 
           <textarea className="input min-h-[180px]" value={body} onChange={(e) => setBody(e.target.value)} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button
-            className="btn-primary"
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button
+            variant="primary"
             disabled={!to || !subject || !body || send.isPending}
             onClick={() => send.mutate()}
           >
             {send.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             Отправить
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Plus, LayoutGrid, List as ListIcon, Table as TableIcon, CalendarDays, Search, Trash2,
   Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, Loader2, SlidersHorizontal, X,
+  Inbox, ArrowUpCircle, Eye, ListChecks, FolderKanban, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -17,6 +18,7 @@ import {
 import type { TaskListItem, TaskStatus, Project, User, Page } from "@/types";
 import { STATUS_LABEL, STATUS_ORDER, PRIORITY_LABEL } from "@/types";
 import { Avatar, EmptyState, FieldError, FormError, Modal, PriorityChip, StatusChip } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { SkeletonKanban, SkeletonTable, SkeletonCard } from "@/components/Skeleton";
 import { taskSchema, type TaskForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
@@ -25,6 +27,7 @@ import { VirtualList } from "@/components/VirtualList";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 
 const TASKS_VIEW_STORAGE_KEY = "tasks:view";
+const TASKS_SIDEBAR_STORAGE_KEY = "tasks:sidebar";
 
 type View = "kanban" | "table" | "list" | "calendar";
 const VIEWS: View[] = ["kanban", "table", "list", "calendar"];
@@ -79,6 +82,19 @@ export default function Tasks() {
   const [openFilters, setOpenFilters] = useState(false);
   const [qLocal, setQLocal] = useState(q);
   useEffect(() => setQLocal(q), [q]);
+
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const s = window.localStorage.getItem(TASKS_SIDEBAR_STORAGE_KEY);
+    return s === null ? true : s === "1";
+  });
+  const toggleSidebar = () => {
+    setSidebarOpen((v) => {
+      const nv = !v;
+      try { window.localStorage.setItem(TASKS_SIDEBAR_STORAGE_KEY, nv ? "1" : "0"); } catch {}
+      return nv;
+    });
+  };
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<null | "status" | "priority" | "assignee" | "deadline">(null);
   const canBulk = can("tasks.bulk_update");
@@ -237,12 +253,48 @@ export default function Tasks() {
     setQLocal("");
   };
 
+  const activeScopeTab = TASK_SCOPE_TABS.find((t) => t.key === scope);
+  const activeProject = projectId ? projects?.find((p) => p.id === Number(projectId)) : null;
+
   return (
-    <div className="space-y-4">
+    <div className={clsx("gap-4", sidebarOpen ? "lg:grid lg:grid-cols-[240px_minmax(0,1fr)]" : "block")}>
+      {sidebarOpen && (
+        <TasksSidebar
+          scope={scope}
+          projectId={projectId}
+          projects={projects ?? []}
+          canCreateTask={canCreate}
+          onScopeChange={(s) => updateParam("scope", s === "all" ? "" : s)}
+          onProjectChange={(pid) => updateParam("project", pid ? String(pid) : "")}
+          onClose={toggleSidebar}
+        />
+      )}
+
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Задачи</h1>
-          <p className="text-sm text-neutral-500">{tasks?.length ?? 0} задач</p>
+        <div className="flex items-center gap-2">
+          {!sidebarOpen && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSidebar}
+              aria-label="Показать боковую панель"
+              title="Показать боковую панель"
+            >
+              <PanelLeftOpen size={16} />
+            </Button>
+          )}
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {activeScopeTab && activeScopeTab.key !== "all" ? activeScopeTab.label : "Задачи"}
+              {activeProject && (
+                <span className="ml-2 text-lg font-normal text-neutral-500">
+                  / {activeProject.name}
+                </span>
+              )}
+            </h1>
+            <p className="text-sm text-neutral-500">{tasks?.length ?? 0} задач</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -278,54 +330,31 @@ export default function Tasks() {
             })}
           </div>
           {can("analytics.reports") && (
-            <button
-              className="btn-ghost"
+            <Button
+              variant="ghost"
               onClick={() => setOpenExport(true)}
               title="Экспорт задач в Excel (с учётом фильтров)"
               aria-label="Экспорт задач в Excel"
             >
               <Download size={15} /> <span className="hidden sm:inline">Экспорт</span>
-            </button>
+            </Button>
           )}
           {canCreate && (
-            <button
-              className="btn-ghost"
+            <Button
+              variant="ghost"
               onClick={() => setOpenImport(true)}
               title="Импортировать задачи из CSV"
               aria-label="Импортировать задачи из CSV"
             >
               <Upload size={15} /> <span className="hidden sm:inline">Импорт</span>
-            </button>
+            </Button>
           )}
           {canCreate && (
-            <button className="btn-primary" onClick={() => setOpenNew(true)} aria-label="Новая задача">
+            <Button variant="primary" onClick={() => setOpenNew(true)} aria-label="Новая задача">
               <Plus size={16} /> <span className="hidden sm:inline">Новая задача</span>
-            </button>
+            </Button>
           )}
         </div>
-      </div>
-
-      <div
-        role="tablist"
-        aria-label="Область задач"
-        className="flex flex-wrap items-center gap-1 border-b border-neutral-200 dark:border-neutral-800"
-      >
-        {TASK_SCOPE_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            role="tab"
-            aria-selected={scope === tab.key}
-            onClick={() => updateParam("scope", tab.key === "all" ? "" : tab.key)}
-            className={clsx(
-              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-              scope === tab.key
-                ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
-                : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
@@ -383,9 +412,9 @@ export default function Tasks() {
         </div>
 
         {/* Мобилка: одна кнопка "Фильтры" со счётчиком */}
-        <button
-          type="button"
-          className="btn-ghost md:hidden"
+        <Button
+          className="md:hidden"
+          variant="ghost"
           onClick={() => setOpenFilters(true)}
           aria-label="Открыть фильтры"
         >
@@ -396,15 +425,17 @@ export default function Tasks() {
               {activeFilterCount(projectId, assigneeId, status, priority)}
             </span>
           )}
-        </button>
+        </Button>
 
         {filtersActive && (
-          <button
-            className="btn-ghost !px-2 !py-1 text-xs"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!px-2 !py-1"
             onClick={resetFilters}
           >
             Сбросить фильтры
-          </button>
+          </Button>
         )}
       </div>
 
@@ -434,13 +465,13 @@ export default function Tasks() {
             description="Попробуйте изменить или сбросить фильтры"
             action={
               <div className="flex gap-2">
-                <button className="btn-secondary" onClick={resetFilters}>
+                <Button variant="secondary" onClick={resetFilters}>
                   Сбросить фильтры
-                </button>
+                </Button>
                 {canCreate && (
-                  <button className="btn-primary" onClick={() => setOpenNew(true)}>
+                  <Button variant="primary" onClick={() => setOpenNew(true)}>
                     <Plus size={16} /> Новая задача
-                  </button>
+                  </Button>
                 )}
               </div>
             }
@@ -450,9 +481,9 @@ export default function Tasks() {
             title="Задач пока нет"
             description="Создайте первую задачу — она появится на канбан-доске"
             action={canCreate && (
-              <button className="btn-primary" onClick={() => setOpenNew(true)}>
+              <Button variant="primary" onClick={() => setOpenNew(true)}>
                 <Plus size={16} /> Новая задача
-              </button>
+              </Button>
             )}
           />
         )
@@ -559,19 +590,162 @@ export default function Tasks() {
               Задача «{tasks?.find((t) => t.id === confirmDeleteId)?.title || ""}» будет удалена без возможности восстановления.
             </p>
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => setConfirmDeleteId(null)}>Отмена</button>
-              <button
-                className="btn-primary bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-600"
+              <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>Отмена</Button>
+              <Button
+                variant="primary"
+                className="bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-600"
                 disabled={deleteTask.isPending}
                 onClick={() => deleteTask.mutate(confirmDeleteId)}
               >
                 Удалить
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
       )}
     </div>
+    </div>
+  );
+}
+
+function TasksSidebar({
+  scope,
+  projectId,
+  projects,
+  canCreateTask,
+  onScopeChange,
+  onProjectChange,
+  onClose,
+}: {
+  scope: TaskScope;
+  projectId: string;
+  projects: Project[];
+  canCreateTask: boolean;
+  onScopeChange: (s: TaskScope) => void;
+  onProjectChange: (pid: number | null) => void;
+  onClose: () => void;
+}) {
+  const [projectsOpen, setProjectsOpen] = useState(true);
+  const currentPid = projectId ? Number(projectId) : null;
+
+  const scopeItems: { key: TaskScope; label: string; icon: React.ReactNode }[] = [
+    { key: "all", label: "Все задачи", icon: <ListChecks size={14} /> },
+    { key: "incoming", label: "Мне назначены", icon: <Inbox size={14} /> },
+    { key: "outgoing", label: "Я поставил", icon: <ArrowUpCircle size={14} /> },
+    { key: "audited", label: "Наблюдаю", icon: <Eye size={14} /> },
+  ];
+
+  return (
+    <aside className="card sticky top-4 h-fit self-start p-3 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          Разделы
+        </h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Скрыть боковую панель"
+          title="Скрыть боковую панель"
+        >
+          <PanelLeftClose size={14} />
+        </Button>
+      </div>
+
+      <nav aria-label="Категории задач" className="space-y-0.5">
+        {scopeItems.map((it) => {
+          const active = scope === it.key;
+          return (
+            <button
+              key={it.key}
+              type="button"
+              onClick={() => onScopeChange(it.key)}
+              className={clsx(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                active
+                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                  : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800/60",
+              )}
+              aria-current={active ? "page" : undefined}
+            >
+              <span className="shrink-0 opacity-70">{it.icon}</span>
+              <span className="truncate">{it.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={() => setProjectsOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800/40"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <FolderKanban size={12} />
+            Проекты
+            <span className="normal-case font-normal text-neutral-400">
+              ({projects.length})
+            </span>
+          </span>
+          {projectsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+
+        {projectsOpen && (
+          <div className="mt-1 space-y-0.5">
+            <button
+              type="button"
+              onClick={() => onProjectChange(null)}
+              className={clsx(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                !currentPid
+                  ? "bg-neutral-100 font-medium dark:bg-neutral-800/60"
+                  : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/40",
+              )}
+            >
+              <span className="ml-1 inline-flex h-1.5 w-1.5 rounded-full bg-neutral-400" />
+              <span className="truncate">Все проекты</span>
+            </button>
+            {projects.map((p) => {
+              const active = currentPid === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onProjectChange(p.id)}
+                  className={clsx(
+                    "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                    active
+                      ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                      : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800/60",
+                  )}
+                  aria-current={active ? "page" : undefined}
+                  title={p.name}
+                >
+                  <span
+                    className="ml-1 inline-flex h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: (p as any).color || "#7C5CFF" }}
+                  />
+                  <span className="truncate">{p.name}</span>
+                </button>
+              );
+            })}
+            {projects.length === 0 && (
+              <div className="px-2 py-1.5 text-xs text-neutral-400">Проектов пока нет</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {canCreateTask && (
+        <Link
+          to="/projects"
+          className="mt-3 flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-neutral-300 px-2 py-1.5 text-xs text-neutral-500 hover:border-brand-400 hover:text-brand-600 dark:border-neutral-700 dark:hover:border-brand-500"
+        >
+          <Plus size={12} /> Новый проект
+        </Link>
+      )}
+    </aside>
   );
 }
 
@@ -589,13 +763,16 @@ function KanbanColumn({
   activeDragId?: number | null;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `col:${status}` });
+  const isDraggingSomething = activeDragId != null;
   return (
     <div
       ref={setNodeRef}
       className={clsx(
-        "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border p-2.5 transition-all duration-[180ms] ease-out-soft",
+        "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border-2 p-2.5 transition-all duration-[180ms] ease-out-soft",
         isOver
-          ? "border-brand-400 bg-brand-50/70 dark:border-brand-700 dark:bg-brand-900/10"
+          ? "border-brand-500 bg-brand-50 shadow-[0_0_0_4px_rgba(124,92,255,0.12)] dark:border-brand-500 dark:bg-brand-900/15"
+          : isDraggingSomething
+          ? "border-dashed border-neutral-300 bg-neutral-50/40 dark:border-neutral-700/60 dark:bg-[#17171F]"
           : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-700/50 dark:bg-[#17171F]",
       )}
     >
@@ -633,24 +810,31 @@ const KanbanCard = memo(function KanbanCard({
 }) {
   const { attributes, listeners, setNodeRef } = useDraggable({ id: `task:${task.id}` });
   const nav = useNavigate();
+  if (isActiveDrag) {
+    return (
+      <div
+        ref={setNodeRef}
+        aria-hidden="true"
+        className="rounded-xl border-2 border-dashed border-brand-300/70 bg-brand-50/40 p-3 dark:border-brand-500/40 dark:bg-brand-500/5"
+        style={{ minHeight: 78 }}
+      >
+        <div className="mb-1.5 h-3 w-3/4 rounded bg-brand-200/60 dark:bg-brand-500/20" />
+        <div className="flex items-center justify-between opacity-30">
+          <PriorityChip priority={task.priority} />
+          {task.assignee && <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} />}
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       ref={setNodeRef}
-      style={{
-        // Пока тащим — полностью скрываем оригинал (визуально «след» не остаётся).
-        // Не убираем из DOM (display:none) — это сломает измерения @dnd-kit.
-        visibility: isActiveDrag ? "hidden" : "visible",
-        touchAction: "none",
-      }}
+      style={{ touchAction: "none" }}
       {...listeners}
       {...attributes}
-      onClick={() => {
-        if (isActiveDrag) return;
-        nav(`/tasks/${task.id}`);
-      }}
+      onClick={() => nav(`/tasks/${task.id}`)}
       className={clsx(
-        "group relative rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft dark:border-neutral-700/50 dark:bg-[#2b2b34]",
-        !isActiveDrag && "cursor-pointer hover:-translate-y-0.5 hover:shadow-md",
+        "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#2b2b34]",
         landed && "animate-settle",
       )}
     >
@@ -929,9 +1113,9 @@ function CalendarView({ tasks }: { tasks: TaskListItem[] }) {
           {base.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
         </h3>
         <div className="flex gap-1">
-          <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setMonthOffset((o) => o - 1)}>← Пред</button>
-          <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setMonthOffset(0)}>Сегодня</button>
-          <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setMonthOffset((o) => o + 1)}>След →</button>
+          <Button variant="ghost" size="sm" className="!px-2 !py-1" onClick={() => setMonthOffset((o) => o - 1)}>← Пред</Button>
+          <Button variant="ghost" size="sm" className="!px-2 !py-1" onClick={() => setMonthOffset(0)}>Сегодня</Button>
+          <Button variant="ghost" size="sm" className="!px-2 !py-1" onClick={() => setMonthOffset((o) => o + 1)}>След →</Button>
         </div>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-neutral-500">
@@ -1058,8 +1242,8 @@ export function TaskFormModal({
         </div>
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!isValid || create.isPending}>Создать</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!isValid || create.isPending}>Создать</Button>
         </div>
       </form>
     </Modal>
@@ -1171,11 +1355,11 @@ function ImportCsvModal({ onClose, onDone }: { onClose: () => void; onDone: () =
             </div>
 
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={onClose}>Отмена</button>
-              <button className="btn-primary" disabled={!file || starting} onClick={start}>
+              <Button variant="ghost" onClick={onClose}>Отмена</Button>
+              <Button variant="primary" disabled={!file || starting} onClick={start}>
                 {starting ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
                 Запустить импорт
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -1216,7 +1400,7 @@ function ImportCsvModal({ onClose, onDone }: { onClose: () => void; onDone: () =
             )}
 
             <div className="flex justify-end">
-              <button className="btn-primary" onClick={onClose}>Готово</button>
+              <Button variant="primary" onClick={onClose}>Готово</Button>
             </div>
           </div>
         )}
@@ -1231,7 +1415,7 @@ function ImportCsvModal({ onClose, onDone }: { onClose: () => void; onDone: () =
               </div>
             </div>
             <div className="flex justify-end">
-              <button className="btn-ghost" onClick={onClose}>Закрыть</button>
+              <Button variant="ghost" onClick={onClose}>Закрыть</Button>
             </div>
           </div>
         )}
@@ -1370,9 +1554,9 @@ function ExportExcelModal({ filters, onClose }: { filters: TaskFilters; onClose:
             <div className="text-xs text-neutral-500">
               {status.filename} · {status.rows ?? 0} строк
             </div>
-            <button className="btn-primary mx-auto" onClick={download}>
+            <Button variant="primary" className="mx-auto" onClick={download}>
               <Download size={15} /> Скачать снова
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1389,7 +1573,7 @@ function ExportExcelModal({ filters, onClose }: { filters: TaskFilters; onClose:
         )}
 
         <div className="flex justify-end">
-          <button className="btn-ghost" onClick={onClose}>Закрыть</button>
+          <Button variant="ghost" onClick={onClose}>Закрыть</Button>
         </div>
       </div>
     </Modal>
@@ -1412,15 +1596,15 @@ function BulkToolbar({
       <div className="card pointer-events-auto flex flex-wrap items-center gap-2 px-3 py-2 shadow-lg animate-slide-up">
         <span className="pl-1 pr-2 text-sm font-medium">Выбрано: {count}</span>
         <div className="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
-        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("status")}>Статус</button>
-        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("priority")}>Приоритет</button>
-        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("assignee")}>Исполнитель</button>
-        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => onOpen("deadline")}>Дедлайн</button>
-        <button className="btn-ghost !py-1 !px-2 text-xs text-rose-500" onClick={onDelete}>
+        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("status")}>Статус</Button>
+        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("priority")}>Приоритет</Button>
+        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("assignee")}>Исполнитель</Button>
+        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("deadline")}>Дедлайн</Button>
+        <Button variant="ghost" size="sm" className="!py-1 !px-2 text-rose-500" onClick={onDelete}>
           <Trash2 size={12} /> Удалить
-        </button>
+        </Button>
         <div className="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
-        <button className="btn-ghost !py-1 !px-2 text-xs" onClick={onClear}>Отмена</button>
+        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={onClear}>Отмена</Button>
       </div>
     </div>
   );
@@ -1518,10 +1702,10 @@ function BulkPatchModal({
         )}
 
         <div className="flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" onClick={submit} disabled={isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" onClick={submit} disabled={isPending}>
             {isPending ? "Применяем…" : "Применить"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -1568,9 +1752,9 @@ function FilterDrawer({
       <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#17171F]">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold">Фильтры</h3>
-          <button className="btn-ghost !p-1.5" onClick={onClose} aria-label="Закрыть фильтры">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Закрыть фильтры">
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-3">
@@ -1623,18 +1807,19 @@ function FilterDrawer({
         </div>
 
         <div className="mt-5 flex gap-2">
-          <button
-            className="btn-secondary flex-1"
+          <Button
+            variant="secondary"
+            className="flex-1"
             onClick={() => {
               onReset();
               onClose();
             }}
           >
             Сбросить
-          </button>
-          <button className="btn-primary flex-1" onClick={onClose}>
+          </Button>
+          <Button variant="primary" className="flex-1" onClick={onClose}>
             Применить
-          </button>
+          </Button>
         </div>
       </div>
     </div>

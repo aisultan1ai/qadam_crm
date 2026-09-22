@@ -1,15 +1,29 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Trash2, Palmtree } from "lucide-react";
 import { EmptyState, Modal, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/Confirm";
+import { Button } from "@/components/lib/Button";
+import { FormField } from "@/components/lib/FormField";
+import { DataTable, Column } from "@/components/lib/DataTable";
+import { holidaySchema, type HolidayForm } from "@/lib/validation";
 
 type Holiday = { id: number; date: string; name: string; is_workday: boolean };
+
+const holidayFormSchema = holidaySchema.extend({
+  is_workday: z.boolean().default(false),
+});
+type HolidayFullForm = z.infer<typeof holidayFormSchema>;
 
 export default function HolidaysPage() {
   const qc = useQueryClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [openNew, setOpenNew] = useState(false);
@@ -27,6 +41,64 @@ export default function HolidaysPage() {
     },
   });
 
+  const columns: Column<Holiday>[] = [
+    {
+      key: "date",
+      header: "Дата",
+      sortable: true,
+      sortAccessor: (h) => new Date(h.date),
+      render: (h) => <span className="tabular-nums">{new Date(h.date).toLocaleDateString("ru-RU")}</span>,
+      width: 140,
+    },
+    {
+      key: "name",
+      header: "Название",
+      sortable: true,
+      sortAccessor: (h) => h.name,
+      render: (h) => <span className="font-medium">{h.name}</span>,
+    },
+    {
+      key: "type",
+      header: "Тип",
+      render: (h) =>
+        h.is_workday ? (
+          <span className="rounded bg-sky-200 px-2 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+            Рабочий (перенос)
+          </span>
+        ) : (
+          <span className="rounded bg-rose-200 px-2 py-0.5 text-xs font-medium text-rose-900 dark:bg-rose-950/50 dark:text-rose-200">
+            Выходной
+          </span>
+        ),
+      width: 200,
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: 80,
+      render: (h) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-rose-500"
+          onClick={() =>
+            confirm({
+              title: "Удалить?",
+              message: `«${h.name}» будет удалён из календаря.`,
+              danger: true,
+              confirmLabel: "Удалить",
+              onConfirm: () => del.mutateAsync(h.id),
+            })
+          }
+          aria-label="Удалить"
+        >
+          <Trash2 size={13} />
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -40,49 +112,22 @@ export default function HolidaysPage() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <button className="btn-primary" onClick={() => setOpenNew(true)}>
-            <Plus size={15} /> День
-          </button>
+          <Button variant="primary" leftIcon={<Plus size={15} />} onClick={() => setOpenNew(true)}>
+            День
+          </Button>
         </div>
       </div>
 
-      {isPending ? (
-        <div className="h-40 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
-      ) : !data || data.length === 0 ? (
+      {!isPending && (!data || data.length === 0) ? (
         <EmptyState icon={<Palmtree size={32} />} title={`За ${year} год пусто`} description="Добавьте праздники и переносы" />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase text-neutral-500 dark:bg-neutral-900/60">
-              <tr>
-                <th className="px-3 py-2">Дата</th>
-                <th className="px-3 py-2">Название</th>
-                <th className="px-3 py-2">Тип</th>
-                <th className="px-3 py-2 text-right"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((h) => (
-                <tr key={h.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                  <td className="px-3 py-2 tabular-nums">{new Date(h.date).toLocaleDateString("ru-RU")}</td>
-                  <td className="px-3 py-2 font-medium">{h.name}</td>
-                  <td className="px-3 py-2">
-                    {h.is_workday ? (
-                      <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">Рабочий (перенос)</span>
-                    ) : (
-                      <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">Выходной</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button className="btn-ghost !p-1.5 text-rose-500" onClick={() => del.mutate(h.id)}>
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={data ?? []}
+          rowKey={(h) => h.id}
+          isLoading={isPending}
+          initialSort={{ key: "date", direction: "asc" }}
+        />
       )}
 
       {openNew && <NewHolidayModal onClose={() => setOpenNew(false)} />}
@@ -92,39 +137,44 @@ export default function HolidaysPage() {
 
 function NewHolidayModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const [date, setDate] = useState("");
-  const [name, setName] = useState("");
-  const [isWorkday, setIsWorkday] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<HolidayFullForm>({
+    resolver: zodResolver(holidayFormSchema),
+    defaultValues: { name: "", date: "", is_workday: false },
+  });
 
-  const save = useMutation({
-    mutationFn: () => api.post("/api/holidays", { date, name, is_workday: isWorkday }),
-    onSuccess: () => {
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    try {
+      await api.post("/api/holidays", data);
       qc.invalidateQueries({ queryKey: ["holidays"] });
       onClose();
-    },
-    onError: (e) => setErr(extractApiError(e).message),
+    } catch (e) {
+      setServerError(extractApiError(e).message);
+    }
   });
 
   return (
     <Modal open onClose={onClose} title="Новый день" size="sm">
-      <form onSubmit={(e) => { e.preventDefault(); if (date && name) save.mutate(); }} className="space-y-3">
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дата</span>
-          <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Наурыз" />
-        </label>
+      <form onSubmit={onSubmit} className="space-y-3" noValidate>
+        <FormField label="Дата" required error={errors.date?.message}>
+          <input type="date" className="input" {...register("date")} />
+        </FormField>
+        <FormField label="Название" required error={errors.name?.message}>
+          <input className="input" placeholder="Наурыз" {...register("name")} />
+        </FormField>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={isWorkday} onChange={(e) => setIsWorkday(e.target.checked)} />
+          <input type="checkbox" {...register("is_workday")} />
           Рабочий день (перенос)
         </label>
-        <FormError msg={err} />
+        {serverError && <FormError msg={serverError} />}
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!date || !name || save.isPending}>Создать</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>Создать</Button>
         </div>
       </form>
     </Modal>

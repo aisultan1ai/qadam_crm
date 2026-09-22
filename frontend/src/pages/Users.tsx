@@ -7,7 +7,8 @@ import clsx from "clsx";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers } from "lucide-react";
 import type { User, Role, Department, Page } from "@/types";
-import { Avatar, Loader, Modal, FieldError, FormError } from "@/components/ui";
+import { Avatar, Loader, Modal, FieldError, FormError, EmptyState } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { useConfirm } from "@/components/Confirm";
 import { useToast } from "@/components/Toast";
 import { VirtualList } from "@/components/VirtualList";
@@ -100,9 +101,9 @@ function UsersList() {
           <input className="input pl-8" placeholder="Поиск по имени или email…" value={qLocal} onChange={(e) => setQLocal(e.target.value)} />
         </div>
         {can("users.create") && (
-          <button className="btn-primary" onClick={() => setOpenForm({ mode: "create" })}>
+          <Button variant="primary" onClick={() => setOpenForm({ mode: "create" })}>
             <Plus size={16} /> Новый пользователь
-          </button>
+          </Button>
         )}
       </div>
 
@@ -222,18 +223,20 @@ function UsersGrid({
             </div>
             <div className="flex items-center justify-end gap-0.5">
               {can("users.update") && (
-                <button className="btn-ghost !p-1.5" onClick={() => onEdit(u)} aria-label="Изменить">
+                <Button variant="ghost" size="icon" onClick={() => onEdit(u)} aria-label="Изменить">
                   <Pencil size={14} />
-                </button>
+                </Button>
               )}
               {can("users.delete") && !u.is_superuser && (
-                <button
-                  className="btn-ghost !p-1.5 text-rose-500"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-rose-500"
                   onClick={() => onDelete(u)}
                   aria-label="Удалить"
                 >
                   <Trash2 size={14} />
-                </button>
+                </Button>
               )}
               {!showActions && <span />}
             </div>
@@ -300,9 +303,9 @@ function DepartmentsView() {
           Всего отделов: {departments?.length ?? 0}
         </p>
         {can("settings.dictionaries") && (
-          <button className="btn-primary" onClick={() => setOpenNew(true)}>
+          <Button variant="primary" onClick={() => setOpenNew(true)}>
             <Plus size={16} /> Новый отдел
-          </button>
+          </Button>
         )}
       </div>
 
@@ -363,7 +366,11 @@ function DepartmentsView() {
             <span className="text-xs text-neutral-500">{counts.noDept}</span>
           </button>
           {(!departments || departments.length === 0) && (
-            <div className="py-6 text-center text-xs text-neutral-500">Отделов пока нет</div>
+            <EmptyState
+              icon={<Layers size={22} />}
+              title="Отделов пока нет"
+              description="Создайте отдел, чтобы группировать сотрудников."
+            />
           )}
         </div>
       </div>
@@ -382,7 +389,11 @@ function DepartmentsView() {
               </div>
             </div>
             {employees.length === 0 ? (
-              <div className="py-10 text-center text-sm text-neutral-500">Здесь пока никого нет</div>
+              <EmptyState
+                icon={<UsersIcon size={26} />}
+                title="Здесь пока никого нет"
+                description="Добавьте сотрудников или измените фильтры."
+              />
             ) : (
               <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {employees.map((u) => (
@@ -460,10 +471,10 @@ function NewDepartmentModal({
         </label>
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!isValid || create.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!isValid || create.isPending}>
             Создать
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -593,10 +604,10 @@ function UserFormModal({
         <FormError msg={formError} />
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!isValid || save.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!isValid || save.isPending}>
             Сохранить
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

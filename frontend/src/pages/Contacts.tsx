@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Search, Trash2, BookUser, Building2, User as UserIcon, Pencil } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
-import { EmptyState, Modal, Avatar, FieldError, FormError } from "@/components/ui";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { EmptyState, Modal, Avatar, FormError } from "@/components/ui";
+import { Pagination } from "@/components/lib/Pagination";
+import { Button } from "@/components/lib/Button";
+import { FormField } from "@/components/lib/FormField";
+import { contactSchema, companySchema, type ContactForm, type CompanyForm } from "@/lib/validation";
 import { SkeletonCard } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
@@ -87,12 +93,12 @@ export default function Contacts() {
         </div>
         {canCreate && (
           <div className="flex items-center gap-2">
-            <button className="btn-secondary" onClick={() => setOpenCompany("new")}>
+            <Button variant="secondary" onClick={() => setOpenCompany("new")}>
               <Plus size={15} /> Компания
-            </button>
-            <button className="btn-primary" onClick={() => setOpenContact("new")}>
+            </Button>
+            <Button variant="primary" onClick={() => setOpenContact("new")}>
               <Plus size={16} /> Контакт
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -175,15 +181,21 @@ function ContactsList({
   const toast = useToast();
   const confirm = useConfirm();
 
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
+  useEffect(() => { setPage(1); }, [q, scope, perPage]);
+
   const { data, isPending } = useQuery({
-    queryKey: ["contacts", q, scope],
+    queryKey: ["contacts", q, scope, page, perPage],
     queryFn: async () =>
       (
         await api.get<Page<Contact>>("/api/contacts", {
-          params: { q: q || undefined, scope: scope === "all" ? undefined : scope, per_page: 200 },
+          params: { q: q || undefined, scope: scope === "all" ? undefined : scope, per_page: perPage, page },
         })
-      ).data.items,
+      ).data,
   });
+  const items = data?.items;
+  const total = data?.total ?? 0;
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/api/contacts/${id}`),
@@ -207,7 +219,7 @@ function ContactsList({
     );
   }
 
-  if (!data || data.length === 0) {
+  if (!items || items.length === 0) {
     return (
       <EmptyState
         icon={<UserIcon size={32} />}
@@ -218,8 +230,9 @@ function ContactsList({
   }
 
   return (
+    <div className="space-y-3">
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-      {data.map((c) => (
+      {items.map((c) => (
         <div key={c.id} className="card-interactive group flex flex-col gap-2 p-4">
           <div className="flex items-start gap-3">
             <Avatar name={`${c.first_name} ${c.last_name || ""}`.trim()} size={40} />
@@ -239,13 +252,15 @@ function ContactsList({
             </div>
             <div className="flex opacity-0 transition-opacity group-hover:opacity-100">
               {canUpdate && (
-                <button className="btn-ghost !p-1.5" onClick={() => onEdit(c)} title="Редактировать">
+                <Button variant="ghost" size="icon" onClick={() => onEdit(c)} title="Редактировать">
                   <Pencil size={14} />
-                </button>
+                </Button>
               )}
               {canDelete && (
-                <button
-                  className="btn-ghost !p-1.5 text-rose-500"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-rose-500"
                   onClick={() =>
                     confirm({
                       title: "Удалить контакт?",
@@ -258,7 +273,7 @@ function ContactsList({
                   title="Удалить"
                 >
                   <Trash2 size={14} />
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -277,6 +292,14 @@ function ContactsList({
         </div>
       ))}
     </div>
+    <Pagination
+      page={page}
+      perPage={perPage}
+      total={total}
+      onPageChange={setPage}
+      onPerPageChange={setPerPage}
+    />
+    </div>
   );
 }
 
@@ -290,11 +313,17 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
   const toast = useToast();
   const confirm = useConfirm();
 
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
+  useEffect(() => { setPage(1); }, [q, perPage]);
+
   const { data, isPending } = useQuery({
-    queryKey: ["companies", q],
+    queryKey: ["companies", q, page, perPage],
     queryFn: async () =>
-      (await api.get<Page<Company>>("/api/companies", { params: { q: q || undefined, per_page: 200 } })).data.items,
+      (await api.get<Page<Company>>("/api/companies", { params: { q: q || undefined, per_page: perPage, page } })).data,
   });
+  const items = data?.items;
+  const total = data?.total ?? 0;
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/api/companies/${id}`),
@@ -319,7 +348,7 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
     );
   }
 
-  if (!data || data.length === 0) {
+  if (!items || items.length === 0) {
     return (
       <EmptyState
         icon={<Building2 size={32} />}
@@ -330,8 +359,9 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
   }
 
   return (
+    <div className="space-y-3">
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-      {data.map((c) => (
+      {items.map((c) => (
         <div key={c.id} className="card-interactive group flex flex-col gap-2 p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
@@ -347,13 +377,15 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
             </div>
             <div className="flex opacity-0 transition-opacity group-hover:opacity-100">
               {canUpdate && (
-                <button className="btn-ghost !p-1.5" onClick={() => onEdit(c)} title="Редактировать">
+                <Button variant="ghost" size="icon" onClick={() => onEdit(c)} title="Редактировать">
                   <Pencil size={14} />
-                </button>
+                </Button>
               )}
               {canDelete && (
-                <button
-                  className="btn-ghost !p-1.5 text-rose-500"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-rose-500"
                   onClick={() =>
                     confirm({
                       title: "Удалить компанию?",
@@ -366,7 +398,7 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
                   title="Удалить"
                 >
                   <Trash2 size={14} />
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -391,6 +423,14 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
         </div>
       ))}
     </div>
+    <Pagination
+      page={page}
+      perPage={perPage}
+      total={total}
+      onPageChange={setPage}
+      onPerPageChange={setPerPage}
+    />
+    </div>
   );
 }
 
@@ -400,85 +440,76 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
 
 function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: () => void }) {
   const qc = useQueryClient();
-  const [formError, setFormError] = useState<string | null>(null);
-  const [firstName, setFirstName] = useState(initial?.first_name || "");
-  const [lastName, setLastName] = useState(initial?.last_name || "");
-  const [email, setEmail] = useState(initial?.email || "");
-  const [phone, setPhone] = useState(initial?.phone || "");
-  const [position, setPosition] = useState(initial?.position || "");
-  const [companyId, setCompanyId] = useState<number | "">(initial?.company?.id ?? "");
-  const [note, setNote] = useState(initial?.note || "");
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const { data: companies } = useQuery({
     queryKey: ["companies"],
     queryFn: async () => (await api.get<Page<Company>>("/api/companies")).data.items,
   });
 
-  const save = useMutation({
-    mutationFn: async () => {
-      const body = {
-        first_name: firstName,
-        last_name: lastName || null,
-        email: email || null,
-        phone: phone || null,
-        position: position || null,
-        company_id: companyId === "" ? null : Number(companyId),
-        note: note || null,
-      };
-      if (initial) return api.patch(`/api/contacts/${initial.id}`, body);
-      return api.post(`/api/contacts`, body);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactForm>({
+    resolver: zodResolver(contactSchema),
+    defaultValues: {
+      first_name: initial?.first_name || "",
+      last_name: initial?.last_name || "",
+      email: initial?.email || "",
+      phone: initial?.phone || "",
+      position: initial?.position || "",
+      company_id: (initial?.company?.id ?? "") as any,
+      note: initial?.note || "",
     },
-    onSuccess: () => {
+  });
+
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    const body = {
+      first_name: data.first_name,
+      last_name: data.last_name || null,
+      email: data.email || null,
+      phone: data.phone || null,
+      position: data.position || null,
+      company_id: data.company_id === "" || data.company_id == null ? null : Number(data.company_id),
+      note: data.note || null,
+    };
+    try {
+      if (initial) await api.patch(`/api/contacts/${initial.id}`, body);
+      else await api.post(`/api/contacts`, body);
       qc.invalidateQueries({ queryKey: ["contacts"] });
       qc.invalidateQueries({ queryKey: ["companies"] });
       onClose();
-    },
-    onError: (e) => setFormError(extractApiError(e).message),
+    } catch (e) {
+      setServerError(extractApiError(e).message);
+    }
   });
-
-  const invalid = !firstName.trim();
 
   return (
     <Modal open onClose={onClose} title={initial ? "Редактировать контакт" : "Новый контакт"} size="md">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!invalid) save.mutate();
-        }}
-        className="space-y-3"
-      >
+      <form onSubmit={onSubmit} className="space-y-3" noValidate>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Имя *</span>
-            <input className="input" autoFocus value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            <FieldError msg={invalid ? "Обязательно" : undefined} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Фамилия</span>
-            <input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-          </label>
+          <FormField label="Имя" required error={errors.first_name?.message}>
+            <input className="input" autoFocus {...register("first_name")} />
+          </FormField>
+          <FormField label="Фамилия" error={errors.last_name?.message}>
+            <input className="input" {...register("last_name")} />
+          </FormField>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Email</span>
-            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Телефон</span>
-            <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </label>
+          <FormField label="Email" error={errors.email?.message}>
+            <input className="input" type="email" {...register("email")} />
+          </FormField>
+          <FormField label="Телефон" error={errors.phone?.message}>
+            <input className="input" {...register("phone")} />
+          </FormField>
         </div>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Должность</span>
-          <input className="input" value={position} onChange={(e) => setPosition(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Компания</span>
-          <select
-            className="input"
-            value={companyId === "" ? "" : String(companyId)}
-            onChange={(e) => setCompanyId(e.target.value === "" ? "" : Number(e.target.value))}
-          >
+        <FormField label="Должность" error={errors.position?.message}>
+          <input className="input" {...register("position")} />
+        </FormField>
+        <FormField label="Компания">
+          <select className="input" {...register("company_id")}>
             <option value="">— Без компании —</option>
             {companies?.map((c) => (
               <option key={c.id} value={c.id}>
@@ -486,19 +517,16 @@ function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: 
               </option>
             ))}
           </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Заметка</span>
-          <textarea className="input min-h-[80px]" value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-        <FormError msg={formError} />
+        </FormField>
+        <FormField label="Заметка" error={errors.note?.message}>
+          <textarea className="input min-h-[80px]" {...register("note")} />
+        </FormField>
+        <FormError msg={serverError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>
-            Отмена
-          </button>
-          <button type="submit" className="btn-primary" disabled={invalid || save.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>
             {initial ? "Сохранить" : "Создать"}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -507,94 +535,85 @@ function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: 
 
 function CompanyModal({ initial, onClose }: { initial: Company | null; onClose: () => void }) {
   const qc = useQueryClient();
-  const [formError, setFormError] = useState<string | null>(null);
-  const [name, setName] = useState(initial?.name || "");
-  const [industry, setIndustry] = useState(initial?.industry || "");
-  const [website, setWebsite] = useState(initial?.website || "");
-  const [email, setEmail] = useState(initial?.email || "");
-  const [phone, setPhone] = useState(initial?.phone || "");
-  const [taxId, setTaxId] = useState(initial?.tax_id || "");
-  const [address, setAddress] = useState(initial?.address || "");
-  const [note, setNote] = useState(initial?.note || "");
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const save = useMutation({
-    mutationFn: async () => {
-      const body = {
-        name,
-        industry: industry || null,
-        website: website || null,
-        email: email || null,
-        phone: phone || null,
-        tax_id: taxId || null,
-        address: address || null,
-        note: note || null,
-      };
-      if (initial) return api.patch(`/api/companies/${initial.id}`, body);
-      return api.post(`/api/companies`, body);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<CompanyForm>({
+    resolver: zodResolver(companySchema),
+    defaultValues: {
+      name: initial?.name || "",
+      industry: initial?.industry || "",
+      website: initial?.website || "",
+      email: initial?.email || "",
+      phone: initial?.phone || "",
+      tax_id: initial?.tax_id || "",
+      address: initial?.address || "",
+      note: initial?.note || "",
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["companies"] });
-      onClose();
-    },
-    onError: (e) => setFormError(extractApiError(e).message),
   });
 
-  const invalid = !name.trim();
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    const body = {
+      name: data.name,
+      industry: data.industry || null,
+      website: data.website || null,
+      email: data.email || null,
+      phone: data.phone || null,
+      tax_id: data.tax_id || null,
+      address: data.address || null,
+      note: data.note || null,
+    };
+    try {
+      if (initial) await api.patch(`/api/companies/${initial.id}`, body);
+      else await api.post(`/api/companies`, body);
+      qc.invalidateQueries({ queryKey: ["companies"] });
+      onClose();
+    } catch (e) {
+      setServerError(extractApiError(e).message);
+    }
+  });
 
   return (
     <Modal open onClose={onClose} title={initial ? "Редактировать компанию" : "Новая компания"} size="md">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!invalid) save.mutate();
-        }}
-        className="space-y-3"
-      >
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название *</span>
-          <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
-          <FieldError msg={invalid ? "Обязательно" : undefined} />
-        </label>
+      <form onSubmit={onSubmit} className="space-y-3" noValidate>
+        <FormField label="Название" required error={errors.name?.message}>
+          <input className="input" autoFocus {...register("name")} />
+        </FormField>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Отрасль</span>
-            <input className="input" value={industry} onChange={(e) => setIndustry(e.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Сайт</span>
-            <input className="input" placeholder="example.com" value={website} onChange={(e) => setWebsite(e.target.value)} />
-          </label>
+          <FormField label="Отрасль" error={errors.industry?.message}>
+            <input className="input" {...register("industry")} />
+          </FormField>
+          <FormField label="Сайт" error={errors.website?.message}>
+            <input className="input" placeholder="example.com" {...register("website")} />
+          </FormField>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Email</span>
-            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Телефон</span>
-            <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </label>
+          <FormField label="Email" error={errors.email?.message}>
+            <input className="input" type="email" {...register("email")} />
+          </FormField>
+          <FormField label="Телефон" error={errors.phone?.message}>
+            <input className="input" {...register("phone")} />
+          </FormField>
         </div>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">БИН / Tax ID</span>
-          <input className="input" value={taxId} onChange={(e) => setTaxId(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Адрес</span>
-          <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Заметка</span>
-          <textarea className="input min-h-[80px]" value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-        <FormError msg={formError} />
+        <FormField label="БИН / Tax ID" error={errors.tax_id?.message}>
+          <input className="input" {...register("tax_id")} />
+        </FormField>
+        <FormField label="Адрес" error={errors.address?.message}>
+          <input className="input" {...register("address")} />
+        </FormField>
+        <FormField label="Заметка" error={errors.note?.message}>
+          <textarea className="input min-h-[80px]" {...register("note")} />
+        </FormField>
+        <FormError msg={serverError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>
-            Отмена
-          </button>
-          <button type="submit" className="btn-primary" disabled={invalid || save.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>
             {initial ? "Сохранить" : "Создать"}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

@@ -1,12 +1,18 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import {
   FolderPlus, Folder, FileText, Upload, Trash2, Share2, Eye, Download, ChevronLeft,
 } from "lucide-react";
-import { EmptyState, Modal, FieldError, FormError } from "@/components/ui";
+import { EmptyState, Modal, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
+import { Button } from "@/components/lib/Button";
+import { FormField } from "@/components/lib/FormField";
+import { DataTable, Column } from "@/components/lib/DataTable";
 import { fromNow } from "@/lib/date";
 
 type Folder = { id: number; parent_id: number | null; name: string; created_at: string };
@@ -22,6 +28,11 @@ type Doc = {
   created_at: string;
   updated_at: string;
 };
+
+const folderSchema = z.object({
+  name: z.string().trim().min(1, "Обязательно").max(200),
+});
+type FolderForm = z.infer<typeof folderSchema>;
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -96,6 +107,111 @@ export default function DocumentsPage() {
     setFolderId(null);
   };
 
+  const columns: Column<Doc>[] = [
+    {
+      key: "name",
+      header: "Имя",
+      sortable: true,
+      sortAccessor: (d) => d.name,
+      render: (d) => (
+        <div className="flex items-center gap-2">
+          <FileText size={14} className="text-neutral-400" />
+          <span className="truncate font-medium">{d.name}</span>
+          {d.is_public && (
+            <span className="rounded bg-emerald-200 px-1.5 py-0.5 text-[10px] font-medium text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
+              public
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "size",
+      header: "Размер",
+      width: 100,
+      sortable: true,
+      sortAccessor: (d) => d.size,
+      render: (d) => <span className="text-xs text-neutral-500 tabular-nums">{fmtSize(d.size)}</span>,
+    },
+    {
+      key: "versions",
+      header: "Версий",
+      width: 80,
+      render: (d) => <span className="text-xs text-neutral-500 tabular-nums">v{d.version_count}</span>,
+    },
+    {
+      key: "updated",
+      header: "Обновлён",
+      width: 130,
+      sortable: true,
+      sortAccessor: (d) => new Date(d.updated_at),
+      render: (d) => <span className="text-xs text-neutral-500">{fromNow(d.updated_at)}</span>,
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: 160,
+      render: (d) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button variant="ghost" size="icon" onClick={() => setOpenPreview(d)} title="Просмотр" aria-label="Просмотр">
+            <Eye size={13} />
+          </Button>
+          {d.is_public && d.public_slug && (
+            <a
+              href={`/public/documents/${d.public_slug}/download`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-ghost !p-1.5"
+              title="Скачать"
+            >
+              <Download size={13} />
+            </a>
+          )}
+          {d.is_public ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-emerald-600"
+              onClick={() => unpublish.mutate(d.id)}
+              title="Убрать публичность"
+              aria-label="Убрать публичность"
+            >
+              <Share2 size={13} />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => publish.mutate(d.id)}
+              title="Опубликовать"
+              aria-label="Опубликовать"
+            >
+              <Share2 size={13} />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-rose-500"
+            onClick={() =>
+              confirm({
+                title: "Удалить документ?",
+                message: `«${d.name}» будет удалён.`,
+                danger: true,
+                confirmLabel: "Удалить",
+                onConfirm: () => del.mutateAsync(d.id),
+              })
+            }
+            aria-label="Удалить"
+          >
+            <Trash2 size={13} />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -104,9 +220,9 @@ export default function DocumentsPage() {
           <p className="text-sm text-neutral-500">Файловое хранилище с версиями и публичными ссылками</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-secondary" onClick={() => setOpenNewFolder(true)}>
-            <FolderPlus size={15} /> Папка
-          </button>
+          <Button variant="secondary" leftIcon={<FolderPlus size={15} />} onClick={() => setOpenNewFolder(true)}>
+            Папка
+          </Button>
           <input
             ref={uploadRef}
             type="file"
@@ -117,17 +233,22 @@ export default function DocumentsPage() {
               e.target.value = "";
             }}
           />
-          <button className="btn-primary" onClick={() => uploadRef.current?.click()}>
-            <Upload size={15} /> Загрузить файл
-          </button>
+          <Button
+            variant="primary"
+            leftIcon={<Upload size={15} />}
+            isLoading={upload.isPending}
+            onClick={() => uploadRef.current?.click()}
+          >
+            Загрузить файл
+          </Button>
         </div>
       </div>
 
       <div className="flex items-center gap-2 text-sm">
         {breadcrumbs.length > 0 && (
-          <button onClick={goUp} className="btn-ghost !p-1">
+          <Button variant="ghost" size="icon" onClick={goUp} aria-label="Наверх">
             <ChevronLeft size={14} />
-          </button>
+          </Button>
         )}
         <button onClick={goRoot} className="hover:text-brand-600">
           Корень
@@ -163,77 +284,20 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      {isPending ? (
-        <div className="h-40 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
-      ) : !docs || docs.length === 0 ? (
-        <EmptyState icon={<FileText size={32} />} title="В этой папке пусто" description="Загрузите файл или создайте вложенную папку" />
+      {!isPending && (!docs || docs.length === 0) ? (
+        <EmptyState
+          icon={<FileText size={32} />}
+          title="В этой папке пусто"
+          description="Загрузите файл или создайте вложенную папку"
+        />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase text-neutral-500 dark:bg-neutral-900/60">
-              <tr>
-                <th className="px-3 py-2">Имя</th>
-                <th className="px-3 py-2">Размер</th>
-                <th className="px-3 py-2">Версий</th>
-                <th className="px-3 py-2">Обновлён</th>
-                <th className="px-3 py-2 text-right">Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map((d) => (
-                <tr key={d.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <FileText size={14} className="text-neutral-400" />
-                      <span className="truncate font-medium">{d.name}</span>
-                      {d.is_public && (
-                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">public</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-neutral-500 tabular-nums">{fmtSize(d.size)}</td>
-                  <td className="px-3 py-2 text-xs text-neutral-500 tabular-nums">v{d.version_count}</td>
-                  <td className="px-3 py-2 text-xs text-neutral-500">{fromNow(d.updated_at)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-end gap-1">
-                      <button className="btn-ghost !p-1.5" onClick={() => setOpenPreview(d)} title="Просмотр">
-                        <Eye size={13} />
-                      </button>
-                      {d.is_public && d.public_slug && (
-                        <a href={`/public/documents/${d.public_slug}/download`} target="_blank" rel="noreferrer" className="btn-ghost !p-1.5" title="Скачать">
-                          <Download size={13} />
-                        </a>
-                      )}
-                      {d.is_public ? (
-                        <button className="btn-ghost !p-1.5 text-emerald-600" onClick={() => unpublish.mutate(d.id)} title="Убрать публичность">
-                          <Share2 size={13} />
-                        </button>
-                      ) : (
-                        <button className="btn-ghost !p-1.5" onClick={() => publish.mutate(d.id)} title="Опубликовать">
-                          <Share2 size={13} />
-                        </button>
-                      )}
-                      <button
-                        className="btn-ghost !p-1.5 text-rose-500"
-                        onClick={() =>
-                          confirm({
-                            title: "Удалить документ?",
-                            message: `«${d.name}» будет удалён.`,
-                            danger: true,
-                            confirmLabel: "Удалить",
-                            onConfirm: () => del.mutateAsync(d.id),
-                          })
-                        }
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={docs ?? []}
+          rowKey={(d) => d.id}
+          isLoading={isPending}
+          initialSort={{ key: "updated", direction: "desc" }}
+        />
       )}
 
       {openNewFolder && (
@@ -246,36 +310,37 @@ export default function DocumentsPage() {
 
 function NewFolderModal({ parentId, onClose }: { parentId: number | null; onClose: () => void }) {
   const qc = useQueryClient();
-  const [name, setName] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FolderForm>({
+    resolver: zodResolver(folderSchema),
+    defaultValues: { name: "" },
+  });
 
-  const create = useMutation({
-    mutationFn: () => api.post("/api/documents/folders", { name, parent_id: parentId }),
-    onSuccess: () => {
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    try {
+      await api.post("/api/documents/folders", { name: data.name, parent_id: parentId });
       qc.invalidateQueries({ queryKey: ["doc-folders"] });
       onClose();
-    },
-    onError: (e) => setErr(extractApiError(e).message),
+    } catch (e) {
+      setServerError(extractApiError(e).message);
+    }
   });
 
   return (
     <Modal open onClose={onClose} title="Новая папка" size="sm">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) create.mutate();
-        }}
-        className="space-y-3"
-      >
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
-          <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
-          <FieldError msg={!name.trim() ? "Обязательно" : undefined} />
-        </label>
-        <FormError msg={err} />
+      <form onSubmit={onSubmit} className="space-y-3" noValidate>
+        <FormField label="Название" required error={errors.name?.message}>
+          <input className="input" autoFocus {...register("name")} />
+        </FormField>
+        <FormError msg={serverError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!name.trim() || create.isPending}>Создать</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>Создать</Button>
         </div>
       </form>
     </Modal>

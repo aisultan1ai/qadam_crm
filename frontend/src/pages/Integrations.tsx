@@ -4,6 +4,7 @@ import { api, extractApiError } from "@/api/client";
 import { Puzzle, Check, ExternalLink, FolderOpen, Cloud, FileDown, ChevronRight, Loader2, Settings2, X } from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
+import { Button } from "@/components/lib/Button";
 
 type Provider = {
   id: number;
@@ -203,39 +204,42 @@ function ProviderCard({
         {isStorage ? (
           <>
             {connected ? (
-              <button className="btn-secondary flex-1" onClick={onBrowse}>
+              <Button variant="secondary" className="flex-1" onClick={onBrowse}>
                 <FolderOpen size={13} /> Файлы
-              </button>
+              </Button>
             ) : (
-              <button
-                className="btn-secondary flex-1"
+              <Button
+                variant="secondary"
+                className="flex-1"
                 disabled={!configured}
                 onClick={onConnect}
               >
                 <ExternalLink size={13} /> Подключить
-              </button>
+              </Button>
             )}
             {p.code === "dropbox" && (
-              <button className="btn-ghost" onClick={onConfigure} title="Настройки Dropbox App">
+              <Button variant="ghost" onClick={onConfigure} title="Настройки Dropbox App">
                 <Settings2 size={13} />
-              </button>
+              </Button>
             )}
           </>
         ) : (
           <>
-            <button
-              className="btn-secondary flex-1"
+            <Button
+              variant="secondary"
+              className="flex-1"
               disabled={p.status === "coming_soon"}
               onClick={onConnect}
             >
               <ExternalLink size={13} /> Подключить
-            </button>
-            <button
-              className={clsx("btn-ghost", p.is_enabled ? "text-rose-500" : "text-emerald-600")}
+            </Button>
+            <Button
+              variant="ghost"
+              className={clsx(p.is_enabled ? "text-rose-500" : "text-emerald-600")}
               onClick={onToggle}
             >
               {p.is_enabled ? "Выкл." : "Вкл."}
-            </button>
+            </Button>
           </>
         )}
       </div>
@@ -301,12 +305,12 @@ function StorageBrowser({
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            <button className="btn-ghost text-xs text-rose-500" onClick={() => disconnect.mutate()}>
+            <Button variant="ghost" size="sm" className="text-rose-500" onClick={() => disconnect.mutate()}>
               Отключить
-            </button>
-            <button className="btn-ghost" onClick={onClose}>
+            </Button>
+            <Button variant="ghost" onClick={onClose}>
               <X size={16} />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -366,14 +370,15 @@ function StorageBrowser({
                           </span>
                         )}
                       </div>
-                      <button
-                        className="btn-ghost text-xs"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         disabled={importFile.isPending}
                         onClick={() => importFile.mutate(f)}
                         title="Импортировать в Документы"
                       >
                         <FileDown size={13} /> Импортировать
-                      </button>
+                      </Button>
                     </>
                   )}
                 </li>
@@ -444,7 +449,7 @@ function DropboxConfigModal({ onClose }: { onClose: () => void }) {
       <div className="w-full max-w-lg rounded-xl bg-white shadow-xl dark:bg-neutral-900">
         <div className="flex items-center justify-between border-b border-neutral-200 p-4 dark:border-neutral-800">
           <h3 className="text-base font-semibold">Настройки Dropbox App</h3>
-          <button className="btn-ghost" onClick={onClose}><X size={16} /></button>
+          <Button variant="ghost" onClick={onClose}><X size={16} /></Button>
         </div>
         <div className="space-y-4 p-4">
           <details className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
@@ -493,15 +498,15 @@ function DropboxConfigModal({ onClose }: { onClose: () => void }) {
           </label>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button className="btn-ghost" onClick={onClose}>Отмена</button>
-            <button
-              className="btn-primary"
+            <Button variant="ghost" onClick={onClose}>Отмена</Button>
+            <Button
+              variant="primary"
               disabled={!canSubmit || save.isPending}
               onClick={() => save.mutate()}
             >
               {save.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
               Сохранить
-            </button>
+            </Button>
           </div>
         </div>
       </div>

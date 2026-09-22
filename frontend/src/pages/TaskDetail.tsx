@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -40,10 +40,68 @@ function formatActivityDetail(detail: string | null | undefined): string {
   return detail.split(",").map(localizeChange).join(", ");
 }
 import { Avatar, Loader, PriorityChip, StatusChip } from "@/components/ui";
-import { ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile, Pencil } from "lucide-react";
+import { Button } from "@/components/lib/Button";
+import {
+  ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile, Pencil,
+  ChevronRight, Calendar, User as UserIcon, Flag, FolderKanban, UserCircle2,
+  AlertTriangle, Clock, Flame, Eye, Users, BellRing,
+} from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
 import { TaskTimerButton } from "@/components/TaskTimerButton";
+import { SaveIndicator } from "@/components/lib/SaveIndicator";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { fromNow } from "@/lib/date";
+import { UserMultiSelect } from "@/components/lib/UserMultiSelect";
+import type { TaskReminder, UserBrief } from "@/types";
+
+type RoleName = "assignees" | "auditors" | "participants";
+
+const REMINDER_PRESETS: { label: string; kind: "before_deadline" | "before_start"; offset_minutes: number }[] = [
+  { label: "За 1 день до завершения", kind: "before_deadline", offset_minutes: 24 * 60 },
+  { label: "За 3 часа до завершения", kind: "before_deadline", offset_minutes: 3 * 60 },
+  { label: "За 1 час до завершения", kind: "before_deadline", offset_minutes: 60 },
+  { label: "За 1 день до начала", kind: "before_start", offset_minutes: 24 * 60 },
+  { label: "За 1 час до начала", kind: "before_start", offset_minutes: 60 },
+];
+
+function reminderLabel(r: TaskReminder): string {
+  const preset = REMINDER_PRESETS.find((p) => p.kind === r.kind && p.offset_minutes === r.offset_minutes);
+  if (preset) return preset.label;
+  const h = Math.floor(r.offset_minutes / 60);
+  const m = r.offset_minutes % 60;
+  const suffix = r.kind === "before_deadline" ? "до завершения" : "до начала";
+  if (h && m) return `За ${h} ч ${m} мин ${suffix}`;
+  if (h) return `За ${h} ч ${suffix}`;
+  return `За ${m} мин ${suffix}`;
+}
+
+type DeadlineTone = "neutral" | "warning" | "danger" | "muted";
+
+function deadlineInfo(deadline: string | null | undefined): { text: string; tone: DeadlineTone } {
+  if (!deadline) return { text: "Без срока", tone: "muted" };
+  const d = new Date(deadline);
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const days = Math.round(diffMs / 86_400_000);
+  if (days < 0) return { text: `Просрочено на ${Math.abs(days)} дн.`, tone: "danger" };
+  if (days === 0) return { text: "Сегодня — последний день", tone: "warning" };
+  if (days === 1) return { text: "Остался 1 день", tone: "warning" };
+  if (days <= 3) return { text: `Осталось ${days} дн.`, tone: "warning" };
+  return { text: `Осталось ${days} дн.`, tone: "neutral" };
+}
+
+const DEADLINE_TONE: Record<DeadlineTone, string> = {
+  neutral: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+  warning: "bg-amber-200 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
+  danger: "bg-rose-200 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
+  muted: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400",
+};
+
+function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
 
 type TaskPatch = {
   title?: string;
@@ -52,6 +110,7 @@ type TaskPatch = {
   priority?: TaskPriority;
   project_id?: number | null;
   assignee_id?: number | null;
+  start_date?: string | null;
   deadline?: string | null;
 };
 
@@ -84,6 +143,25 @@ export default function TaskDetail() {
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (e) => toast.error("Не удалось сохранить", extractApiError(e).message),
+  });
+
+  const setRole = useMutation({
+    mutationFn: ({ role, user_ids }: { role: RoleName; user_ids: number[] }) =>
+      api.put(`/api/tasks/${taskId}/${role}`, { user_ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    onError: (e) => toast.error("Не удалось изменить участников", extractApiError(e).message),
+  });
+
+  const addReminder = useMutation({
+    mutationFn: (body: { kind: "before_deadline" | "before_start"; offset_minutes: number }) =>
+      api.post(`/api/tasks/${taskId}/reminders`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    onError: (e) => toast.error("Не удалось добавить напоминание", extractApiError(e).message),
+  });
+  const delReminder = useMutation({
+    mutationFn: (rid: number) => api.delete(`/api/tasks/${taskId}/reminders/${rid}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["task", taskId] }),
+    onError: (e) => toast.error("Не удалось удалить напоминание", extractApiError(e).message),
   });
 
   const addComment = useMutation({
@@ -172,8 +250,27 @@ export default function TaskDetail() {
 
   const [comment, setComment] = useState("");
   const [newCheck, setNewCheck] = useState("");
-  const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [titleInitialized, setTitleInitialized] = useState(false);
+
+  useEffect(() => {
+    if (task && !titleInitialized) {
+      setTitleDraft(task.title);
+      setTitleInitialized(true);
+    }
+  }, [task, titleInitialized]);
+
+  const canEditTitle = can("tasks.update");
+  const titleSave = useAutoSave({
+    value: titleDraft,
+    enabled: titleInitialized && canEditTitle,
+    delay: 700,
+    onSave: async (v) => {
+      const trimmed = v.trim();
+      if (!trimmed || trimmed === task?.title) return;
+      await patch.mutateAsync({ title: trimmed });
+    },
+  });
 
   if (!task) return <Loader />;
 
@@ -196,38 +293,105 @@ export default function TaskDetail() {
     }
   };
 
-  return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <div className="min-w-0 space-y-5 lg:col-span-2">
-        <Link to="/tasks" className="inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white">
-          <ArrowLeft size={14} /> Задачи
-        </Link>
+  const currentProject = projects?.find((p) => p.id === task.project_id) ?? null;
+  const dl = deadlineInfo(task.deadline);
+  const isUrgent = task.priority === "critical" || task.priority === "high";
 
-        <div>
-          {editingTitle ? (
-            <div className="flex items-center gap-2">
-              <input className="input text-xl font-semibold" value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} />
-              <button className="btn-primary" onClick={() => { patch.mutate({ title: titleDraft }); setEditingTitle(false); }}>Сохранить</button>
-              <button className="btn-ghost" onClick={() => setEditingTitle(false)}>Отмена</button>
-            </div>
-          ) : (
-            <div className="flex items-start justify-between gap-3">
-              <h1
-                className="cursor-text break-words text-2xl font-semibold tracking-tight"
-                onClick={() => can("tasks.update") && (setTitleDraft(task.title), setEditingTitle(true))}
-              >
-                {task.title}
-              </h1>
-              <TaskTimerButton taskId={taskId} />
-            </div>
+  return (
+    <div className="space-y-5">
+      {/* ============ HEADER: breadcrumbs + title + status + deadline ============ */}
+      <div className="card p-5">
+        <nav aria-label="Хлебные крошки" className="mb-2 flex items-center gap-1.5 text-xs text-neutral-500">
+          <Link to="/tasks" className="inline-flex items-center gap-1 hover:text-brand-600">
+            <ArrowLeft size={12} /> Задачи
+          </Link>
+          {currentProject && (
+            <>
+              <ChevronRight size={12} className="opacity-50" />
+              <Link to={`/projects/${currentProject.id}`} className="hover:text-brand-600">
+                {currentProject.name}
+              </Link>
+            </>
           )}
-          <div className="mt-1 text-xs text-neutral-500">
-            Автор: {task.author?.name || "—"} · создано {new Date(task.created_at).toLocaleString("ru-RU")}
+          <ChevronRight size={12} className="opacity-50" />
+          <span className="truncate font-medium text-neutral-700 dark:text-neutral-300">
+            {task.title}
+          </span>
+        </nav>
+
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              {isUrgent && (
+                <span
+                  className="mt-2 inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-200 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-rose-900 dark:bg-rose-950/50 dark:text-rose-200"
+                  title={task.priority === "critical" ? "Критический приоритет" : "Высокий приоритет"}
+                >
+                  <Flame size={11} /> Срочная
+                </span>
+              )}
+              <input
+                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-2xl font-semibold tracking-tight outline-none focus:ring-0 disabled:cursor-default disabled:opacity-100"
+                value={titleDraft}
+                disabled={!canEditTitle}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => titleSave.flush()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  }
+                  if (e.key === "Escape") setTitleDraft(task.title);
+                }}
+                placeholder="Название задачи"
+                aria-label="Название задачи"
+              />
+            </div>
           </div>
+          <TaskTimerButton taskId={taskId} />
         </div>
 
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <StatusChip status={task.status} showIcon />
+          {task.deadline && (
+            <span className="inline-flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
+              <Calendar size={13} />
+              <span className="tabular-nums">
+                {fmtDateShort(task.created_at)} — {fmtDateShort(task.deadline)}
+              </span>
+            </span>
+          )}
+          <span
+            className={clsx(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+              DEADLINE_TONE[dl.tone],
+            )}
+          >
+            {dl.tone === "danger" && <AlertTriangle size={11} />}
+            {dl.tone === "warning" && <Clock size={11} />}
+            {dl.text}
+          </span>
+        </div>
+
+        <div className="mt-2 flex items-center gap-3 text-xs text-neutral-500">
+          <span className="inline-flex items-center gap-1.5">
+            <Avatar name={task.author?.name} size={16} url={task.author?.avatar_url} />
+            {task.author?.name || "—"}
+            <span className="opacity-70">· создано {fromNow(task.created_at)}</span>
+          </span>
+          <SaveIndicator
+            state={titleSave.state}
+            errorMsg={titleSave.errorMsg}
+            onRetry={titleSave.retry}
+          />
+        </div>
+      </div>
+
+      {/* ============ GRID: left (description/checklist/comments) + right sidebar ============ */}
+      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="min-w-0 space-y-5 lg:col-span-2">
         <div className="card p-5">
-          <h3 className="mb-2 text-sm font-semibold">Описание</h3>
+          <h3 className="mb-2 text-sm font-semibold">Общее описание задачи</h3>
           <TextareaAuto
             disabled={!can("tasks.update")}
             initial={task.description || ""}
@@ -281,13 +445,13 @@ export default function TaskDetail() {
                   }
                 }}
               />
-              <button
-                className="btn-secondary"
+              <Button
+                variant="secondary"
                 onClick={() => newCheck.trim() && (addCheck.mutate(newCheck), setNewCheck(""))}
                 aria-label="Добавить пункт"
               >
                 <Plus size={14} />
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -332,15 +496,17 @@ export default function TaskDetail() {
                     }
                   }}
                 />
-                <button
+                <Button
                   type="submit"
-                  className="btn-primary absolute bottom-2 right-2 !py-1.5 !px-2.5"
+                  variant="primary"
+                  size="sm"
+                  className="absolute bottom-2 right-2 !px-2.5"
                   disabled={!comment.trim() || addComment.isPending}
                   aria-label="Отправить комментарий"
                   title="Отправить (⌘⏎)"
                 >
                   <Send size={14} />
-                </button>
+                </Button>
               </div>
               <div className="mt-1 text-[11px] text-neutral-400">
                 Enter — новая строка · <span className="kbd">⌘</span>+<span className="kbd">⏎</span> — отправить
@@ -373,36 +539,46 @@ export default function TaskDetail() {
         </div>
       </div>
 
-      <aside className="min-w-0 space-y-4">
+      <aside className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
         <div className="card p-5">
-          <div className="space-y-3 text-sm">
-            <Field label="Статус">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Свойства
+          </h3>
+          <div className="space-y-3.5 text-sm">
+            <SidebarField icon={<StatusChip status={task.status} showIcon />} label="Статус">
               <select
-                className="input"
+                className="input !py-1.5"
                 disabled={!can("tasks.change_status")}
                 value={task.status}
                 onChange={(e) => patch.mutate({ status: e.target.value as TaskStatus })}
               >
                 {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
-            </Field>
+            </SidebarField>
 
-            <Field label="Приоритет">
-              <select
-                className="input"
-                disabled={!can("tasks.change_priority")}
-                value={task.priority}
-                onChange={(e) => patch.mutate({ priority: e.target.value as TaskPriority })}
-              >
-                {(["low", "medium", "high", "critical"] as const).map((p) => (
-                  <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
-                ))}
-              </select>
-            </Field>
+            <SidebarField icon={<Calendar size={14} className="text-neutral-400" />} label="Дата начала">
+              <input
+                className="input !py-1.5"
+                type="datetime-local"
+                disabled={!can("tasks.update")}
+                value={task.start_date ? task.start_date.substring(0, 16) : ""}
+                onChange={(e) => patch.mutate({ start_date: e.target.value ? new Date(e.target.value).toISOString() : null })}
+              />
+            </SidebarField>
 
-            <Field label="Проект">
+            <SidebarField icon={<Calendar size={14} className="text-neutral-400" />} label="Дата завершения">
+              <input
+                className="input !py-1.5"
+                type="datetime-local"
+                disabled={!can("tasks.update")}
+                value={task.deadline ? task.deadline.substring(0, 16) : ""}
+                onChange={(e) => patch.mutate({ deadline: e.target.value ? new Date(e.target.value).toISOString() : null })}
+              />
+            </SidebarField>
+
+            <SidebarField icon={<FolderKanban size={14} className="text-neutral-400" />} label="Проект">
               <select
-                className="input"
+                className="input !py-1.5"
                 disabled={!can("tasks.update")}
                 value={task.project_id ?? ""}
                 onChange={(e) => patch.mutate({ project_id: e.target.value ? Number(e.target.value) : null })}
@@ -410,30 +586,133 @@ export default function TaskDetail() {
                 <option value="">—</option>
                 {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-            </Field>
+            </SidebarField>
 
-            <Field label="Исполнитель">
-              <select
-                className="input"
+            <SidebarField icon={<UserIcon size={14} className="text-neutral-400" />} label="Исполнители">
+              <UserMultiSelect
+                value={(task.assignees ?? []) as UserBrief[]}
+                options={(users ?? []) as UserBrief[]}
                 disabled={!can("tasks.assign")}
-                value={task.assignee?.id ?? ""}
-                onChange={(e) => patch.mutate({ assignee_id: e.target.value ? Number(e.target.value) : null })}
-              >
-                <option value="">—</option>
-                {users?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </Field>
-
-            <Field label="Дедлайн">
-              <input
-                className="input"
-                type="datetime-local"
-                disabled={!can("tasks.update")}
-                value={task.deadline ? task.deadline.substring(0, 16) : ""}
-                onChange={(e) => patch.mutate({ deadline: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                onChange={(list) => setRole.mutate({ role: "assignees", user_ids: list.map((u) => u.id) })}
+                placeholder="Добавить исполнителя"
+                emptyText="Не назначено"
               />
-            </Field>
+            </SidebarField>
+
+            <SidebarField icon={<Eye size={14} className="text-neutral-400" />} label="Аудиторы">
+              <UserMultiSelect
+                value={(task.auditors ?? []) as UserBrief[]}
+                options={(users ?? []) as UserBrief[]}
+                disabled={!can("tasks.assign")}
+                onChange={(list) => setRole.mutate({ role: "auditors", user_ids: list.map((u) => u.id) })}
+                placeholder="Добавить аудитора"
+                emptyText="—"
+                size="sm"
+              />
+            </SidebarField>
+
+            <SidebarField icon={<Users size={14} className="text-neutral-400" />} label="Участники">
+              <UserMultiSelect
+                value={(task.participants ?? []) as UserBrief[]}
+                options={(users ?? []) as UserBrief[]}
+                disabled={!can("tasks.assign")}
+                onChange={(list) => setRole.mutate({ role: "participants", user_ids: list.map((u) => u.id) })}
+                placeholder="Добавить участника"
+                emptyText="—"
+                size="sm"
+              />
+            </SidebarField>
+
+            <SidebarField icon={<Flag size={14} className="text-neutral-400" />} label="Приоритет">
+              <div className="flex items-center gap-2">
+                <select
+                  className="input !py-1.5 flex-1"
+                  disabled={!can("tasks.change_priority")}
+                  value={task.priority}
+                  onChange={(e) => patch.mutate({ priority: e.target.value as TaskPriority })}
+                >
+                  {(["low", "medium", "high", "critical"] as const).map((p) => (
+                    <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
+                  ))}
+                </select>
+                <PriorityChip priority={task.priority} />
+              </div>
+            </SidebarField>
+
+            <SidebarField icon={<UserCircle2 size={14} className="text-neutral-400" />} label="Постановщик">
+              <div className="inline-flex items-center gap-1.5">
+                {task.author ? (
+                  <>
+                    <Avatar name={task.author.name} url={task.author.avatar_url} size={20} />
+                    <span>{task.author.name}</span>
+                  </>
+                ) : (
+                  <span className="text-neutral-400">—</span>
+                )}
+              </div>
+            </SidebarField>
           </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <BellRing size={14} className="text-neutral-400" />
+            <h3 className="text-sm font-semibold">Напоминания</h3>
+          </div>
+          {task.reminders.length === 0 ? (
+            <div className="mb-2 text-xs text-neutral-500">Ни одного не настроено</div>
+          ) : (
+            <ul className="mb-2 space-y-1">
+              {task.reminders.map((r) => (
+                <li
+                  key={r.id}
+                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-neutral-50 dark:hover:bg-neutral-800/60"
+                >
+                  <BellRing size={12} className="shrink-0 text-neutral-400" />
+                  <span className="flex-1 truncate">{reminderLabel(r)}</span>
+                  {r.fired_at && (
+                    <span className="text-[10px] text-emerald-600" title={new Date(r.fired_at).toLocaleString("ru-RU")}>
+                      отправлено
+                    </span>
+                  )}
+                  {can("tasks.update") && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 transition-opacity group-hover:opacity-100"
+                      onClick={() => delReminder.mutate(r.id)}
+                      aria-label="Удалить напоминание"
+                    >
+                      <X size={12} />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {can("tasks.update") && (
+            <select
+              className="input !py-1.5 text-xs"
+              value=""
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const preset = REMINDER_PRESETS[Number(e.target.value)];
+                if (preset) addReminder.mutate({ kind: preset.kind, offset_minutes: preset.offset_minutes });
+                e.target.value = "";
+              }}
+              aria-label="Добавить напоминание"
+            >
+              <option value="">+ Добавить напоминание…</option>
+              {REMINDER_PRESETS.map((p, i) => {
+                const already = task.reminders.some((r) => r.kind === p.kind && r.offset_minutes === p.offset_minutes);
+                return (
+                  <option key={i} value={i} disabled={already}>
+                    {p.label}{already ? " · уже добавлено" : ""}
+                  </option>
+                );
+              })}
+            </select>
+          )}
         </div>
 
         <div className="card p-5">
@@ -441,6 +720,7 @@ export default function TaskDetail() {
             <h3 className="text-sm font-semibold">Вложения</h3>
             {can("files.upload") && (
               <label className="btn-secondary cursor-pointer !py-1 !px-2 text-xs">
+                {/* label — не button; используем класс напрямую */}
                 <Paperclip size={12} /> Загрузить
                 <input
                   type="file"
@@ -469,14 +749,28 @@ export default function TaskDetail() {
           </div>
         </div>
 
-        <div className="card p-4">
-          <div className="text-xs text-neutral-500">Текущий статус</div>
-          <div className="mt-2 flex gap-2">
-            <StatusChip status={task.status} />
-            <PriorityChip priority={task.priority} />
-          </div>
-        </div>
       </aside>
+      </div>
+    </div>
+  );
+}
+
+function SidebarField({
+  icon,
+  label,
+  children,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+        {icon}
+        {label}
+      </div>
+      {children}
     </div>
   );
 }
@@ -547,13 +841,15 @@ function ChecklistRow({
         </span>
       )}
       {canEdit && !editing && (
-        <button
-          className="btn-ghost !p-1 opacity-0 transition-opacity group-hover:opacity-100"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="!p-1 opacity-0 transition-opacity group-hover:opacity-100"
           onClick={onRemove}
           aria-label="Удалить пункт"
         >
           <X size={14} />
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -575,12 +871,25 @@ function TextareaAuto({
   placeholder,
 }: {
   initial: string;
-  onSave: (v: string) => void;
+  onSave: (v: string) => Promise<unknown> | void;
   disabled?: boolean;
   placeholder?: string;
 }) {
   const [v, setV] = useState(initial);
-  const [saved, setSaved] = useState(true);
+
+  useEffect(() => {
+    setV(initial);
+  }, [initial]);
+
+  const auto = useAutoSave({
+    value: v,
+    enabled: !disabled,
+    delay: 800,
+    onSave: async (val) => {
+      await onSave(val);
+    },
+  });
+
   return (
     <>
       <textarea
@@ -588,10 +897,13 @@ function TextareaAuto({
         disabled={disabled}
         placeholder={placeholder}
         value={v}
-        onChange={(e) => { setV(e.target.value); setSaved(false); }}
-        onBlur={() => { if (!saved) { onSave(v); setSaved(true); } }}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => auto.flush()}
       />
-      <div className="mt-1 text-[11px] text-neutral-400">{saved ? "Сохранено" : "Изменено — авто-сохранение при потере фокуса"}</div>
+      <div className="mt-1 flex items-center gap-2 text-[11px] text-neutral-400">
+        <SaveIndicator state={auto.state} errorMsg={auto.errorMsg} onRetry={auto.retry} />
+        {auto.state === "idle" && <span>Авто-сохранение при вводе</span>}
+      </div>
     </>
   );
 }
@@ -691,12 +1003,12 @@ function CommentRow({
               }}
             />
             <div className="mt-1 flex items-center gap-2">
-              <button className="btn-primary !py-1 !px-2.5 text-xs" onClick={save} disabled={isSaving || !draft.trim()}>
+              <Button variant="primary" size="sm" className="!py-1 !px-2.5" onClick={save} disabled={isSaving || !draft.trim()}>
                 Сохранить
-              </button>
-              <button className="btn-ghost !py-1 !px-2.5 text-xs" onClick={() => setEditing(false)}>
+              </Button>
+              <Button variant="ghost" size="sm" className="!py-1 !px-2.5" onClick={() => setEditing(false)}>
                 Отмена
-              </button>
+              </Button>
               <span className="text-[11px] text-neutral-400">⌘⏎ сохранить · Esc отменить</span>
             </div>
           </div>
@@ -726,13 +1038,14 @@ function CommentRow({
           })}
           {canReact && (
             <div className="relative">
-              <button
+              <Button
                 onClick={() => setPickerOpen((v) => !v)}
-                className="btn-ghost !p-1 opacity-0 group-hover:opacity-100"
+                className="!p-1 opacity-0 group-hover:opacity-100"
+                variant="ghost"
                 title="Реакция"
               >
                 <Smile size={14} />
-              </button>
+              </Button>
               {pickerOpen && (
                 <div
                   className="absolute left-0 top-full z-10 mt-1 flex flex-wrap gap-1 rounded-lg border border-neutral-200 bg-white p-2 shadow-md dark:border-neutral-800 dark:bg-neutral-900"

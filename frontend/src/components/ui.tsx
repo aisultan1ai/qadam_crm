@@ -83,27 +83,27 @@ export function Avatar({
 // на проверке = янтарь, готово = зелёный, отменено = серый).
 const STATUS_STYLE: Record<TaskStatus, { chip: string; dot: string; icon: ReactNode }> = {
   new: {
-    chip: "bg-pink-100 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300",
+    chip: "bg-pink-200 text-pink-900 dark:bg-pink-950/50 dark:text-pink-200",
     dot: "bg-pink-500",
     icon: <Circle size={10} className="fill-current opacity-70" />,
   },
   in_progress: {
-    chip: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+    chip: "bg-sky-200 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
     dot: "bg-sky-500",
     icon: <Loader2 size={11} />,
   },
   review: {
-    chip: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+    chip: "bg-amber-200 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
     dot: "bg-amber-500",
     icon: <Eye size={11} />,
   },
   done: {
-    chip: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+    chip: "bg-emerald-200 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
     dot: "bg-emerald-500",
     icon: <CheckCircle2 size={11} />,
   },
   cancelled: {
-    chip: "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+    chip: "bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300",
     dot: "bg-neutral-400",
     icon: <XCircle size={11} />,
   },
@@ -130,19 +130,19 @@ export function StatusDot({ status, size = 10 }: { status: TaskStatus; size?: nu
 
 const PRIORITY_STYLE: Record<TaskPriority, { chip: string; icon: ReactNode }> = {
   low: {
-    chip: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+    chip: "bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300",
     icon: <ArrowDown size={11} />,
   },
   medium: {
-    chip: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+    chip: "bg-sky-200 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
     icon: <Minus size={11} />,
   },
   high: {
-    chip: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+    chip: "bg-amber-200 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
     icon: <ArrowUp size={11} />,
   },
   critical: {
-    chip: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+    chip: "bg-rose-200 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
     icon: <Flame size={11} />,
   },
 };

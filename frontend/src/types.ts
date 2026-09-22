@@ -95,9 +95,19 @@ export type TaskListItem = {
   priority: TaskPriority;
   project_id?: number | null;
   assignee?: UserBrief | null;
+  start_date?: string | null;
   deadline?: string | null;
   created_at: string;
   order_index: number;
+};
+
+export type TaskReminderKind = "before_deadline" | "before_start";
+export type TaskReminder = {
+  id: number;
+  kind: TaskReminderKind;
+  offset_minutes: number;
+  fired_at?: string | null;
+  created_at: string;
 };
 
 export type Task = TaskListItem & {
@@ -107,6 +117,10 @@ export type Task = TaskListItem & {
   comments: Comment[];
   attachments: Attachment[];
   activities: ActivityItem[];
+  assignees: UserBrief[];
+  auditors: UserBrief[];
+  participants: UserBrief[];
+  reminders: TaskReminder[];
   updated_at: string;
 };
 

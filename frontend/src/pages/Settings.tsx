@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { api, extractApiError } from "@/api/client";
 import type { Role, PermissionGroup } from "@/types";
 import { Loader, Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import {
   Plus, Copy, Trash2, Save, CreditCard, Palette, UserPlus, Mail, Check,
   Clock, XCircle, RefreshCw, Users, HardDrive, Zap, Sparkles, Shield,
@@ -173,9 +174,9 @@ function RolesSettings() {
       <div className="card p-2">
         <div className="mb-1 flex items-center justify-between px-2 py-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Роли</span>
-          <button className="btn-ghost !p-1" onClick={() => setOpenNew(true)}>
+          <Button variant="ghost" size="icon" className="!p-1" onClick={() => setOpenNew(true)}>
             <Plus size={14} />
-          </button>
+          </Button>
         </div>
         <div className="space-y-0.5">
           {roles?.map((r) => (
@@ -212,11 +213,12 @@ function RolesSettings() {
               </label>
             </div>
             <div className="flex gap-1">
-              <button className="btn-ghost !p-2" title="Копировать" onClick={() => copyRole.mutate(selected.id)}>
+              <Button variant="ghost" className="!p-2" title="Копировать" onClick={() => copyRole.mutate(selected.id)}>
                 <Copy size={16} />
-              </button>
-              <button
-                className="btn-ghost !p-2 text-rose-500"
+              </Button>
+              <Button
+                variant="ghost"
+                className="!p-2 text-rose-500"
                 title="Удалить"
                 onClick={() =>
                   confirm({
@@ -229,7 +231,7 @@ function RolesSettings() {
                 }
               >
                 <Trash2 size={16} />
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -281,9 +283,9 @@ function RolesSettings() {
 
           <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-4 dark:border-neutral-800">
             <span className="text-xs text-neutral-500">{permSet.size} прав выбрано</span>
-            <button className="btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+            <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
               <Save size={14} /> Сохранить
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -317,8 +319,8 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={!name || create.isPending} onClick={() => create.mutate()}>Создать</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" disabled={!name || create.isPending} onClick={() => create.mutate()}>Создать</Button>
         </div>
       </div>
     </Modal>
@@ -486,13 +488,13 @@ function TeamSettings() {
               ))}
             </select>
           </label>
-          <button
-            className="btn-primary"
+          <Button
+            variant="primary"
             disabled={!email.includes("@") || create.isPending}
             onClick={() => create.mutate()}
           >
             <Mail size={15} /> Пригласить
-          </button>
+          </Button>
         </div>
 
         {lastCreated && (
@@ -508,13 +510,14 @@ function TeamSettings() {
                 value={lastCreated.invite_url}
                 onFocus={(e) => e.target.select()}
               />
-              <button
-                className="btn-ghost !py-1.5"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => copyLink(lastCreated.invite_url)}
                 title="Скопировать"
               >
                 <Copy size={15} />
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -551,18 +554,22 @@ function TeamSettings() {
 
                   <div className="flex gap-1">
                     {status !== "accepted" && (
-                      <button
-                        className="btn-ghost !py-1.5 !px-2"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!px-2"
                         title={status === "expired" ? "Создать новую ссылку" : "Обновить и отправить снова"}
                         onClick={() => resend.mutate(inv)}
                         disabled={resend.isPending}
                       >
                         <RefreshCw size={14} />
-                      </button>
+                      </Button>
                     )}
                     {status !== "accepted" && (
-                      <button
-                        className="btn-ghost !py-1.5 !px-2 text-rose-500"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!px-2 text-rose-500"
                         title="Отозвать"
                         onClick={() =>
                           confirm({
@@ -576,7 +583,7 @@ function TeamSettings() {
                         disabled={revoke.isPending}
                       >
                         <XCircle size={14} />
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -720,7 +727,7 @@ function BrandingSettings() {
             Загрузить логотип
           </label>
           {data.logo_url && (
-            <button className="btn-ghost ml-2 text-rose-600" onClick={() => removeLogo.mutate()}>Удалить</button>
+            <Button variant="ghost" className="ml-2 text-rose-600" onClick={() => removeLogo.mutate()}>Удалить</Button>
           )}
           <div className="mt-1 text-xs text-neutral-500">PNG, JPEG, WebP или SVG · до 2 МБ</div>
         </div>
@@ -756,9 +763,9 @@ function BrandingSettings() {
       </label>
 
       <div className="flex justify-end">
-        <button className="btn-primary" onClick={() => save.mutate()} disabled={save.isPending}>
+        <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>
           Сохранить
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1079,14 +1086,14 @@ function BillingSettings() {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn-ghost" onClick={() => setPendingPlan(null)}>Отмена</button>
-              <button
-                className="btn-primary"
+              <Button variant="ghost" onClick={() => setPendingPlan(null)}>Отмена</Button>
+              <Button
+                variant="primary"
                 disabled={subscribe.isPending}
                 onClick={() => subscribe.mutate(pendingPlan.key)}
               >
                 Подтвердить
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
@@ -1288,9 +1295,9 @@ function LeadFormsSettings() {
       <div className="card p-2">
         <div className="mb-1 flex items-center justify-between px-2 py-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Формы</span>
-          <button className="btn-ghost !p-1" title="Создать форму" onClick={() => create.mutate()}>
+          <Button variant="ghost" size="icon" className="!p-1" title="Создать форму" onClick={() => create.mutate()}>
             <Plus size={14} />
-          </button>
+          </Button>
         </div>
         <div className="max-h-[70vh] overflow-y-auto">
           {(forms ?? []).map((f) => (
@@ -1524,9 +1531,9 @@ function LeadFormEditor({
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Поля формы</span>
-            <button className="btn-ghost !py-1 text-xs" onClick={() => setAddFieldOpen(true)}>
+            <Button variant="ghost" size="sm" className="!py-1" onClick={() => setAddFieldOpen(true)}>
               <Plus size={12} className="mr-1" /> Поле
-            </button>
+            </Button>
           </div>
           <div className="space-y-2">
             {draft.fields_config.map((f, idx) => (
@@ -1645,19 +1652,20 @@ function LeadFormEditor({
         </div>
 
         <div className="flex items-center justify-between pt-2">
-          <button
-            className="btn-ghost inline-flex items-center gap-1 text-rose-600 dark:text-rose-400"
+          <Button
+            variant="ghost"
+            className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400"
             onClick={onDelete}
           >
             <Trash2 size={14} /> Удалить форму
-          </button>
-          <button
-            className="btn-primary"
+          </Button>
+          <Button
+            variant="primary"
             disabled={!dirty || save.isPending}
             onClick={() => save.mutate()}
           >
             <Save size={14} className="mr-1" /> Сохранить
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1674,8 +1682,9 @@ function LeadFormEditor({
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Прямая ссылка</div>
           <div className="flex gap-1">
             <input className="input flex-1 text-xs" readOnly value={directLink} onClick={(e) => (e.target as HTMLInputElement).select()} />
-            <button
-              className="btn-ghost !px-2"
+            <Button
+              variant="ghost"
+              className="!px-2"
               title="Скопировать"
               onClick={() => {
                 navigator.clipboard.writeText(directLink);
@@ -1683,7 +1692,7 @@ function LeadFormEditor({
               }}
             >
               <Copy size={13} />
-            </button>
+            </Button>
           </div>
           <div className="mb-2 mt-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">Embed-код</div>
           <textarea
@@ -1692,15 +1701,17 @@ function LeadFormEditor({
             value={embedCode}
             onClick={(e) => (e.target as HTMLTextAreaElement).select()}
           />
-          <button
-            className="btn-ghost mt-1 !py-1 text-xs"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-1 !py-1"
             onClick={() => {
               navigator.clipboard.writeText(embedCode);
               toast.success("Embed-код скопирован");
             }}
           >
             <Copy size={12} className="mr-1" /> Скопировать
-          </button>
+          </Button>
         </div>
 
         <div className="card p-4">
@@ -1711,8 +1722,9 @@ function LeadFormEditor({
           <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">POST</div>
           <div className="flex gap-1">
             <input className="input flex-1 font-mono text-[11px]" readOnly value={apiEndpoint} onClick={(e) => (e.target as HTMLInputElement).select()} />
-            <button
-              className="btn-ghost !px-2"
+            <Button
+              variant="ghost"
+              className="!px-2"
               title="Скопировать URL"
               onClick={() => {
                 navigator.clipboard.writeText(apiEndpoint);
@@ -1720,7 +1732,7 @@ function LeadFormEditor({
               }}
             >
               <Copy size={13} />
-            </button>
+            </Button>
           </div>
 
           <div className="mt-3 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
@@ -1734,15 +1746,17 @@ function LeadFormEditor({
           />
           <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
             <span>Ответ: <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-800">{`{"message":"..."}`}</code></span>
-            <button
-              className="btn-ghost !py-1 text-xs"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="!py-1"
               onClick={() => {
                 navigator.clipboard.writeText(apiCurl);
                 toast.success("curl скопирован");
               }}
             >
               <Copy size={12} className="mr-1" /> Скопировать
-            </button>
+            </Button>
           </div>
           <div className="mt-2 rounded-md bg-neutral-50 p-2 text-[11px] text-neutral-500 dark:bg-neutral-800/40">
             <b>Совет:</b> добавьте скрытое поле <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-800">website_url</code> —
@@ -1866,10 +1880,10 @@ function AddFieldModal({
         </label>
 
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!canSubmit}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
             <Plus size={13} /> Добавить
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -2175,14 +2189,14 @@ function ManagerAvailabilitySettings() {
                   </div>
                   <div className="text-xs text-neutral-500">{row.user_email}</div>
                 </div>
-                <button
-                  className="btn-primary"
+                <Button
+                  variant="primary"
                   disabled={!rowDirty || !canEdit || save.isPending}
                   onClick={() => save.mutate(row.user_id)}
                 >
                   <Save size={13} className="mr-1" />
                   Сохранить
-                </button>
+                </Button>
               </div>
 
               <fieldset disabled={!canEdit} className="space-y-3">
@@ -2440,9 +2454,9 @@ function MessengersSettings() {
           <div className="card p-2">
             <div className="mb-1 flex items-center justify-between px-2 py-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Каналы</span>
-              <button className="btn-ghost !p-1" title="Подключить канал" onClick={() => setCreating(true)}>
+              <Button variant="ghost" size="icon" className="!p-1" title="Подключить канал" onClick={() => setCreating(true)}>
                 <Plus size={14} />
-              </button>
+              </Button>
             </div>
             <div className="max-h-[70vh] overflow-y-auto">
               {isPending && <Loader />}
@@ -2668,16 +2682,16 @@ function CreateChannelModal({
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Отмена
-          </button>
-          <button
-            className="btn-primary"
+          </Button>
+          <Button
+            variant="primary"
             disabled={!canCreate || create.isPending}
             onClick={() => create.mutate()}
           >
             Подключить
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -2776,15 +2790,16 @@ function ChannelEditor({
           <div className="flex gap-1">
             <input className="input flex-1 text-xs font-mono" readOnly value={webhookUrl}
               onClick={(e) => (e.target as HTMLInputElement).select()} />
-            <button
-              className="btn-ghost !px-2"
+            <Button
+              variant="ghost"
+              className="!px-2"
               onClick={() => {
                 navigator.clipboard.writeText(webhookUrl);
                 toast.success("URL скопирован");
               }}
             >
               <Copy size={13} />
-            </button>
+            </Button>
           </div>
           <p className="mt-1 text-[11px] text-neutral-500">
             {channel.kind === "telegram"
@@ -2800,24 +2815,24 @@ function ChannelEditor({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
-            <button className="btn-secondary" onClick={() => test.mutate()} disabled={test.isPending}>
+            <Button variant="secondary" onClick={() => test.mutate()} disabled={test.isPending}>
               {test.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Проверить подключение
-            </button>
+            </Button>
             {channel.kind === "telegram" && (
-              <button className="btn-secondary" onClick={() => setWh.mutate()} disabled={setWh.isPending}>
+              <Button variant="secondary" onClick={() => setWh.mutate()} disabled={setWh.isPending}>
                 {setWh.isPending ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                 Установить webhook у бота
-              </button>
+              </Button>
             )}
           </div>
           <div className="flex gap-2">
-            <button className="btn-ghost text-rose-600" onClick={onDelete}>
+            <Button variant="ghost" className="text-rose-600" onClick={onDelete}>
               <Trash2 size={14} /> Удалить канал
-            </button>
-            <button className="btn-primary" onClick={() => save.mutate()} disabled={save.isPending}>
+            </Button>
+            <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>
               <Save size={14} /> Сохранить
-            </button>
+            </Button>
           </div>
         </div>
         {testResult && (
@@ -2856,9 +2871,9 @@ function AutoReplyRulesEditor({ channelId }: { channelId: number }) {
     <div className="card space-y-2 p-5">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">Автоответы</h3>
-        <button className="btn-ghost !py-1 text-xs" onClick={() => setCreating(true)}>
+        <Button variant="ghost" size="sm" className="!py-1" onClick={() => setCreating(true)}>
           <Plus size={12} className="mr-1" /> Правило
-        </button>
+        </Button>
       </div>
       {(rules?.length ?? 0) === 0 && (
         <div className="rounded border border-dashed border-neutral-300 p-4 text-center text-xs text-neutral-500 dark:border-neutral-700">
@@ -2890,16 +2905,18 @@ function AutoReplyRulesEditor({ channelId }: { channelId: number }) {
               </div>
             </div>
             <div className="flex gap-1">
-              <button className="btn-ghost !p-1.5" title="Редактировать" onClick={() => setEditing(r)}>
+              <Button variant="ghost" size="icon" title="Редактировать" onClick={() => setEditing(r)}>
                 <Save size={13} />
-              </button>
-              <button
-                className="btn-ghost !p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                 title="Удалить"
                 onClick={() => del.mutate(r.id)}
               >
                 <Trash2 size={13} />
-              </button>
+              </Button>
             </div>
           </div>
         ))}
@@ -3024,10 +3041,10 @@ function AutoReplyRuleModal({
           </label>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={!text.trim() || save.isPending} onClick={() => save.mutate()}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" disabled={!text.trim() || save.isPending} onClick={() => save.mutate()}>
             {isEdit ? "Сохранить" : "Создать"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -3059,9 +3076,9 @@ function MessageTemplatesSettings() {
         <p className="text-sm text-neutral-500">
           Шаблоны быстрых ответов — доступны менеджерам в inbox при ответе клиенту.
         </p>
-        <button className="btn-primary" onClick={() => setCreating(true)}>
+        <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus size={16} /> Новый шаблон
-        </button>
+        </Button>
       </div>
       <div className="grid gap-2">
         {(templates ?? []).map((t) => (
@@ -3082,16 +3099,18 @@ function MessageTemplatesSettings() {
               <p className="mt-1 line-clamp-2 text-sm text-neutral-600 dark:text-neutral-400">{t.body}</p>
             </div>
             <div className="flex gap-1">
-              <button className="btn-ghost !p-1.5" title="Редактировать" onClick={() => setEditing(t)}>
+              <Button variant="ghost" size="icon" title="Редактировать" onClick={() => setEditing(t)}>
                 <Save size={13} />
-              </button>
-              <button
-                className="btn-ghost !p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                 title="Удалить"
                 onClick={() => del.mutate(t.id)}
               >
                 <Trash2 size={13} />
-              </button>
+              </Button>
             </div>
           </div>
         ))}
@@ -3181,12 +3200,12 @@ function TemplateModal({
           </label>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Отмена
-          </button>
-          <button className="btn-primary" disabled={!name.trim() || !body.trim() || save.isPending} onClick={() => save.mutate()}>
+          </Button>
+          <Button variant="primary" disabled={!name.trim() || !body.trim() || save.isPending} onClick={() => save.mutate()}>
             {isEdit ? "Сохранить" : "Создать"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -3421,18 +3440,19 @@ function MailboxSettings() {
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
           <div className="flex gap-2">
-            <button
-              className="btn-secondary"
+            <Button
+              variant="secondary"
               disabled={test.isPending || !mb}
               onClick={() => test.mutate()}
               title="Проверить IMAP + SMTP подключение"
             >
               {test.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Проверить подключение
-            </button>
+            </Button>
             {mb && (
-              <button
-                className="btn-ghost text-rose-600"
+              <Button
+                variant="ghost"
+                className="text-rose-600"
                 onClick={async () => {
                   if (await confirm({ title: "Удалить mailbox?", message: "Все threads и сообщения будут удалены.", confirmLabel: "Удалить" })) {
                     del.mutate();
@@ -3440,13 +3460,13 @@ function MailboxSettings() {
                 }}
               >
                 <Trash2 size={14} /> Удалить
-              </button>
+              </Button>
             )}
           </div>
-          <button className="btn-primary" onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>
             {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Сохранить
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -3566,9 +3586,9 @@ function BookingSettings() {
       <div className="card p-2">
         <div className="mb-1 flex items-center justify-between px-2 py-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Страницы</span>
-          <button className="btn-ghost !p-1" onClick={() => create.mutate()} title="Новая">
+          <Button variant="ghost" size="icon" className="!p-1" onClick={() => create.mutate()} title="Новая">
             <Plus size={14} />
-          </button>
+          </Button>
         </div>
         <div className="max-h-[70vh] overflow-y-auto">
           {(pages ?? []).length === 0 && (
@@ -3735,15 +3755,16 @@ function BookingPageEditor({
             <div className="flex gap-1">
               <input className="input flex-1 text-xs" readOnly value={publicUrl}
                 onClick={(e) => (e.target as HTMLInputElement).select()} />
-              <button
-                className="btn-ghost !px-2"
+              <Button
+                variant="ghost"
+                className="!px-2"
                 onClick={() => {
                   navigator.clipboard.writeText(publicUrl);
                   toast.success("Скопировано");
                 }}
               >
                 <Copy size={13} />
-              </button>
+              </Button>
               <a
                 className="btn-ghost !px-2"
                 href={publicUrl}
@@ -3864,9 +3885,9 @@ function BookingPageEditor({
         <div>
           <div className="mb-2 flex items-center justify-between">
             <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Дополнительные вопросы</div>
-            <button className="btn-ghost !py-1 text-xs" onClick={addQuestion}>
+            <Button variant="ghost" size="sm" className="!py-1" onClick={addQuestion}>
               <Plus size={12} className="mr-1" /> Вопрос
-            </button>
+            </Button>
           </div>
           <div className="space-y-2">
             {(draft.questions ?? []).map((q, idx) => (
@@ -3899,12 +3920,12 @@ function BookingPageEditor({
         </div>
 
         <div className="flex items-center justify-between pt-2">
-          <button className="btn-ghost inline-flex items-center gap-1 text-rose-600" onClick={onDelete}>
+          <Button variant="ghost" className="inline-flex items-center gap-1 text-rose-600" onClick={onDelete}>
             <Trash2 size={14} /> Удалить страницу
-          </button>
-          <button className="btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+          </Button>
+          <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
             <Save size={14} className="mr-1" /> Сохранить
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -4052,27 +4073,28 @@ function IntegrationsSettings() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               {!s?.connected && (
-                <button
-                  className="btn-primary"
+                <Button
+                  variant="primary"
                   onClick={() => connect.mutate()}
                   disabled={!s?.configured || connect.isPending}
                 >
                   {connect.isPending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
                   Подключить Google
-                </button>
+                </Button>
               )}
               {s?.connected && (
                 <>
-                  <button
-                    className="btn-secondary"
+                  <Button
+                    variant="secondary"
                     onClick={() => syncNow.mutate()}
                     disabled={syncNow.isPending}
                   >
                     {syncNow.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                     Синхронизировать сейчас
-                  </button>
-                  <button
-                    className="btn-ghost text-rose-500"
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-rose-500"
                     onClick={async () => {
                       const ok = await confirm({
                         title: "Отключить Google Calendar?",
@@ -4085,7 +4107,7 @@ function IntegrationsSettings() {
                     disabled={disconnect.isPending}
                   >
                     <LogOut size={14} /> Отключить
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -4227,17 +4249,18 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              className="btn-primary"
+            <Button
+              variant="primary"
               onClick={() => save.mutate()}
               disabled={!canSubmit || save.isPending}
             >
               {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               Сохранить
-            </button>
+            </Button>
             {(cfgQ.data?.client_id || cfgQ.data?.has_secret) && (
-              <button
-                className="btn-ghost text-rose-500"
+              <Button
+                variant="ghost"
+                className="text-rose-500"
                 disabled={clear.isPending}
                 onClick={async () => {
                   const ok = await confirm({
@@ -4250,7 +4273,7 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
                 }}
               >
                 <Trash2 size={14} /> Очистить
-              </button>
+              </Button>
             )}
           </div>
         </div>

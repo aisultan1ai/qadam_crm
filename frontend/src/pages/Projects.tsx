@@ -9,6 +9,7 @@ import clsx from "clsx";
 import type { Project, UserBrief, Page, User } from "@/types";
 import { useAuth } from "@/store/auth";
 import { Modal, Avatar, EmptyState, FieldError, FormError } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { SkeletonCard } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
@@ -65,9 +66,9 @@ export default function Projects() {
           <p className="text-sm text-neutral-500">{data?.length ?? 0} проектов</p>
         </div>
         {canCreate && (
-          <button className="btn-primary" onClick={() => setOpenNew(true)}>
+          <Button variant="primary" onClick={() => setOpenNew(true)}>
             <Plus size={16} /> Новый проект
-          </button>
+          </Button>
         )}
       </div>
 
@@ -115,13 +116,13 @@ export default function Projects() {
           title={q ? "По запросу ничего не найдено" : "Проектов пока нет"}
           description={q ? "Попробуйте другой запрос или сбросьте поиск" : "Создайте первый проект, чтобы начать работу"}
           action={q ? (
-            <button className="btn-secondary" onClick={() => setQ("")}>
+            <Button variant="secondary" onClick={() => setQ("")}>
               Сбросить поиск
-            </button>
+            </Button>
           ) : canCreate ? (
-            <button className="btn-primary" onClick={() => setOpenNew(true)}>
+            <Button variant="primary" onClick={() => setOpenNew(true)}>
               <Plus size={16} /> Новый проект
-            </button>
+            </Button>
           ) : undefined}
         />
       ) : (
@@ -138,18 +139,21 @@ export default function Projects() {
                 </Link>
                 <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                   {can("projects.archive") && (
-                    <button
-                      className="btn-ghost !p-1.5"
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       title={p.is_archived ? "Вернуть" : "Архивировать"}
                       aria-label={p.is_archived ? `Вернуть проект «${p.name}» из архива` : `Архивировать проект «${p.name}»`}
                       onClick={() => archive.mutate(p.id)}
                     >
                       {p.is_archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
-                    </button>
+                    </Button>
                   )}
                   {can("projects.delete") && (
-                    <button
-                      className="btn-ghost !p-1.5 text-rose-500"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-rose-500"
                       title="Удалить"
                       aria-label={`Удалить проект «${p.name}»`}
                       onClick={() =>
@@ -163,7 +167,7 @@ export default function Projects() {
                       }
                     >
                       <Trash2 size={15} />
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -299,10 +303,10 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
         </div>
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!isValid || create.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!isValid || create.isPending}>
             Создать
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

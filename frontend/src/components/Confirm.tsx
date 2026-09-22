@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "./ui";
+import { Button } from "@/components/lib/Button";
 
 type ConfirmOptions = {
   title?: string;
@@ -70,18 +71,18 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         <div className="space-y-4">
           <div className="text-sm text-neutral-600 dark:text-neutral-300">{pending?.message}</div>
           <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => close(false)} disabled={busy}>
+            <Button variant="secondary" onClick={() => close(false)} disabled={busy}>
               {pending?.cancelLabel ?? "Отмена"}
-            </button>
-            <button
-              className={pending?.danger ? "btn-danger" : "btn-primary"}
+            </Button>
+            <Button
+              variant={pending?.danger ? "danger" : "primary"}
               autoFocus
               disabled={busy}
               onClick={handleConfirm}
             >
               {busy && <Loader2 size={14} className="animate-spin" />}
               {pending?.confirmLabel ?? "Подтвердить"}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

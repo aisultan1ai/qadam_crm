@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/store/auth";
 import { Avatar, Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import {
@@ -121,9 +122,9 @@ export default function Profile() {
               <Award size={16} /> Скиллы
             </h3>
             {canManageSkills && (
-              <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setSkillsOpen(true)}>
+              <Button variant="ghost" size="sm" className="!px-2 !py-1" onClick={() => setSkillsOpen(true)}>
                 <Plus size={13} /> Управлять
-              </button>
+              </Button>
             )}
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -149,9 +150,9 @@ export default function Profile() {
               <Target size={16} /> Цели
             </h3>
             {canManageGoals && (
-              <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setGoalOpen("new")}>
+              <Button variant="ghost" size="sm" className="!px-2 !py-1" onClick={() => setGoalOpen("new")}>
                 <Plus size={13} /> Новая цель
-              </button>
+              </Button>
             )}
           </div>
           <div className="space-y-2">
@@ -317,13 +318,13 @@ function ProfileHeader({
           )}
           {isSelf && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <button type="button" onClick={() => fileRef.current?.click()} className="btn-ghost !px-2 !py-1" disabled={upload.isPending}>
+              <Button variant="ghost" size="sm" className="!px-2 !py-1" onClick={() => fileRef.current?.click()} disabled={upload.isPending}>
                 <Camera size={13} /> {user.avatar_url ? "Сменить аватар" : "Загрузить аватар"}
-              </button>
+              </Button>
               {user.avatar_url && (
-                <button type="button" onClick={() => removeAvatar.mutate()} className="btn-ghost !px-2 !py-1 text-rose-500" disabled={removeAvatar.isPending}>
+                <Button variant="ghost" size="sm" className="!px-2 !py-1 text-rose-500" onClick={() => removeAvatar.mutate()} disabled={removeAvatar.isPending}>
                   <Trash2 size={13} /> Удалить
-                </button>
+                </Button>
               )}
               {upload.isPending && <span className="text-neutral-500">Загрузка…</span>}
             </div>
@@ -335,9 +336,9 @@ function ProfileHeader({
         </div>
 
         {canEdit && (
-          <button type="button" onClick={onEdit} className="btn-ghost !p-2" title="Редактировать" aria-label="Редактировать">
+          <Button variant="ghost" className="!p-2" onClick={onEdit} title="Редактировать" aria-label="Редактировать">
             <Pencil size={16} />
-          </button>
+          </Button>
         )}
       </div>
 
@@ -496,9 +497,9 @@ function EditProfileModal({
         {isSelf && (
           <div className="border-t border-neutral-100 pt-4 dark:border-neutral-800">
             {!showPasswordFields ? (
-              <button type="button" className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setShowPasswordFields(true)}>
+              <Button variant="ghost" size="sm" className="!px-2 !py-1" onClick={() => setShowPasswordFields(true)}>
                 <KeyRound size={14} /> Сменить пароль
-              </button>
+              </Button>
             ) : (
               <div className="space-y-3">
                 <label className="block">
@@ -531,10 +532,10 @@ function EditProfileModal({
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!canSubmit || save.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit || save.isPending}>
             <Check size={14} /> Сохранить
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -649,19 +650,18 @@ function ManageSkillsModal({
               onChange={(e) => setNewSkillName(e.target.value)}
               placeholder="Название скилла"
             />
-            <button
-              type="button"
-              className="btn-primary"
+            <Button
+              variant="primary"
               disabled={newSkillName.trim().length === 0 || createSkill.isPending}
               onClick={() => createSkill.mutate()}
             >
               <Plus size={14} /> Добавить
-            </button>
+            </Button>
           </div>
         </div>
 
         <div className="flex justify-end pt-2">
-          <button type="button" className="btn-primary" onClick={onClose}>Готово</button>
+          <Button variant="primary" onClick={onClose}>Готово</Button>
         </div>
       </div>
     </Modal>
@@ -866,16 +866,16 @@ function GoalModal({
         <div className="flex justify-between gap-2 pt-2">
           <div>
             {!isNew && canManage && (
-              <button type="button" className="btn-ghost text-rose-500" onClick={() => del.mutate()} disabled={del.isPending}>
+              <Button variant="ghost" className="text-rose-500" onClick={() => del.mutate()} disabled={del.isPending}>
                 <Trophy size={14} /> Удалить
-              </button>
+              </Button>
             )}
           </div>
           <div className="flex gap-2">
-            <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-            <button type="submit" className="btn-primary" disabled={form.title.trim().length === 0 || save.isPending}>
+            <Button variant="ghost" onClick={onClose}>Отмена</Button>
+            <Button type="submit" variant="primary" disabled={form.title.trim().length === 0 || save.isPending}>
               <Check size={14} /> Сохранить
-            </button>
+            </Button>
           </div>
         </div>
       </form>

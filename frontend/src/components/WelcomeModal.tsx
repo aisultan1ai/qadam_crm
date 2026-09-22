@@ -6,6 +6,7 @@ import { FolderKanban, Sparkles } from "lucide-react";
 import { api } from "@/api/client";
 import { useAuth } from "@/store/auth";
 import { Modal } from "./ui";
+import { Button } from "@/components/lib/Button";
 
 const DISMISS_KEY = (tenantId: number) => `qadam:welcome-dismissed:${tenantId}`;
 
@@ -91,17 +92,17 @@ export default function WelcomeModal() {
         </div>
 
         <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
-          <button type="button" className="btn-ghost" onClick={dismiss}>
+          <Button variant="ghost" onClick={dismiss}>
             Пропустить
-          </button>
+          </Button>
           {can("projects.create") ? (
-            <button type="button" className="btn-primary" onClick={goToProjects}>
+            <Button variant="primary" onClick={goToProjects}>
               Создать первый проект
-            </button>
+            </Button>
           ) : (
-            <button type="button" className="btn-primary" onClick={dismiss}>
+            <Button variant="primary" onClick={dismiss}>
               Начать работу
-            </button>
+            </Button>
           )}
         </div>
       </div>

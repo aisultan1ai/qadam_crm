@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { Project, TaskListItem, Page, User } from "@/types";
 import { Loader, Avatar, StatusChip, PriorityChip } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { ArrowLeft, Calendar, Plus, ListTodo, CheckCircle2, AlertTriangle, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/store/auth";
@@ -84,14 +85,14 @@ export default function ProjectDetail() {
         </div>
         <div className="flex items-center gap-3">
           {projectChannel && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={() => nav(`/messenger/${projectChannel.id}`)}
-              className="btn-ghost inline-flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5"
               title="Открыть чат проекта"
             >
               <MessageSquare size={14} /> Чат
-            </button>
+            </Button>
           )}
           {project.deadline && (
             <div className="flex items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-300">
@@ -130,9 +131,9 @@ export default function ProjectDetail() {
         <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
           <h2 className="text-sm font-semibold">Задачи проекта</h2>
           {canCreate && (
-            <button className="btn-primary !py-1.5 !px-3 text-xs" onClick={() => setOpenNew(true)}>
+            <Button variant="primary" size="sm" className="!px-3" onClick={() => setOpenNew(true)}>
               <Plus size={14} /> Новая задача
-            </button>
+            </Button>
           )}
         </div>
         {isLoading ? (

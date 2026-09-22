@@ -26,6 +26,7 @@ import WelcomeModal from "./WelcomeModal";
 import { TimerWidget } from "./TimerWidget";
 import { LogoMark } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { Button } from "@/components/lib/Button";
 import { useRealtimeUpdates } from "@/lib/ws";
 import { applyBrandColor } from "@/lib/branding";
 import { useToast } from "./Toast";
@@ -265,23 +266,25 @@ export default function Layout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-white px-3 text-neutral-900 backdrop-blur sm:gap-3 sm:px-4 dark:border-neutral-800 dark:bg-[#0F0F14] dark:text-neutral-100">
-          <button
-            className="btn-ghost !p-2 md:hidden"
+          <Button
+            variant="ghost"
+            className="!p-2 md:hidden"
             onClick={() => setMobileNavOpen(true)}
             aria-label="Открыть меню"
           >
             <Menu size={18} />
-          </button>
+          </Button>
 
-          <button
-            className="btn-ghost hidden !p-2 md:inline-flex"
+          <Button
+            variant="ghost"
+            className="hidden !p-2 md:inline-flex"
             onClick={toggleCollapsed}
             title={collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}
             aria-label={collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}
             aria-pressed={collapsed}
           >
             {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          </button>
+          </Button>
 
           <button
             className="group flex flex-1 items-center gap-2 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-white dark:border-neutral-700/60 dark:bg-[#17171F] dark:hover:border-neutral-600 dark:hover:bg-[#2b2b34] max-w-md"
@@ -300,13 +303,14 @@ export default function Layout() {
 
           <TenantSwitcher />
 
-          <button className="btn-ghost !p-2" onClick={toggle} title="Тема" aria-label="Переключить тему">
+          <Button variant="ghost" className="!p-2" onClick={toggle} title="Тема" aria-label="Переключить тему">
             {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
+          </Button>
 
           <div className="relative" ref={notifRef}>
-            <button
-              className="btn-ghost relative !p-2"
+            <Button
+              variant="ghost"
+              className="relative !p-2"
               onClick={() => setNotifOpen((v) => !v)}
               aria-label="Уведомления"
               aria-expanded={notifOpen}
@@ -335,7 +339,7 @@ export default function Layout() {
                   )}
                 </>
               )}
-            </button>
+            </Button>
             {notifOpen && (
               <div
                 className="card absolute right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] animate-slide-up p-0"

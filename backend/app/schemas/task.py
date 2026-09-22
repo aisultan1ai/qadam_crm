@@ -83,6 +83,23 @@ class ActivityOut(BaseModel):
     user: Optional[UserBrief] = None
 
 
+class TaskReminderBase(BaseModel):
+    # before_deadline | before_start
+    kind: str = "before_deadline"
+    offset_minutes: int
+
+
+class TaskReminderCreate(TaskReminderBase):
+    pass
+
+
+class TaskReminderOut(TaskReminderBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    fired_at: Optional[datetime] = None
+    created_at: datetime
+
+
 class TaskBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -90,6 +107,7 @@ class TaskBase(BaseModel):
     priority: TaskPriority = TaskPriority.medium
     project_id: Optional[int] = None
     assignee_id: Optional[int] = None
+    start_date: Optional[datetime] = None
     deadline: Optional[datetime] = None
 
 
@@ -99,6 +117,11 @@ class TaskCreate(TaskBase):
     recurrence_rule: Optional[str] = None
     custom_status_id: Optional[int] = None
     custom_data: Optional[dict[str, Any]] = None
+    # Planfix-роли (по желанию — при создании можно сразу назначить)
+    assignee_ids: Optional[List[int]] = None
+    auditor_ids: Optional[List[int]] = None
+    participant_ids: Optional[List[int]] = None
+    reminders: Optional[List[TaskReminderCreate]] = None
 
 
 class TaskUpdate(BaseModel):
@@ -108,6 +131,7 @@ class TaskUpdate(BaseModel):
     priority: Optional[TaskPriority] = None
     project_id: Optional[int] = None
     assignee_id: Optional[int] = None
+    start_date: Optional[datetime] = None
     deadline: Optional[datetime] = None
     order_index: Optional[int] = None
     parent_task_id: Optional[int] = None
@@ -130,6 +154,7 @@ class TaskListItem(BaseModel):
     priority: TaskPriority
     project_id: Optional[int] = None
     assignee: Optional[UserBrief] = None
+    start_date: Optional[datetime] = None
     deadline: Optional[datetime] = None
     created_at: datetime
     order_index: int
@@ -142,6 +167,11 @@ class TaskOut(TaskListItem):
     comments: List[CommentOut] = []
     attachments: List[AttachmentOut] = []
     activities: List[ActivityOut] = []
+    # Planfix-style роли (множественные)
+    assignees: List[UserBrief] = []
+    auditors: List[UserBrief] = []
+    participants: List[UserBrief] = []
+    reminders: List[TaskReminderOut] = []
     updated_at: datetime
     parent_task_id: Optional[int] = None
     custom_status_id: Optional[int] = None
@@ -150,3 +180,8 @@ class TaskOut(TaskListItem):
     recurrence_next_at: Optional[datetime] = None
     inbox_token: Optional[str] = None
     custom_data: dict[str, Any] = {}
+
+
+class TaskUserRefs(BaseModel):
+    """Массовая замена списков ролей для одной задачи."""
+    user_ids: List[int]

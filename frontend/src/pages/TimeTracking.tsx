@@ -7,6 +7,7 @@ import { api, extractApiError } from "@/api/client";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
 import { Loader } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 
 type TimeEntry = {
   id: number;
@@ -209,21 +210,21 @@ function WeekView({
     <div className="card space-y-4 p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button className="btn-ghost !p-2" onClick={onPrev} aria-label="Прошлая неделя">
+          <Button variant="ghost" size="icon" onClick={onPrev} aria-label="Прошлая неделя">
             <ChevronLeft size={16} />
-          </button>
+          </Button>
           <div className="text-sm font-medium tabular-nums">
             {weekStart.toLocaleDateString("ru-RU")} — {new Date(weekEnd.getTime() - 86_400_000).toLocaleDateString("ru-RU")}
           </div>
-          <button className="btn-ghost !p-2" onClick={onNext} aria-label="Следующая неделя">
+          <Button variant="ghost" size="icon" onClick={onNext} aria-label="Следующая неделя">
             <ChevronRight size={16} />
-          </button>
+          </Button>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-sm">Итого за неделю: <b>{fmtSec(weekTotal)}</b></div>
-          <button className="btn-primary" onClick={onSubmit}>
+          <Button variant="primary" onClick={onSubmit}>
             Отправить на утверждение
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -313,14 +314,16 @@ function WeekView({
                   </div>
                 </div>
                 {e.approval_status !== "approved" && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => del.mutate(e.id)}
-                    className="btn-ghost !p-1 text-neutral-500 hover:text-red-600"
+                    className="text-neutral-500 hover:text-red-600"
                     title="Удалить"
+                    aria-label="Удалить"
                   >
                     <Trash2 size={12} />
-                  </button>
+                  </Button>
                 )}
               </div>
             ))}
@@ -405,10 +408,9 @@ function ManualEntryForm({ defaultDate, onCreated }: { defaultDate: Date; onCrea
           placeholder="Что делали"
         />
       </div>
-      <button type="submit" className="btn-primary inline-flex items-center gap-1">
-        <Plus size={14} />
+      <Button type="submit" variant="primary" leftIcon={<Plus size={14} />}>
         Добавить
-      </button>
+      </Button>
     </form>
   );
 }
@@ -467,30 +469,32 @@ function ReportsView({ canApprove }: { canApprove: boolean }) {
       {isLoading || !data ? (
         <Loader />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-xs uppercase text-neutral-500 dark:border-neutral-700">
-                <th className="py-2 pr-3">{groupBy === "user" ? "Сотрудник" : groupBy === "project" ? "Проект" : "Задача"}</th>
-                <th className="px-2 py-2 text-right">Часы</th>
-                <th className="pl-2 pr-2 text-right">Биллинг</th>
+        <div className="table-container">
+         <div className="table-scroll">
+          <table className="w-full">
+            <thead className="table-head">
+              <tr>
+                <th className="table-head-cell">{groupBy === "user" ? "Сотрудник" : groupBy === "project" ? "Проект" : "Задача"}</th>
+                <th className="table-head-cell text-right">Часы</th>
+                <th className="table-head-cell text-right">Биллинг</th>
               </tr>
             </thead>
             <tbody>
               {data.buckets.length === 0 && (
-                <tr><td colSpan={3} className="py-6 text-center text-neutral-500">Нет записей за период</td></tr>
+                <tr><td colSpan={3} className="table-cell text-center">Нет записей за период</td></tr>
               )}
               {data.buckets.map((b) => (
-                <tr key={b.key} className="border-b border-neutral-100 dark:border-neutral-800">
-                  <td className="py-2 pr-3">{b.label}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{fmtSec(b.seconds)}</td>
-                  <td className="pl-2 pr-2 text-right tabular-nums text-neutral-500">
+                <tr key={b.key} className="table-row">
+                  <td className="table-cell">{b.label}</td>
+                  <td className="table-cell text-right tabular-nums">{fmtSec(b.seconds)}</td>
+                  <td className="table-cell text-right tabular-nums text-neutral-500">
                     {b.billable_cents > 0 ? `${(b.billable_cents / 100).toFixed(2)}` : "—"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+         </div>
         </div>
       )}
     </div>
@@ -567,21 +571,22 @@ function TimesheetsView({ canApprove }: { canApprove: boolean }) {
                   <StatusBadge status={ts.status} />
                   {canDecide && (
                     <>
-                      <button
-                        type="button"
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        leftIcon={<Check size={12} />}
                         onClick={() => decide.mutate({ id: ts.id, action: "approve" })}
-                        className="btn-primary !py-1 !px-2 text-xs"
                       >
-                        <Check size={12} className="mr-1 inline" />
                         Одобрить
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600"
                         onClick={() => decide.mutate({ id: ts.id, action: "reject" })}
-                        className="btn-ghost !py-1 !px-2 text-xs text-red-600"
                       >
                         Отклонить
-                      </button>
+                      </Button>
                     </>
                   )}
                 </div>

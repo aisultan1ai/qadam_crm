@@ -1,14 +1,31 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import { Plus, BookText, Trash2, ChevronRight } from "lucide-react";
 import clsx from "clsx";
 import { EmptyState, Modal, FieldError, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
+import { Button } from "@/components/lib/Button";
+import { FormField } from "@/components/lib/FormField";
+import { DataTable, Column } from "@/components/lib/DataTable";
 
 type Dir = { id: number; code: string; label: string; icon: string | null; fields: any[] };
 type Entry = { id: number; label: string | null; values: Record<string, any> };
+
+const dirCreateSchema = z.object({
+  label: z.string().trim().min(2, "Минимум 2 символа").max(200),
+  code: z
+    .string()
+    .trim()
+    .min(2, "Минимум 2 символа")
+    .max(64)
+    .regex(/^[a-z][a-z0-9_]*$/, "Только маленькие латинские, цифры, _"),
+});
+type DirCreateForm = z.infer<typeof dirCreateSchema>;
 
 export default function DirectoriesPage() {
   const [active, setActive] = useState<string | null>(null);
@@ -28,9 +45,9 @@ export default function DirectoriesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Справочники</h1>
           <p className="text-sm text-neutral-500">Пользовательские lookup-таблицы (страны, продукты, статусы...)</p>
         </div>
-        <button className="btn-primary" onClick={() => setOpenNew(true)}>
-          <Plus size={16} /> Справочник
-        </button>
+        <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
+          Справочник
+        </Button>
       </div>
 
       {isPending ? (
@@ -68,11 +85,10 @@ export default function DirectoriesPage() {
 
 function EntriesPanel({ dir }: { dir: Dir }) {
   const qc = useQueryClient();
-  const toast = useToast();
   const confirm = useConfirm();
   const [openNew, setOpenNew] = useState(false);
 
-  const { data } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["dir-entries", dir.code],
     queryFn: async () => (await api.get<Entry[]>(`/api/directories/${dir.code}/entries`)).data,
   });
@@ -82,6 +98,50 @@ function EntriesPanel({ dir }: { dir: Dir }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dir-entries", dir.code] }),
   });
 
+  const columns: Column<Entry>[] = [
+    {
+      key: "label",
+      header: "Название",
+      sortable: true,
+      sortAccessor: (e) => e.label || `#${e.id}`,
+      render: (e) => <span className="font-medium">{e.label || `#${e.id}`}</span>,
+    },
+    ...dir.fields.slice(0, 4).map<Column<Entry>>((f: any) => ({
+      key: f.name,
+      header: f.label,
+      render: (e) => (
+        <span className="text-neutral-600 dark:text-neutral-400">
+          {String(e.values[f.name] ?? "—").slice(0, 60)}
+        </span>
+      ),
+    })),
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: 60,
+      render: (e) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-rose-500"
+          onClick={() =>
+            confirm({
+              title: "Удалить запись?",
+              message: `Запись «${e.label || `#${e.id}`}» будет удалена.`,
+              danger: true,
+              confirmLabel: "Удалить",
+              onConfirm: () => del.mutateAsync(e.id),
+            })
+          }
+          aria-label="Удалить"
+        >
+          <Trash2 size={13} />
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
       <div className="mb-3 flex items-center justify-between">
@@ -89,54 +149,20 @@ function EntriesPanel({ dir }: { dir: Dir }) {
           <h2 className="text-lg font-semibold">{dir.label} <span className="text-xs text-neutral-500">/{dir.code}</span></h2>
           <p className="text-xs text-neutral-500">{dir.fields.length} полей · {data?.length ?? 0} записей</p>
         </div>
-        <button className="btn-primary" onClick={() => setOpenNew(true)}>
-          <Plus size={14} /> Запись
-        </button>
+        <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => setOpenNew(true)}>
+          Запись
+        </Button>
       </div>
 
-      {!data || data.length === 0 ? (
+      {!isPending && (!data || data.length === 0) ? (
         <div className="py-8 text-center text-sm text-neutral-500">Записей нет</div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase text-neutral-500 dark:bg-neutral-900/40">
-              <tr>
-                <th className="px-3 py-2">Название</th>
-                {dir.fields.slice(0, 4).map((f: any) => (
-                  <th key={f.name} className="px-3 py-2">{f.label}</th>
-                ))}
-                <th className="px-3 py-2 text-right"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((e) => (
-                <tr key={e.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                  <td className="px-3 py-2 font-medium">{e.label || `#${e.id}`}</td>
-                  {dir.fields.slice(0, 4).map((f: any) => (
-                    <td key={f.name} className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                      {String(e.values[f.name] ?? "—").slice(0, 60)}
-                    </td>
-                  ))}
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      className="btn-ghost !p-1.5 text-rose-500"
-                      onClick={() =>
-                        confirm({
-                          title: "Удалить запись?",
-                          danger: true,
-                          confirmLabel: "Удалить",
-                          onConfirm: () => del.mutateAsync(e.id),
-                        })
-                      }
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={data ?? []}
+          rowKey={(e) => e.id}
+          isLoading={isPending}
+        />
       )}
 
       {openNew && <NewEntryModal dir={dir} onClose={() => setOpenNew(false)} />}
@@ -146,36 +172,45 @@ function EntriesPanel({ dir }: { dir: Dir }) {
 
 function NewDirModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const [code, setCode] = useState("");
-  const [label, setLabel] = useState("");
   const [fields, setFields] = useState<{ name: string; label: string; type: string }[]>([]);
   const [nf, setNf] = useState({ name: "", label: "", type: "text" });
-  const [err, setErr] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const save = useMutation({
-    mutationFn: () => api.post("/api/directories", { code, label, fields }),
-    onSuccess: () => {
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<DirCreateForm>({
+    resolver: zodResolver(dirCreateSchema),
+    defaultValues: { label: "", code: "" },
+  });
+  const codeVal = watch("code");
+
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    try {
+      await api.post("/api/directories", { ...data, fields });
       qc.invalidateQueries({ queryKey: ["directories"] });
       onClose();
-    },
-    onError: (e) => setErr(extractApiError(e).message),
+    } catch (e) {
+      setServerError(extractApiError(e).message);
+    }
   });
-
-  const invalid = !label.trim() || !/^[a-z][a-z0-9_]*$/.test(code);
 
   return (
     <Modal open onClose={onClose} title="Новый справочник" size="md">
-      <form onSubmit={(e) => { e.preventDefault(); if (!invalid) save.mutate(); }} className="space-y-3">
+      <form onSubmit={onSubmit} className="space-y-3" noValidate>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
-            <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Страны" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Код (snake_case)</span>
-            <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="countries" />
-            <FieldError msg={code && !/^[a-z][a-z0-9_]*$/.test(code) ? "Только маленькие латинские, цифры, _" : undefined} />
-          </label>
+          <FormField label="Название" required error={errors.label?.message}>
+            <input className="input" placeholder="Страны" {...register("label")} />
+          </FormField>
+          <FormField label="Код (snake_case)" required error={errors.code?.message}>
+            <input className="input" placeholder="countries" {...register("code")} />
+            {codeVal && !errors.code && (
+              <FieldError msg={!/^[a-z][a-z0-9_]*$/.test(codeVal) ? "Только маленькие латинские, цифры, _" : undefined} />
+            )}
+          </FormField>
         </div>
 
         <div>
@@ -186,9 +221,15 @@ function NewDirModal({ onClose }: { onClose: () => void }) {
                 <span className="font-mono text-xs text-neutral-500">{f.name}</span>
                 <span className="flex-1">{f.label}</span>
                 <span className="text-xs text-neutral-500">{f.type}</span>
-                <button type="button" className="btn-ghost !p-1 text-rose-500" onClick={() => setFields(fields.filter((_, j) => j !== i))}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-rose-500"
+                  onClick={() => setFields(fields.filter((_, j) => j !== i))}
+                  aria-label="Удалить поле"
+                >
                   <Trash2 size={12} />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -201,16 +242,21 @@ function NewDirModal({ onClose }: { onClose: () => void }) {
               <option value="date">date</option>
               <option value="checkbox">bool</option>
             </select>
-            <button type="button" className="btn-ghost !px-2" onClick={() => { if (nf.name && nf.label) { setFields([...fields, nf]); setNf({ name: "", label: "", type: "text" }); } }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { if (nf.name && nf.label) { setFields([...fields, nf]); setNf({ name: "", label: "", type: "text" }); } }}
+              aria-label="Добавить поле"
+            >
               <Plus size={13} />
-            </button>
+            </Button>
           </div>
         </div>
 
-        <FormError msg={err} />
+        <FormError msg={serverError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={invalid || save.isPending}>Создать</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>Создать</Button>
         </div>
       </form>
     </Modal>
@@ -221,7 +267,7 @@ function NewEntryModal({ dir, onClose }: { dir: Dir; onClose: () => void }) {
   const qc = useQueryClient();
   const [label, setLabel] = useState("");
   const [values, setValues] = useState<Record<string, any>>({});
-  const [err, setErr] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: () => api.post(`/api/directories/${dir.code}/entries`, { label: label || null, values }),
@@ -229,31 +275,29 @@ function NewEntryModal({ dir, onClose }: { dir: Dir; onClose: () => void }) {
       qc.invalidateQueries({ queryKey: ["dir-entries", dir.code] });
       onClose();
     },
-    onError: (e) => setErr(extractApiError(e).message),
+    onError: (e) => setServerError(extractApiError(e).message),
   });
 
   return (
     <Modal open onClose={onClose} title={`Новая запись: ${dir.label}`} size="md">
       <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-3">
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
+        <FormField label="Название">
           <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} />
-        </label>
+        </FormField>
         {dir.fields.map((f: any) => (
-          <label key={f.name} className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">{f.label}</span>
+          <FormField key={f.name} label={f.label}>
             <input
               className="input"
               type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
               value={values[f.name] ?? ""}
               onChange={(e) => setValues({ ...values, [f.name]: f.type === "number" ? Number(e.target.value) : e.target.value })}
             />
-          </label>
+          </FormField>
         ))}
-        <FormError msg={err} />
+        <FormError msg={serverError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={save.isPending}>Создать</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={save.isPending}>Создать</Button>
         </div>
       </form>
     </Modal>

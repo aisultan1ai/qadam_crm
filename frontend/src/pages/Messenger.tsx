@@ -13,6 +13,7 @@ import { subscribeChannel, unsubscribeChannel } from "@/lib/ws";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { Avatar, EmptyState, Loader, Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { VirtualList } from "@/components/VirtualList";
 import { fromNow } from "@/lib/date";
 
@@ -102,12 +103,12 @@ export default function Messenger() {
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Чаты</h2>
             <div className="flex gap-1">
-              <button className="btn-ghost !p-1.5" title="Новый DM" onClick={() => setNewDmOpen(true)}>
+              <Button variant="ghost" size="icon" title="Новый DM" onClick={() => setNewDmOpen(true)}>
                 <MessageSquarePlus size={16} />
-              </button>
-              <button className="btn-ghost !p-1.5" title="Новая группа" onClick={() => setNewGroupOpen(true)}>
+              </Button>
+              <Button variant="ghost" size="icon" title="Новая группа" onClick={() => setNewGroupOpen(true)}>
                 <UsersIcon size={16} />
-              </button>
+              </Button>
             </div>
           </div>
           <div className="relative">
@@ -319,9 +320,9 @@ function ChatWindow({ channelId, onBack }: { channelId: number; onBack: () => vo
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-2 border-b border-neutral-100 p-3 dark:border-neutral-800">
         <div className="flex min-w-0 items-center gap-2">
-          <button className="btn-ghost !p-1.5 md:hidden" onClick={onBack} title="Назад">
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack} title="Назад">
             <ArrowLeft size={16} />
-          </button>
+          </Button>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{channelName}</div>
             <div className="truncate text-xs text-neutral-500">
@@ -330,9 +331,9 @@ function ChatWindow({ channelId, onBack }: { channelId: number; onBack: () => vo
           </div>
         </div>
         <div className="flex gap-1">
-          <button className="btn-ghost !p-1.5" title="Поиск" onClick={() => setSearch(search === null ? "" : null)}>
+          <Button variant="ghost" size="icon" title="Поиск" onClick={() => setSearch(search === null ? "" : null)}>
             <Search size={16} />
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -765,14 +766,14 @@ function MessageComposer({
           onKeyDown={onKeyDown}
           onPaste={onPaste}
         />
-        <button
-          type="button"
-          className="btn-primary !px-3"
+        <Button
+          className="!px-3"
+          variant="primary"
           disabled={send.isPending || uploading || (!text.trim() && attachmentIds.length === 0)}
           onClick={submit}
         >
           {editing ? <Check size={16} /> : <Send size={16} />}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -844,13 +845,15 @@ function PollView({ poll, channelId }: { poll: Poll; channelId: number }) {
       <div className="mt-2 flex items-center justify-between text-[11px] text-neutral-500">
         <span>{poll.total_votes} голосов{closed && " · закрыт"}</span>
         {!closed && (
-          <button
-            className="btn-primary !px-2 !py-0.5 text-xs"
+          <Button
+            variant="primary"
+            size="sm"
+            className="!px-2 !py-0.5"
             disabled={selected.length === 0 || vote.isPending || selected.sort().join(",") === poll.my_votes.slice().sort().join(",")}
             onClick={() => vote.mutate(selected)}
           >
             Голосовать
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -909,9 +912,9 @@ function CreatePollModal({ channelId, onClose }: { channelId: number; onClose: (
                   onChange={(e) => setOptions((o) => o.map((x, idx) => (idx === i ? e.target.value : x)))}
                 />
                 {options.length > 2 && (
-                  <button className="btn-ghost !px-2" onClick={() => setOptions((o) => o.filter((_, idx) => idx !== i))}>
+                  <Button variant="ghost" className="!px-2" onClick={() => setOptions((o) => o.filter((_, idx) => idx !== i))}>
                     <X size={14} />
-                  </button>
+                  </Button>
                 )}
               </div>
             ))}
@@ -922,10 +925,10 @@ function CreatePollModal({ channelId, onClose }: { channelId: number; onClose: (
           Можно выбрать несколько вариантов
         </label>
         <div className="flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" onClick={() => create.mutate()} disabled={!canCreate || create.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" onClick={() => create.mutate()} disabled={!canCreate || create.isPending}>
             Создать
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -1042,10 +1045,10 @@ function NewGroupModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="text-xs text-neutral-500">Выбрано: {selected.length}</div>
         <div className="flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={!name.trim() || selected.length === 0 || create.isPending} onClick={() => create.mutate()}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" disabled={!name.trim() || selected.length === 0 || create.isPending} onClick={() => create.mutate()}>
             Создать
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -1075,7 +1078,7 @@ function SearchPanel({ channelId, q, setQ, onClose }: { channelId: number; q: st
           onChange={(e) => setQ(e.target.value)}
           autoFocus
         />
-        <button className="btn-ghost !p-1.5" onClick={onClose} title="Закрыть поиск" aria-label="Закрыть поиск"><X size={14} /></button>
+        <Button variant="ghost" size="icon" onClick={onClose} title="Закрыть поиск" aria-label="Закрыть поиск"><X size={14} /></Button>
       </div>
       {q.trim().length >= 2 && data && (
         <div className="max-h-40 overflow-y-auto text-xs">

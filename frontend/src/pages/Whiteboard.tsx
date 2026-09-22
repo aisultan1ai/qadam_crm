@@ -7,6 +7,7 @@ import "@excalidraw/excalidraw/index.css";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Trash2, Pencil, PenSquare, Save } from "lucide-react";
 import { EmptyState, Modal, FieldError, FormError } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 
@@ -52,9 +53,9 @@ function BoardList({ onOpen }: { onOpen: (id: number) => void }) {
           <h1 className="text-2xl font-semibold tracking-tight">Доски</h1>
           <p className="text-sm text-neutral-500">Совместные whiteboard-доски на Excalidraw</p>
         </div>
-        <button className="btn-primary" onClick={() => setOpenNew(true)}>
-          <Plus size={16} /> Новая доска
-        </button>
+        <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
+          Новая доска
+        </Button>
       </div>
 
       {isPending ? (
@@ -76,8 +77,10 @@ function BoardList({ onOpen }: { onOpen: (id: number) => void }) {
                     Обновлено {new Date(b.updated_at).toLocaleString("ru-RU")}
                   </div>
                 </button>
-                <button
-                  className="btn-ghost !p-1.5 text-rose-500 opacity-0 transition-opacity group-hover:opacity-100"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-rose-500 opacity-0 transition-opacity group-hover:opacity-100"
                   onClick={() =>
                     confirm({
                       title: "Удалить доску?",
@@ -87,9 +90,10 @@ function BoardList({ onOpen }: { onOpen: (id: number) => void }) {
                       onConfirm: () => del.mutateAsync(b.id),
                     })
                   }
+                  aria-label="Удалить доску"
                 >
                   <Trash2 size={14} />
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -132,8 +136,8 @@ function NewBoardModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         </label>
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!title.trim() || create.isPending}>Создать</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!title.trim()} isLoading={create.isPending}>Создать</Button>
         </div>
       </form>
     </Modal>

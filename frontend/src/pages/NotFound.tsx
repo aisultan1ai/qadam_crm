@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Compass, Home } from "lucide-react";
+import { Button } from "@/components/lib/Button";
 
 export default function NotFound() {
   return (
@@ -14,9 +15,9 @@ export default function NotFound() {
           Возможно, ссылка устарела или содержит ошибку. Проверьте адрес или вернитесь на главную.
         </p>
         <div className="flex justify-center gap-2">
-          <button className="btn-secondary" onClick={() => window.history.back()}>
+          <Button variant="secondary" onClick={() => window.history.back()}>
             Назад
-          </button>
+          </Button>
           <Link to="/" className="btn-primary inline-flex items-center gap-1.5">
             <Home size={16} /> На главную
           </Link>

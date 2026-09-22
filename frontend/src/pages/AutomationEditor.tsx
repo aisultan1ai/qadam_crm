@@ -14,6 +14,7 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 
 // ============================================================================
 // Types
@@ -326,18 +327,18 @@ export default function AutomationEditor() {
         </div>
         <div className="flex items-center gap-2">
           {!isNew && (
-            <button className="btn-secondary" onClick={() => setTestOpen(true)}>
+            <Button variant="secondary" onClick={() => setTestOpen(true)}>
               <Play size={14} /> Тест-запуск
-            </button>
+            </Button>
           )}
-          <button
-            className="btn-primary"
+          <Button
+            variant="primary"
             disabled={save.isPending || !name.trim() || loading}
             onClick={() => save.mutate()}
           >
             {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {isNew ? "Создать" : "Сохранить"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -497,13 +498,15 @@ function NodeInspector({
           {node.type}
         </div>
         {node.type !== "trigger" && (
-          <button
-            className="btn-ghost !p-1 text-rose-500 hover:bg-rose-50"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="!p-1 text-rose-500 hover:bg-rose-50"
             onClick={onDelete}
             title="Удалить узел"
           >
             <Trash2 size={13} />
-          </button>
+          </Button>
         )}
       </div>
 
@@ -878,11 +881,11 @@ function TestRunModal({
           onChange={(e) => setPayload(e.target.value)}
         />
         <div className="flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onClose}>Закрыть</button>
-          <button className="btn-primary" disabled={test.isPending} onClick={() => test.mutate()}>
+          <Button variant="ghost" onClick={onClose}>Закрыть</Button>
+          <Button variant="primary" disabled={test.isPending} onClick={() => test.mutate()}>
             {test.isPending ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
             Запустить
-          </button>
+          </Button>
         </div>
         {test.data && (
           <div className="rounded-lg border border-neutral-200 p-3 text-xs dark:border-neutral-800">

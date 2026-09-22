@@ -2,7 +2,10 @@ from .tenant import Tenant, TenantMembership
 from .user import User, Department
 from .role import Role, Permission, user_roles, role_permissions
 from .project import Project, project_members
-from .task import Task, TaskStatus, TaskPriority, ChecklistItem
+from .task import (
+    Task, TaskStatus, TaskPriority, ChecklistItem, TaskReminder,
+    task_assignees, task_auditors, task_participants,
+)
 from .comment import Comment
 from .attachment import Attachment
 from .notification import Notification
@@ -83,6 +86,10 @@ __all__ = [
     "TaskStatus",
     "TaskPriority",
     "ChecklistItem",
+    "TaskReminder",
+    "task_assignees",
+    "task_auditors",
+    "task_participants",
     "Comment",
     "Attachment",
     "Notification",

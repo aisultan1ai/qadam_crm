@@ -1,21 +1,46 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import clsx from "clsx";
 
 import { api, extractApiError } from "@/api/client";
 import { LogoMark, Wordmark } from "@/components/Logo";
 import { PasswordStrength } from "@/components/PasswordStrength";
+import { passwordSchema } from "@/lib/validation";
+import { FormError } from "@/components/ui";
+import { FormField } from "@/components/lib/FormField";
+import { Button } from "@/components/lib/Button";
+
+const schema = z
+  .object({
+    password: passwordSchema,
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, {
+    message: "Пароли не совпадают",
+    path: ["confirm"],
+  });
+type ResetForm = z.infer<typeof schema>;
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const token = params.get("token") || "";
-
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<ResetForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { password: "", confirm: "" },
+  });
+  const password = watch("password");
 
   if (!token) {
     return (
@@ -39,35 +64,25 @@ export default function ResetPassword() {
     );
   }
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (password.length < 8) {
-      setError("Пароль должен быть не короче 8 символов");
-      return;
-    }
-    if (password !== confirm) {
-      setError("Пароли не совпадают");
-      return;
-    }
-    setLoading(true);
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
     try {
-      await api.post("/api/auth/reset-password", { token, new_password: password });
+      await api.post("/api/auth/reset-password", { token, new_password: data.password });
       setDone(true);
-      // Даем секунду прочитать сообщение и уходим на логин
       setTimeout(() => nav("/login", { replace: true }), 1500);
     } catch (err) {
-      setError(extractApiError(err).message || "Не удалось сменить пароль");
-    } finally {
-      setLoading(false);
+      setServerError(extractApiError(err).message || "Не удалось сменить пароль");
     }
-  };
+  });
+
+  const anyError = serverError || Object.keys(errors).length > 0;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] p-4 dark:bg-[#0F0F14]">
       <form
-        onSubmit={submit}
-        className={clsx("card relative w-full max-w-sm p-8 animate-rise", error && "animate-shake")}
+        onSubmit={onSubmit}
+        className={clsx("card relative w-full max-w-sm p-8 animate-rise", anyError && "animate-shake")}
+        noValidate
       >
         <Link
           to="/"
@@ -91,47 +106,37 @@ export default function ResetPassword() {
               Придумайте новый пароль — минимум 8 символов, латинские буквы и цифры.
             </p>
 
-            <label className="mb-3 block">
-              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                Новый пароль
-              </span>
+            <FormField label="Новый пароль" error={errors.password?.message} className="mb-3">
               <input
                 className="input"
                 type="password"
                 autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 autoFocus
+                {...register("password")}
               />
-              <PasswordStrength password={password} />
-            </label>
+              <PasswordStrength password={password || ""} />
+            </FormField>
 
-            <label className="mb-4 block">
-              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                Повторите пароль
-              </span>
+            <FormField label="Повторите пароль" error={errors.confirm?.message} className="mb-4">
               <input
                 className="input"
                 type="password"
                 autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
+                {...register("confirm")}
               />
-            </label>
+            </FormField>
 
-            {error && (
-              <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                {error}
-              </div>
-            )}
+            {serverError && <FormError msg={serverError} />}
 
-            <button
+            <Button
               type="submit"
-              disabled={loading}
-              className="btn-primary w-full disabled:opacity-60"
+              variant="primary"
+              fullWidth
+              isLoading={isSubmitting}
+              className="mt-3 disabled:opacity-60"
             >
-              {loading ? "Сохраняем…" : "Установить новый пароль"}
-            </button>
+              {isSubmitting ? "Сохраняем…" : "Установить новый пароль"}
+            </Button>
 
             <div className="mt-4 text-center text-sm text-neutral-500">
               <Link to="/login" className="link">

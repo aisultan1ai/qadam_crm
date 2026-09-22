@@ -4,10 +4,12 @@ import { Link } from "react-router-dom";
 import { api, extractApiError } from "@/api/client";
 import clsx from "clsx";
 import { Bell, Shield, Monitor, Link as LinkIcon, ArrowLeft, LogOut, ShieldCheck, Trash2, KeyRound, Copy, RefreshCw, Check } from "lucide-react";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, Modal } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/store/auth";
 import { fromNow } from "@/lib/date";
+import { Button } from "@/components/lib/Button";
+import { FormField } from "@/components/lib/FormField";
 
 type Tab = "notifications" | "security" | "sessions" | "linked";
 
@@ -91,33 +93,35 @@ function NotificationsTab() {
       <h2 className="mb-1 text-lg font-semibold">Каналы доставки</h2>
       <p className="mb-3 text-sm text-neutral-500">Выберите, куда присылать какие уведомления</p>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase text-neutral-500 dark:bg-neutral-900/40">
-            <tr>
-              <th className="px-3 py-2">Событие</th>
-              <th className="px-3 py-2 text-center">В приложении</th>
-              <th className="px-3 py-2 text-center">Email</th>
-              <th className="px-3 py-2 text-center">Push</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data?.map((p) => (
-              <tr key={p.kind} className="border-t border-neutral-100 dark:border-neutral-800">
-                <td className="px-3 py-2">{p.label}</td>
-                {(["inapp", "email", "push"] as const).map((ch) => (
-                  <td key={ch} className="px-3 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={p[ch]}
-                      onChange={(e) => update.mutate({ kind: p.kind, [ch]: e.target.checked })}
-                    />
-                  </td>
-                ))}
+      <div className="table-container">
+        <div className="table-scroll">
+          <table className="w-full">
+            <thead className="table-head">
+              <tr>
+                <th className="table-head-cell">Событие</th>
+                <th className="table-head-cell text-center">В приложении</th>
+                <th className="table-head-cell text-center">Email</th>
+                <th className="table-head-cell text-center">Push</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data?.map((p) => (
+                <tr key={p.kind} className="table-row">
+                  <td className="table-cell">{p.label}</td>
+                  {(["inapp", "email", "push"] as const).map((ch) => (
+                    <td key={ch} className="table-cell text-center">
+                      <input
+                        type="checkbox"
+                        checked={p[ch]}
+                        onChange={(e) => update.mutate({ kind: p.kind, [ch]: e.target.checked })}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -172,6 +176,7 @@ function SecurityTab() {
         <Link to="/profile" className="btn-secondary inline-flex">
           Открыть профиль
         </Link>
+        {/* keep Link with btn-secondary — Button is <button> only */}
       </div>
 
       {totpEnabled && <BackupCodesSection />}
@@ -193,9 +198,15 @@ function SecurityTab() {
                 onChange={(e) => setCode(e.target.value)}
                 maxLength={6}
               />
-              <button className="btn-danger ml-2" onClick={() => disable.mutate()} disabled={code.length < 6 || disable.isPending}>
+              <Button
+                variant="danger"
+                className="ml-2"
+                onClick={() => disable.mutate()}
+                isLoading={disable.isPending}
+                disabled={code.length < 6}
+              >
                 Выключить 2FA
-              </button>
+              </Button>
             </div>
           </div>
         ) : setupData ? (
@@ -225,12 +236,17 @@ function SecurityTab() {
                   maxLength={6}
                   autoFocus
                 />
-                <button className="btn-primary" onClick={() => verify.mutate()} disabled={code.length < 6 || verify.isPending}>
+                <Button
+                  variant="primary"
+                  onClick={() => verify.mutate()}
+                  isLoading={verify.isPending}
+                  disabled={code.length < 6}
+                >
                   Подтвердить
-                </button>
-                <button className="btn-ghost" onClick={() => { setSetupData(null); setCode(""); }}>
+                </Button>
+                <Button variant="ghost" onClick={() => { setSetupData(null); setCode(""); }}>
                   Отмена
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -239,9 +255,13 @@ function SecurityTab() {
             <p className="mb-2 text-sm text-neutral-600 dark:text-neutral-400">
               Дополнительный уровень защиты. При входе будет требоваться код из мобильного приложения.
             </p>
-            <button className="btn-primary" onClick={() => setup.mutate()} disabled={setup.isPending}>
+            <Button
+              variant="primary"
+              onClick={() => setup.mutate()}
+              isLoading={setup.isPending}
+            >
               Включить 2FA
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -335,63 +355,66 @@ function BackupCodesSection() {
         </div>
       )}
 
-      <button className="btn-secondary" onClick={() => setShowRegenModal(true)}>
-        <RefreshCw size={14} className="mr-1 inline" />
+      <Button
+        variant="secondary"
+        leftIcon={<RefreshCw size={14} />}
+        onClick={() => setShowRegenModal(true)}
+      >
         {s && s.total > 0 ? "Перегенерировать коды" : "Сгенерировать коды"}
-      </button>
+      </Button>
 
       {showRegenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowRegenModal(false)}>
-          <div className="card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 text-base font-semibold">Подтвердите TOTP-кодом</h3>
-            <p className="mb-4 text-sm text-neutral-500">
-              Введите текущий 6-значный код из authenticator-приложения. Старые резервные
-              коды перестанут работать.
-            </p>
+        <Modal open onClose={() => { setShowRegenModal(false); setCode(""); }} title="Подтвердите TOTP-кодом" size="sm">
+          <p className="mb-4 text-sm text-neutral-500">
+            Введите текущий 6-значный код из authenticator-приложения. Старые резервные
+            коды перестанут работать.
+          </p>
+          <FormField label="Код" required>
             <input
-              className="input mb-3 tabular-nums text-lg"
+              className="input tabular-nums text-lg"
               placeholder="000000"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               maxLength={6}
               autoFocus
             />
-            <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => { setShowRegenModal(false); setCode(""); }}>Отмена</button>
-              <button
-                className="btn-primary"
-                disabled={code.length < 6 || regen.isPending}
-                onClick={() => regen.mutate()}
-              >
-                {regen.isPending ? "Генерируем…" : "Сгенерировать"}
-              </button>
-            </div>
+          </FormField>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setShowRegenModal(false); setCode(""); }}>Отмена</Button>
+            <Button
+              variant="primary"
+              disabled={code.length < 6}
+              isLoading={regen.isPending}
+              onClick={() => regen.mutate()}
+            >
+              Сгенерировать
+            </Button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {freshCodes && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFreshCodes(null)}>
-          <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 text-base font-semibold">Резервные коды</h3>
-            <div className="mb-3 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-              Сохраните эти коды сейчас — мы больше не покажем их. Только пересгенерируем новые.
-            </div>
-            <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3 font-mono text-sm dark:border-neutral-800 dark:bg-neutral-900">
-              {freshCodes.map((c, i) => (
-                <div key={i} className="tabular-nums">{c}</div>
-              ))}
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <button className="btn-ghost" onClick={copyAll}>
-                {copied ? <Check size={14} className="mr-1 inline text-emerald-600" /> : <Copy size={14} className="mr-1 inline" />}
-                {copied ? "Скопировано" : "Скопировать все"}
-              </button>
-              <button className="btn-ghost" onClick={downloadTxt}>Скачать .txt</button>
-              <button className="btn-primary" onClick={() => setFreshCodes(null)}>Я сохранил коды</button>
-            </div>
+        <Modal open onClose={() => setFreshCodes(null)} title="Резервные коды" size="md">
+          <div className="mb-3 rounded bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            Сохраните эти коды сейчас — мы больше не покажем их. Только пересгенерируем новые.
           </div>
-        </div>
+          <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3 font-mono text-sm dark:border-neutral-800 dark:bg-neutral-900">
+            {freshCodes.map((c, i) => (
+              <div key={i} className="tabular-nums">{c}</div>
+            ))}
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="ghost"
+              leftIcon={copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+              onClick={copyAll}
+            >
+              {copied ? "Скопировано" : "Скопировать все"}
+            </Button>
+            <Button variant="ghost" onClick={downloadTxt}>Скачать .txt</Button>
+            <Button variant="primary" onClick={() => setFreshCodes(null)}>Я сохранил коды</Button>
+          </div>
+        </Modal>
       )}
     </div>
   );
@@ -452,8 +475,10 @@ function SessionsTab() {
           <h2 className="mb-1 text-lg font-semibold">Активные сессии</h2>
           <p className="text-sm text-neutral-500">Устройства, где вы вошли. Незнакомую сессию — отзовите</p>
         </div>
-        <button
-          className="btn-danger shrink-0 text-xs"
+        <Button
+          variant="danger"
+          size="sm"
+          className="shrink-0"
           onClick={() => {
             if (window.confirm("Выйти со всех других устройств? Текущая сессия останется активной.")) {
               revokeOthers.mutate();
@@ -464,7 +489,7 @@ function SessionsTab() {
         >
           <LogOut size={13} className="mr-1 inline" />
           Выйти со всех других ({activeOthers})
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-2">
@@ -494,9 +519,9 @@ function SessionsTab() {
               </div>
             </div>
             {!s.revoked_at && !s.is_current && (
-              <button className="btn-ghost !p-1.5 text-rose-500" onClick={() => revoke.mutate(s.id)} title="Отозвать сессию">
+              <Button variant="ghost" size="icon" className="text-rose-500" onClick={() => revoke.mutate(s.id)} title="Отозвать сессию">
                 <LogOut size={14} />
-              </button>
+              </Button>
             )}
           </div>
         ))}
@@ -561,9 +586,9 @@ function LinkedTab() {
                   {l.display_name || l.email || l.external_id} · привязано {fromNow(l.created_at)}
                 </div>
               </div>
-              <button className="btn-ghost !p-1.5 text-rose-500" onClick={() => unlink.mutate(l.id)} title="Отвязать">
+              <Button variant="ghost" size="icon" className="text-rose-500" onClick={() => unlink.mutate(l.id)} title="Отвязать">
                 <Trash2 size={14} />
-              </button>
+              </Button>
             </div>
           ))}
         </div>

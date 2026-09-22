@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, Search, Zap } from "lucide-react";
 import { api } from "@/api/client";
 import { Skeleton } from "@/components/Skeleton";
+import { Button } from "@/components/lib/Button";
 import { useCountUp } from "@/hooks/useCountUp";
 
 type Employees = {
@@ -186,38 +187,40 @@ function TasksAnalytics() {
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </div>
-              <button className="btn-secondary" onClick={exportCSV}>Экспорт CSV</button>
+              <Button variant="secondary" onClick={exportCSV}>Экспорт CSV</Button>
             </div>
           </div>
 
           {/* Desktop: таблица */}
-          <div className="card hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[720px] text-sm" aria-label="Эффективность сотрудников за последние 30 дней">
-              <caption className="sr-only">
-                Эффективность сотрудников за 30 дней: всего задач, завершено, просрочено, эффективность в процентах.
-              </caption>
-              <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40">
-                <tr>
-                  <SortableTh label="Сотрудник" col="name" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
-                  <SortableTh label="Всего" col="total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
-                  <SortableTh label="Завершено" col="done" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
-                  <SortableTh label="Просрочено" col="overdue" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
-                  <SortableTh label="Эффективность" col="efficiency" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((e, i) => (
-                  <EmployeeRow key={e.user_id} row={e} index={i} start={contentVisible} />
-                ))}
-                {rows.length === 0 && (
+          <div className="hidden md:block table-container">
+            <div className="table-scroll">
+              <table className="w-full min-w-[720px]" aria-label="Эффективность сотрудников за последние 30 дней">
+                <caption className="sr-only">
+                  Эффективность сотрудников за 30 дней: всего задач, завершено, просрочено, эффективность в процентах.
+                </caption>
+                <thead className="table-head">
                   <tr>
-                    <td className="py-10 text-center text-sm text-neutral-500" colSpan={5}>
-                      {query ? "Ничего не найдено" : "Нет данных"}
-                    </td>
+                    <SortableTh label="Сотрудник" col="name" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
+                    <SortableTh label="Всего" col="total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                    <SortableTh label="Завершено" col="done" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                    <SortableTh label="Просрочено" col="overdue" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                    <SortableTh label="Эффективность" col="efficiency" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((e, i) => (
+                    <EmployeeRow key={e.user_id} row={e} index={i} start={contentVisible} />
+                  ))}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td className="table-cell text-center py-10" colSpan={5}>
+                        {query ? "Ничего не найдено" : "Нет данных"}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Mobile: карточки */}
@@ -331,9 +334,10 @@ function LeadsAnalyticsPanel() {
       </div>
 
       {/* Desktop: таблица */}
-      <div className="card hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40">
+      <div className="hidden md:block table-container">
+       <div className="table-scroll">
+        <table className="w-full min-w-[720px]">
+          <thead className="table-head">
             <tr>
               <LeadsTh label="Менеджер" col="name" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
               <LeadsTh label="Всего" col="total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
@@ -364,13 +368,14 @@ function LeadsAnalyticsPanel() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td className="py-10 text-center text-sm text-neutral-500" colSpan={5}>
+                <td className="table-cell text-center py-10" colSpan={5}>
                   {query ? "Ничего не найдено" : "Нет данных за 30 дней"}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+       </div>
       </div>
 
       {/* Mobile: карточки */}

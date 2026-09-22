@@ -12,6 +12,8 @@ import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { EmptyState, Loader, Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
+import { Pagination } from "@/components/lib/Pagination";
 import { fromNow } from "@/lib/date";
 
 type LeadStatus = "new" | "contacted" | "qualified" | "converted" | "rejected";
@@ -64,13 +66,21 @@ export default function Leads() {
   const [convertLead, setConvertLead] = useState<TenantLead | null>(null);
   const [openNew, setOpenNew] = useState(false);
   const [openImport, setOpenImport] = useState(false);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
+
+  useEffect(() => { setPage(1); }, [q, formFilter, view, perPage]);
 
   const params = useMemo(() => {
-    const p: Record<string, string> = { per_page: "200" };
+    const isBoard = view === "board";
+    const p: Record<string, string> = {
+      per_page: String(isBoard ? 200 : perPage),
+      page: String(isBoard ? 1 : page),
+    };
     if (q.trim()) p.q = q.trim();
     if (formFilter) p.form_id = formFilter;
     return p;
-  }, [q, formFilter]);
+  }, [q, formFilter, view, page, perPage]);
 
   const { data, isPending } = useQuery({
     queryKey: ["tenant-leads", params],
@@ -117,19 +127,19 @@ export default function Leads() {
             </button>
           </div>
           {can("leads.create") && (
-            <button
-              className="btn-ghost"
+            <Button
+              variant="ghost"
               onClick={() => setOpenImport(true)}
               title="Импорт лидов из Excel/CSV"
               aria-label="Импорт лидов"
             >
               <Upload size={15} /> <span className="hidden sm:inline">Импорт</span>
-            </button>
+            </Button>
           )}
           {can("leads.create") && (
-            <button className="btn-primary" onClick={() => setOpenNew(true)} aria-label="Новый лид">
+            <Button variant="primary" onClick={() => setOpenNew(true)} aria-label="Новый лид">
               <Plus size={16} /> <span className="hidden sm:inline">Новый лид</span>
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -176,12 +186,21 @@ export default function Leads() {
           onConvert={setConvertLead}
         />
       ) : (
-        <TableView
-          leads={data!.items}
-          onOpen={setOpenLeadId}
-          canConvert={can("leads.convert")}
-          onConvert={setConvertLead}
-        />
+        <>
+          <TableView
+            leads={data!.items}
+            onOpen={setOpenLeadId}
+            canConvert={can("leads.convert")}
+            onConvert={setConvertLead}
+          />
+          <Pagination
+            page={page}
+            perPage={perPage}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            onPerPageChange={setPerPage}
+          />
+        </>
       )}
 
       {openLead && (
@@ -460,15 +479,17 @@ function TableView({
               <td className="px-3 py-2 text-neutral-500">{fromNow(l.created_at)}</td>
               <td className="px-3 py-2 text-right">
                 {canConvert && l.status !== "converted" && (
-                  <button
-                    className="btn-ghost !py-1 text-xs"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="!py-1"
                     onClick={(e) => {
                       e.stopPropagation();
                       onConvert(l);
                     }}
                   >
                     В задачу
-                  </button>
+                  </Button>
                 )}
               </td>
             </tr>
@@ -569,28 +590,29 @@ function LeadDetailModal({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           {can("leads.delete") ? (
-            <button
-              className="btn-ghost inline-flex items-center gap-1 text-rose-600 dark:text-rose-400"
+            <Button
+              variant="ghost"
+              className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400"
               onClick={async () => {
                 if (await confirm({ title: "Удалить лид?", message: "Действие необратимо.", confirmLabel: "Удалить" })) del.mutate();
               }}
             >
               <Trash2 size={14} /> Удалить
-            </button>
+            </Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
             {can("leads.convert") && lead.status !== "converted" && (
-              <button className="btn-ghost" onClick={() => onConvert(lead)}>В задачу</button>
+              <Button variant="ghost" onClick={() => onConvert(lead)}>В задачу</Button>
             )}
-            <button
-              className="btn-primary"
+            <Button
+              variant="primary"
               onClick={() => patch.mutate({ status, note })}
               disabled={patch.isPending}
             >
               Сохранить
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -646,10 +668,10 @@ function ConvertLeadModal({ lead, onClose }: { lead: TenantLead; onClose: () => 
           В описание задачи попадут: контакт лида, все дополнительные поля формы и текущая заметка.
         </div>
         <div className="flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" onClick={() => convert.mutate()} disabled={convert.isPending}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" onClick={() => convert.mutate()} disabled={convert.isPending}>
             <Plus size={14} className="mr-1" /> Создать задачу
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -753,11 +775,11 @@ function NewLeadModal({ onClose }: { onClose: () => void }) {
           <textarea className="input min-h-[80px]" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Дополнительные детали…" />
         </label>
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={!canSubmit}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
             {create.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             Создать
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -872,11 +894,11 @@ function ImportLeadsModal({ onClose }: { onClose: () => void }) {
             </div>
 
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={onClose}>Отмена</button>
-              <button className="btn-primary" disabled={!file || starting} onClick={start}>
+              <Button variant="ghost" onClick={onClose}>Отмена</Button>
+              <Button variant="primary" disabled={!file || starting} onClick={start}>
                 {starting ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
                 Запустить импорт
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -919,7 +941,7 @@ function ImportLeadsModal({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="flex justify-end">
-              <button className="btn-primary" onClick={onClose}>Готово</button>
+              <Button variant="primary" onClick={onClose}>Готово</Button>
             </div>
           </div>
         )}
@@ -934,7 +956,7 @@ function ImportLeadsModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
             <div className="flex justify-end">
-              <button className="btn-ghost" onClick={onClose}>Закрыть</button>
+              <Button variant="ghost" onClick={onClose}>Закрыть</Button>
             </div>
           </div>
         )}

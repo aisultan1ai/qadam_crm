@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "@/components/lib/Button";
 
 type Props = {
   children: ReactNode;
@@ -50,12 +51,12 @@ function DefaultFallback({ error, reset }: { error: Error; reset: () => void }) 
           <pre className="mt-2 whitespace-pre-wrap break-words">{error.message}</pre>
         </details>
         <div className="flex justify-center gap-2">
-          <button className="btn-secondary" onClick={reset}>
+          <Button variant="secondary" onClick={reset}>
             Попробовать снова
-          </button>
-          <button className="btn-primary" onClick={() => window.location.reload()}>
+          </Button>
+          <Button variant="primary" onClick={() => window.location.reload()}>
             Перезагрузить
-          </button>
+          </Button>
         </div>
       </div>
     </div>

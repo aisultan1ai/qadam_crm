@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import { useAuth } from "@/store/auth";
 import { LogoMark, Wordmark } from "@/components/Logo";
+import { passwordSchema } from "@/lib/validation";
+import { FormError } from "@/components/ui";
+import { FormField } from "@/components/lib/FormField";
+import { Button } from "@/components/lib/Button";
 
 type InviteInfo = {
   token: string;
@@ -12,6 +19,12 @@ type InviteInfo = {
   requires_signup: boolean;
 };
 
+const schema = z.object({
+  full_name: z.string().trim().min(2, "Минимум 2 символа").max(200),
+  password: passwordSchema,
+});
+type InviteForm = z.infer<typeof schema>;
+
 export default function Invite() {
   const { token = "" } = useParams();
   const nav = useNavigate();
@@ -20,10 +33,16 @@ export default function Invite() {
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const [fullName, setFullName] = useState("");
-  const [password, setPassword] = useState("");
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<InviteForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { full_name: "", password: "" },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -42,22 +61,32 @@ export default function Invite() {
     };
   }, [token]);
 
-  const accept = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const acceptSimple = async () => {
     if (!info) return;
-    setSubmitting(true);
-    setError(null);
+    setServerError(null);
     try {
-      const body = info.requires_signup ? { full_name: fullName, password } : {};
-      await api.post(`/api/invitations/${token}/accept`, body);
+      await api.post(`/api/invitations/${token}/accept`, {});
       await fetchMe();
       nav("/", { replace: true });
     } catch (e) {
-      setError(extractApiError(e).message || "Не удалось принять приглашение");
-    } finally {
-      setSubmitting(false);
+      setServerError(extractApiError(e).message || "Не удалось принять приглашение");
     }
   };
+
+  const acceptWithSignup = handleSubmit(async (data) => {
+    if (!info) return;
+    setServerError(null);
+    try {
+      await api.post(`/api/invitations/${token}/accept`, {
+        full_name: data.full_name,
+        password: data.password,
+      });
+      await fetchMe();
+      nav("/", { replace: true });
+    } catch (e) {
+      setServerError(extractApiError(e).message || "Не удалось принять приглашение");
+    }
+  });
 
   if (loading) {
     return (
@@ -78,9 +107,16 @@ export default function Invite() {
     );
   }
 
+  const onSubmit = info.requires_signup
+    ? acceptWithSignup
+    : (e: React.FormEvent) => {
+        e.preventDefault();
+        acceptSimple();
+      };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] p-4 dark:bg-[#0F0F14]">
-      <form onSubmit={accept} className="card w-full max-w-sm p-8">
+      <form onSubmit={onSubmit} className="card w-full max-w-sm p-8" noValidate>
         <div className="mb-4 flex flex-col items-center gap-2">
           <LogoMark size={48} className="rounded-[12px]" />
           <Wordmark />
@@ -94,41 +130,31 @@ export default function Invite() {
 
         {info.requires_signup && (
           <>
-            <label className="mb-3 block">
-              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Ваше имя</span>
-              <input
-                className="input"
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                minLength={2}
-              />
-            </label>
-            <label className="mb-4 block">
-              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Пароль</span>
+            <FormField label="Ваше имя" error={errors.full_name?.message} className="mb-3">
+              <input className="input" type="text" autoComplete="name" {...register("full_name")} />
+            </FormField>
+            <FormField label="Пароль" error={errors.password?.message} className="mb-4">
               <input
                 className="input"
                 type="password"
                 autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
+                {...register("password")}
               />
-            </label>
+            </FormField>
           </>
         )}
 
-        {error && (
-          <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-            {error}
-          </div>
-        )}
+        {serverError && <FormError msg={serverError} />}
 
-        <button type="submit" className="btn-primary w-full disabled:opacity-60" disabled={submitting}>
-          {submitting ? "Принимаем…" : "Принять приглашение"}
-        </button>
+        <Button
+          type="submit"
+          variant="primary"
+          fullWidth
+          isLoading={isSubmitting}
+          className="mt-3 disabled:opacity-60"
+        >
+          {isSubmitting ? "Принимаем…" : "Принять приглашение"}
+        </Button>
       </form>
     </div>
   );

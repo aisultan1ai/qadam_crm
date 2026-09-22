@@ -5,6 +5,7 @@ import { useAuth } from "@/store/auth";
 import { Navigate } from "react-router-dom";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { Pencil, Trash2, Search, Building2, Power, ChevronRight, Users as UsersIcon, HardDrive, Loader2, CreditCard, Plus, Check } from "lucide-react";
 import clsx from "clsx";
 
@@ -276,14 +277,16 @@ export default function Admin() {
                     className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20"
                   >
                     <td className="px-3 py-2">
-                      <button
-                        className="btn-ghost !p-1"
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="!p-1"
                         onClick={() => setExpandedId(isOpen ? null : t.id)}
                         aria-label={isOpen ? "Свернуть" : "Развернуть детали"}
                         aria-expanded={isOpen}
                       >
                         <ChevronRight size={14} className={clsx("transition-transform", isOpen && "rotate-90")} />
-                      </button>
+                      </Button>
                     </td>
                     <td className="px-3 py-2 text-neutral-500 tabular-nums">{t.id}</td>
                     <td className="px-3 py-2">
@@ -324,20 +327,24 @@ export default function Admin() {
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex justify-end gap-1">
-                        <button
-                          className="btn-ghost !py-1 !px-1.5"
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="!py-1 !px-1.5"
                           title="Редактировать"
                           onClick={() => setEditing(t)}
                         >
                           <Pencil size={14} />
-                        </button>
-                        <button
-                          className="btn-ghost !py-1 !px-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="!py-1 !px-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                           title="Удалить компанию"
                           onClick={() => setDeleting(t)}
                         >
                           <Trash2 size={14} />
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -538,10 +545,10 @@ function EditTenantModal({
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button className="btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
             Сохранить
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -587,14 +594,15 @@ function DeleteTenantModal({
           />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button
-            className="btn-primary bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-600"
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button
+            variant="primary"
+            className="bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-600"
             disabled={!canDelete || isPending}
             onClick={onConfirm}
           >
             Удалить навсегда
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -820,9 +828,9 @@ function PlansTab() {
         <div className="text-sm text-neutral-500">
           Тарифы применяются ко всем компаниям. Изменение цены не влияет на активные подписки до следующего периода.
         </div>
-        <button className="btn-primary" onClick={() => setCreating(true)}>
+        <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus size={16} /> Новый тариф
-        </button>
+        </Button>
       </div>
 
       {isLoading && (
@@ -866,14 +874,15 @@ function PlansTab() {
               Тариф «{deleting.title}» ({deleting.key}) будет удалён навсегда.
             </div>
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => setDeleting(null)}>Отмена</button>
-              <button
-                className="btn-primary bg-rose-600 hover:bg-rose-700"
+              <Button variant="ghost" onClick={() => setDeleting(null)}>Отмена</Button>
+              <Button
+                variant="primary"
+                className="bg-rose-600 hover:bg-rose-700"
                 disabled={del.isPending}
                 onClick={() => del.mutate(deleting.key)}
               >
                 Удалить
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
@@ -918,16 +927,18 @@ function PlanCard({
           {plan.tagline && <div className="mt-1 text-xs text-neutral-500">{plan.tagline}</div>}
         </div>
         <div className="flex gap-1">
-          <button className="btn-ghost !p-1.5" title="Редактировать" onClick={onEdit}>
+          <Button variant="ghost" size="icon" title="Редактировать" onClick={onEdit}>
             <Pencil size={14} />
-          </button>
-          <button
-            className="btn-ghost !p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
             title="Удалить"
             onClick={onDelete}
           >
             <Trash2 size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1191,14 +1202,14 @@ function PlanFormModal({
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button
-            className="btn-primary"
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button
+            variant="primary"
             disabled={save.isPending || !title.trim() || (!isEdit && !key.trim())}
             onClick={() => save.mutate()}
           >
             {save.isPending ? "Сохраняем…" : isEdit ? "Сохранить" : "Создать"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

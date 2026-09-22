@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
 import { Shield, Save } from "lucide-react";
 import { useToast } from "@/components/Toast";
+import { Button } from "@/components/lib/Button";
 
 type Policy = {
   password_min_length: number;
@@ -113,9 +114,9 @@ export default function SecurityPolicyPage() {
       </div>
 
       <div className="flex justify-end">
-        <button className="btn-primary" onClick={submit} disabled={save.isPending}>
+        <Button variant="primary" onClick={submit} disabled={save.isPending}>
           <Save size={15} /> Сохранить
-        </button>
+        </Button>
       </div>
     </div>
   );

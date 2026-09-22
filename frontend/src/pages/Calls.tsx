@@ -1,11 +1,17 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import { Phone, PhoneIncoming, PhoneOutgoing, Trash2, Plus } from "lucide-react";
 import clsx from "clsx";
 import { EmptyState, Modal, Avatar, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
+import { Button } from "@/components/lib/Button";
+import { FormField } from "@/components/lib/FormField";
+import { DataTable, Column } from "@/components/lib/DataTable";
 import type { Page } from "@/types";
 
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
@@ -26,6 +32,15 @@ type Call = {
   user?: UserBrief | null;
   contact?: ContactBrief | null;
 };
+
+const callSchema = z.object({
+  direction: z.enum(["inbound", "outbound"]).default("outbound"),
+  from_number: z.string().trim().max(64).optional(),
+  to_number: z.string().trim().max(64).optional(),
+  duration_sec: z.coerce.number().int().min(0).default(0),
+  note: z.string().max(2000).optional(),
+});
+type CallForm = z.infer<typeof callSchema>;
 
 function fmtDuration(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -59,6 +74,108 @@ export default function CallsPage() {
     onError: (e) => toast.error("Не удалось удалить", extractApiError(e).message),
   });
 
+  const columns: Column<Call>[] = [
+    {
+      key: "direction",
+      header: "Тип",
+      width: 130,
+      render: (c) =>
+        c.direction === "inbound" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <PhoneIncoming size={11} /> Входящий
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-sky-200 px-2 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+            <PhoneOutgoing size={11} /> Исходящий
+          </span>
+        ),
+    },
+    {
+      key: "user",
+      header: "Сотрудник",
+      render: (c) =>
+        c.user ? (
+          <div className="flex items-center gap-2">
+            <Avatar name={c.user.name} url={c.user.avatar_url} size={24} />
+            <span>{c.user.name}</span>
+          </div>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      key: "contact",
+      header: "Контакт",
+      render: (c) => (c.contact ? `${c.contact.first_name} ${c.contact.last_name || ""}` : "—"),
+    },
+    {
+      key: "numbers",
+      header: "Номера",
+      render: (c) => (
+        <span className="text-xs text-neutral-500">
+          {c.from_number || "?"} → {c.to_number || "?"}
+        </span>
+      ),
+    },
+    {
+      key: "duration",
+      header: "Длительность",
+      sortable: true,
+      sortAccessor: (c) => c.duration_sec,
+      render: (c) => <span className="tabular-nums">{fmtDuration(c.duration_sec)}</span>,
+      width: 130,
+    },
+    {
+      key: "started",
+      header: "Начало",
+      sortable: true,
+      sortAccessor: (c) => new Date(c.started_at),
+      render: (c) => (
+        <span className="tabular-nums text-neutral-500">
+          {new Date(c.started_at).toLocaleString("ru-RU")}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: 100,
+      render: (c) => (
+        <div className="flex items-center justify-end gap-1">
+          {c.recording_url && (
+            <a
+              className="btn-ghost !p-1.5 text-brand-600"
+              href={c.recording_url}
+              target="_blank"
+              rel="noreferrer"
+              title="Прослушать"
+            >
+              <Phone size={14} />
+            </a>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-rose-500"
+            onClick={() =>
+              confirm({
+                title: "Удалить запись?",
+                message: `Звонок будет удалён из истории.`,
+                danger: true,
+                confirmLabel: "Удалить",
+                onConfirm: () => del.mutateAsync(c.id),
+              })
+            }
+            aria-label="Удалить"
+          >
+            <Trash2 size={14} />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -66,9 +183,9 @@ export default function CallsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Звонки</h1>
           <p className="text-sm text-neutral-500">История звонков. Twilio/Voximplant подключаются через webhook</p>
         </div>
-        <button className="btn-primary" onClick={() => setOpenLog(true)}>
-          <Plus size={16} /> Записать звонок
-        </button>
+        <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenLog(true)}>
+          Записать звонок
+        </Button>
       </div>
 
       <div role="tablist" className="flex border-b border-neutral-200 dark:border-neutral-800">
@@ -97,77 +214,20 @@ export default function CallsPage() {
         ))}
       </div>
 
-      {isPending ? (
-        <div className="h-40 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
-      ) : !data || data.length === 0 ? (
-        <EmptyState icon={<Phone size={32} />} title="Звонков пока нет" description="Настрой webhook Twilio: /api/webhooks/telephony/twilio?tenant_id=<ID>" />
+      {!isPending && (!data || data.length === 0) ? (
+        <EmptyState
+          icon={<Phone size={32} />}
+          title="Звонков пока нет"
+          description="Настрой webhook Twilio: /api/webhooks/telephony/twilio?tenant_id=<ID>"
+        />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase text-neutral-500 dark:bg-neutral-900/60">
-              <tr>
-                <th className="px-3 py-2">Тип</th>
-                <th className="px-3 py-2">Сотрудник</th>
-                <th className="px-3 py-2">Контакт</th>
-                <th className="px-3 py-2">Номера</th>
-                <th className="px-3 py-2">Длительность</th>
-                <th className="px-3 py-2">Начало</th>
-                <th className="px-3 py-2 text-right">Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((c) => (
-                <tr key={c.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                  <td className="px-3 py-2">
-                    {c.direction === "inbound" ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"><PhoneIncoming size={11} /> Входящий</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700"><PhoneOutgoing size={11} /> Исходящий</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {c.user ? (
-                      <div className="flex items-center gap-2">
-                        <Avatar name={c.user.name} url={c.user.avatar_url} size={24} />
-                        <span>{c.user.name}</span>
-                      </div>
-                    ) : "—"}
-                  </td>
-                  <td className="px-3 py-2">{c.contact ? `${c.contact.first_name} ${c.contact.last_name || ""}` : "—"}</td>
-                  <td className="px-3 py-2 text-xs text-neutral-500">
-                    {c.from_number || "?"} → {c.to_number || "?"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{fmtDuration(c.duration_sec)}</td>
-                  <td className="px-3 py-2 tabular-nums text-neutral-500">
-                    {new Date(c.started_at).toLocaleString("ru-RU")}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-end gap-1">
-                      {c.recording_url && (
-                        <a className="btn-ghost !p-1.5 text-brand-600" href={c.recording_url} target="_blank" rel="noreferrer" title="Прослушать">
-                          <Phone size={14} />
-                        </a>
-                      )}
-                      <button
-                        className="btn-ghost !p-1.5 text-rose-500"
-                        onClick={() =>
-                          confirm({
-                            title: "Удалить запись?",
-                            danger: true,
-                            confirmLabel: "Удалить",
-                            onConfirm: () => del.mutateAsync(c.id),
-                          })
-                        }
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={data ?? []}
+          rowKey={(c) => c.id}
+          isLoading={isPending}
+          initialSort={{ key: "started", direction: "desc" }}
+        />
       )}
 
       {openLog && <LogCallModal onClose={() => setOpenLog(false)} />}
@@ -177,62 +237,61 @@ export default function CallsPage() {
 
 function LogCallModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const [formError, setFormError] = useState<string | null>(null);
-  const [direction, setDirection] = useState<"inbound" | "outbound">("outbound");
-  const [fromN, setFromN] = useState("");
-  const [toN, setToN] = useState("");
-  const [duration, setDuration] = useState("60");
-  const [note, setNote] = useState("");
+  const [serverError, setServerError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<CallForm>({
+    resolver: zodResolver(callSchema),
+    defaultValues: { direction: "outbound", from_number: "", to_number: "", duration_sec: 60, note: "" },
+  });
 
-  const save = useMutation({
-    mutationFn: () =>
-      api.post("/api/calls", {
-        direction,
-        from_number: fromN || null,
-        to_number: toN || null,
-        duration_sec: parseInt(duration || "0", 10),
-        note: note || null,
+  const onSubmit = handleSubmit(async (data) => {
+    setServerError(null);
+    try {
+      await api.post("/api/calls", {
+        direction: data.direction,
+        from_number: data.from_number || null,
+        to_number: data.to_number || null,
+        duration_sec: data.duration_sec,
+        note: data.note || null,
         status: "completed",
-      }),
-    onSuccess: () => {
+      });
       qc.invalidateQueries({ queryKey: ["calls"] });
       onClose();
-    },
-    onError: (e) => setFormError(extractApiError(e).message),
+    } catch (e) {
+      setServerError(extractApiError(e).message);
+    }
   });
 
   return (
     <Modal open onClose={onClose} title="Записать звонок" size="md">
-      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-3">
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Направление</span>
-          <select className="input" value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+      <form onSubmit={onSubmit} className="space-y-3" noValidate>
+        <FormField label="Направление" error={errors.direction?.message}>
+          <select className="input" {...register("direction")}>
             <option value="outbound">Исходящий</option>
             <option value="inbound">Входящий</option>
           </select>
-        </label>
+        </FormField>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Откуда</span>
-            <input className="input" value={fromN} onChange={(e) => setFromN(e.target.value)} placeholder="+7..." />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Куда</span>
-            <input className="input" value={toN} onChange={(e) => setToN(e.target.value)} placeholder="+7..." />
-          </label>
+          <FormField label="Откуда" error={errors.from_number?.message}>
+            <input className="input" placeholder="+7..." {...register("from_number")} />
+          </FormField>
+          <FormField label="Куда" error={errors.to_number?.message}>
+            <input className="input" placeholder="+7..." {...register("to_number")} />
+          </FormField>
         </div>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Длительность (сек)</span>
-          <input className="input tabular-nums" type="number" min={0} value={duration} onChange={(e) => setDuration(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Комментарий</span>
-          <textarea className="input min-h-[70px]" value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-        <FormError msg={formError} />
+        <FormField label="Длительность (сек)" error={errors.duration_sec?.message}>
+          <input className="input tabular-nums" type="number" min={0} {...register("duration_sec", { valueAsNumber: true })} />
+        </FormField>
+        <FormField label="Комментарий" error={errors.note?.message}>
+          <textarea className="input min-h-[70px]" {...register("note")} />
+        </FormField>
+        <FormError msg={serverError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={save.isPending}>Сохранить</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>Сохранить</Button>
         </div>
       </form>
     </Modal>

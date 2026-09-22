@@ -7,6 +7,7 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal, Avatar } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 
 type ChannelKind = "telegram" | "whatsapp" | "instagram";
 
@@ -404,22 +405,26 @@ function Chat({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            className="btn-ghost !py-1 !px-2 text-sm"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!py-1 !px-2"
             onClick={onLinkLead}
             title={contact?.linked_lead_id ? "Связано с лидом" : "Связать с лидом"}
           >
             <Link2 size={14} />
             {contact?.linked_lead_id ? ` Лид #${contact.linked_lead_id}` : " Лид"}
-          </button>
-          <button
-            className="btn-ghost !py-1 !px-2 text-sm"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!py-1 !px-2"
             onClick={() => closeMut.mutate()}
             disabled={closeMut.isPending}
             title={conversation.is_closed ? "Открыть" : "Закрыть"}
           >
             {conversation.is_closed ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -465,23 +470,24 @@ function Chat({
               }}
             />
           </div>
-          <button
-            type="button"
-            className="btn-ghost !p-2 shrink-0"
+          <Button
+            variant="ghost"
+            className="!p-2 shrink-0"
             title="Шаблоны"
             onClick={() => setShowTemplates((v) => !v)}
             disabled={conversation.is_closed || !(templates?.length)}
           >
             <MessageCircle size={16} />
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
-            className="btn-primary shrink-0"
+            variant="primary"
+            className="shrink-0"
             disabled={!text.trim() || send.isPending || conversation.is_closed}
           >
             {send.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             Отправить
-          </button>
+          </Button>
         </div>
         {showTemplates && (templates?.length ?? 0) > 0 && (
           <div className="mt-2 grid gap-1 rounded-lg border border-neutral-200 p-2 text-xs dark:border-neutral-800">
@@ -619,16 +625,16 @@ function LinkLeadModal({
           </label>
         )}
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Отмена
-          </button>
-          <button
-            className="btn-primary"
+          </Button>
+          <Button
+            variant="primary"
             disabled={mut.isPending || (mode === "existing" && !leadId)}
             onClick={() => mut.mutate()}
           >
             Готово
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

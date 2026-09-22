@@ -13,6 +13,7 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 
 const locales = { ru };
 const localizer = dateFnsLocalizer({
@@ -212,9 +213,9 @@ export default function CalendarPage() {
           <h1 className="text-2xl font-semibold">Календарь</h1>
           <p className="text-sm text-neutral-500">Встречи, события, дедлайны задач</p>
         </div>
-        <button className="btn-primary" onClick={() => setEditorOpen({ mode: "create" })}>
+        <Button variant="primary" onClick={() => setEditorOpen({ mode: "create" })}>
           <Plus size={14} /> Новое событие
-        </button>
+        </Button>
       </div>
 
       <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[240px_1fr]">
@@ -323,9 +324,9 @@ function CalendarSidebar({
     <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
       <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2 dark:border-neutral-800">
         <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Календари</span>
-        <button className="btn-ghost !p-1" onClick={() => setCreateOpen(true)} title="Новый календарь">
+        <Button variant="ghost" size="icon" className="!p-1" onClick={() => setCreateOpen(true)} title="Новый календарь">
           <Plus size={14} />
-        </button>
+        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {calendars.map((c) => (
@@ -377,9 +378,9 @@ function CalendarSidebar({
               <input className="input flex-1" value={color} onChange={(e) => setColor(e.target.value)} />
             </div>
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => setCreateOpen(false)}>Отмена</button>
-              <button
-                className="btn-primary"
+              <Button variant="ghost" onClick={() => setCreateOpen(false)}>Отмена</Button>
+              <Button
+                variant="primary"
                 disabled={!name.trim()}
                 onClick={() => {
                   onCreate(name.trim(), color);
@@ -388,7 +389,7 @@ function CalendarSidebar({
                 }}
               >
                 Создать
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
@@ -608,9 +609,9 @@ function EventEditor({
         <div>
           <div className="mb-1 flex items-center justify-between text-xs font-medium text-neutral-500">
             <span><Bell size={11} className="inline" /> Напоминания</span>
-            <button className="btn-ghost !py-0.5 text-xs" onClick={addReminder}>
+            <Button variant="ghost" size="sm" className="!py-0.5" onClick={addReminder}>
               <Plus size={11} /> добавить
-            </button>
+            </Button>
           </div>
           <div className="space-y-1">
             {reminders.map((r, i) => (
@@ -632,24 +633,24 @@ function EventEditor({
                   <option value="notification">Уведомление</option>
                   <option value="email">Email</option>
                 </select>
-                <button className="btn-ghost !p-1" onClick={() => removeReminder(i)}>
+                <Button variant="ghost" size="icon" className="!p-1" onClick={() => removeReminder(i)}>
                   <XIcon size={11} />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button
-            className="btn-primary"
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button
+            variant="primary"
             disabled={!title.trim() || save.isPending}
             onClick={() => save.mutate()}
           >
             {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {mode === "create" ? "Создать" : "Сохранить"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -739,21 +740,21 @@ function EventDetailsModal({
                 </div>
               ))}
               <div className="mt-2 flex gap-1">
-                <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => respond.mutate("accepted")}>Принять</button>
-                <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => respond.mutate("tentative")}>Возможно</button>
-                <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => respond.mutate("declined")}>Отклонить</button>
+                <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => respond.mutate("accepted")}>Принять</Button>
+                <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => respond.mutate("tentative")}>Возможно</Button>
+                <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => respond.mutate("declined")}>Отклонить</Button>
               </div>
             </div>
           )}
           <div className="flex justify-between pt-2">
-            <button className="btn-ghost text-rose-600" onClick={() => {
+            <Button variant="ghost" className="text-rose-600" onClick={() => {
               if (confirm("Удалить событие?")) del.mutate();
             }}>
               <Trash2 size={14} /> Удалить
-            </button>
-            <button className="btn-primary" onClick={() => onEdit(event)}>
+            </Button>
+            <Button variant="primary" onClick={() => onEdit(event)}>
               Редактировать
-            </button>
+            </Button>
           </div>
         </div>
       )}

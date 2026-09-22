@@ -4,6 +4,7 @@ import { api, extractApiError } from "@/api/client";
 import { Plus, Boxes, Trash2, Pencil, ChevronRight } from "lucide-react";
 import clsx from "clsx";
 import { EmptyState, Modal, FieldError, FormError } from "@/components/ui";
+import { Button } from "@/components/lib/Button";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import type { Page } from "@/types";
@@ -66,9 +67,9 @@ export default function ObjectsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Объекты</h1>
           <p className="text-sm text-neutral-500">Конструктор пользовательских сущностей (договоры, тикеты, счета…)</p>
         </div>
-        <button className="btn-primary" onClick={() => setOpenNewSchema(true)}>
+        <Button variant="primary" onClick={() => setOpenNewSchema(true)}>
           <Plus size={16} /> Новая сущность
-        </button>
+        </Button>
       </div>
 
       {isPending ? (
@@ -137,8 +138,8 @@ function SchemaDetail({ schema, onEdit }: { schema: SchemaOut; onEdit: () => voi
           <p className="text-xs text-neutral-500">{schema.fields.length} полей · {records?.length ?? 0} записей</p>
         </div>
         <div className="flex gap-2">
-          <button className="btn-ghost" onClick={onEdit}><Pencil size={13} /> Схема</button>
-          <button className="btn-primary" onClick={() => setOpenRec("new")}><Plus size={14} /> Запись</button>
+          <Button variant="ghost" onClick={onEdit}><Pencil size={13} /> Схема</Button>
+          <Button variant="primary" onClick={() => setOpenRec("new")}><Plus size={14} /> Запись</Button>
         </div>
       </div>
 
@@ -173,12 +174,15 @@ function SchemaDetail({ schema, onEdit }: { schema: SchemaOut; onEdit: () => voi
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
-                      <button className="btn-ghost !p-1.5" onClick={() => setOpenRec(r)}><Pencil size={13} /></button>
-                      <button
-                        className="btn-ghost !p-1.5 text-rose-500"
+                      <Button variant="ghost" size="icon" onClick={() => setOpenRec(r)}><Pencil size={13} /></Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-rose-500"
                         onClick={() =>
                           confirm({
                             title: "Удалить запись?",
+                            message: "Запись будет удалена без возможности восстановления.",
                             danger: true,
                             confirmLabel: "Удалить",
                             onConfirm: () => del.mutateAsync(r.id),
@@ -186,7 +190,7 @@ function SchemaDetail({ schema, onEdit }: { schema: SchemaOut; onEdit: () => voi
                         }
                       >
                         <Trash2 size={13} />
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -272,9 +276,9 @@ function SchemaModal({ initial, onClose }: { initial?: SchemaOut; onClose: () =>
                 <span className="text-sm flex-1">{f.label}</span>
                 <span className="text-xs text-neutral-500">{FIELD_TYPE_LABEL[f.type]}</span>
                 {f.required && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-700">обяз.</span>}
-                <button type="button" className="btn-ghost !p-1 text-rose-500" onClick={() => setFields(fields.filter((_, j) => j !== i))}>
+                <Button variant="ghost" size="icon" className="!p-1 text-rose-500" onClick={() => setFields(fields.filter((_, j) => j !== i))}>
                   <Trash2 size={12} />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -290,14 +294,14 @@ function SchemaModal({ initial, onClose }: { initial?: SchemaOut; onClose: () =>
             <label className="flex items-center justify-center text-xs">
               <input type="checkbox" checked={newField.required} onChange={(e) => setNewField({ ...newField, required: e.target.checked })} /> обяз
             </label>
-            <button type="button" className="btn-ghost !px-2" onClick={addField}><Plus size={13} /></button>
+            <Button variant="ghost" className="!px-2" onClick={addField}><Plus size={13} /></Button>
           </div>
         </div>
 
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={invalid || save.isPending}>{initial ? "Сохранить" : "Создать"}</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={invalid || save.isPending}>{initial ? "Сохранить" : "Создать"}</Button>
         </div>
       </form>
     </Modal>
@@ -360,8 +364,8 @@ function RecordModal({ schema, initial, onClose }: { schema: SchemaOut; initial:
         ))}
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn-primary" disabled={save.isPending}>{initial ? "Сохранить" : "Создать"}</button>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={save.isPending}>{initial ? "Сохранить" : "Создать"}</Button>
         </div>
       </form>
     </Modal>

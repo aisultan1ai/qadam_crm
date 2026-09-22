@@ -10,7 +10,9 @@ import { trackEvent } from "@/lib/analytics";
 import { api, extractApiError } from "@/api/client";
 import { useAuth } from "@/store/auth";
 import { registerSchema, type RegisterForm } from "@/lib/validation";
-import { FieldError } from "@/components/ui";
+import { FormError } from "@/components/ui";
+import { FormField } from "@/components/lib/FormField";
+import { Button } from "@/components/lib/Button";
 import { Wordmark, LogoMark } from "@/components/Logo";
 import { Turnstile, isCaptchaEnabled } from "@/components/Turnstile";
 
@@ -72,50 +74,37 @@ export default function Register() {
           <div className="text-sm text-neutral-500">Регистрация компании</div>
         </Link>
 
-        <label className="mb-3 block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
-            Название компании
-          </span>
+        <FormField label="Название компании" error={errors.company_name?.message} className="mb-3">
           <input className="input" type="text" autoComplete="organization" {...register("company_name")} />
-          <FieldError msg={errors.company_name?.message} />
-        </label>
+        </FormField>
 
-        <label className="mb-3 block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
-            Ваше имя
-          </span>
+        <FormField label="Ваше имя" error={errors.full_name?.message} className="mb-3">
           <input className="input" type="text" autoComplete="name" {...register("full_name")} />
-          <FieldError msg={errors.full_name?.message} />
-        </label>
+        </FormField>
 
-        <label className="mb-3 block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Email</span>
+        <FormField label="Email" error={errors.email?.message} className="mb-3">
           <input className="input" type="email" autoComplete="email" {...register("email")} />
-          <FieldError msg={errors.email?.message} />
-        </label>
+        </FormField>
 
-        <label className="mb-4 block">
-          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Пароль</span>
+        <FormField label="Пароль" error={errors.password?.message} className="mb-4">
           <input className="input" type="password" autoComplete="new-password" {...register("password")} />
           <PasswordStrength password={passwordValue} />
-          <FieldError msg={errors.password?.message} />
-        </label>
+        </FormField>
 
         <Turnstile onToken={setCaptchaToken} />
 
-        {error && (
-          <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-            {error}
-          </div>
-        )}
+        {error && <FormError msg={error} />}
 
-        <button
+        <Button
           type="submit"
-          disabled={disabled || (isCaptchaEnabled() && !captchaToken)}
-          className="btn-primary w-full disabled:opacity-60"
+          variant="primary"
+          fullWidth
+          isLoading={disabled}
+          disabled={isCaptchaEnabled() && !captchaToken}
+          className="mt-3 disabled:opacity-60"
         >
           {loading ? "Создаём компанию…" : "Создать компанию"}
-        </button>
+        </Button>
 
         <div className="mt-4 text-center text-sm text-neutral-500">
           Уже есть аккаунт?{" "}
