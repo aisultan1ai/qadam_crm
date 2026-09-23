@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180" width="360" height="180" fill="none" font-family="'IBM Plex Sans','Segoe UI',Arial,sans-serif">
+  <!-- Gantt: task rows, dependencies, a "today" marker. -->
+  <rect x="16" y="16" width="328" height="148" rx="10" fill="#FFFFFF" stroke="#E1E4E9"/>
+  <rect x="16" y="16" width="328" height="24" rx="10" fill="#F6F7F9"/>
+  <rect x="16" y="30" width="328" height="10" fill="#F6F7F9"/>
+  <rect x="16" y="40" width="328" height="1" fill="#E1E4E9"/>
+  <g fill="#CBD0D8">
+    <rect x="112" y="25" width="16" height="5" rx="2.5"/><rect x="160" y="25" width="16" height="5" rx="2.5"/>
+    <rect x="208" y="25" width="16" height="5" rx="2.5"/><rect x="256" y="25" width="16" height="5" rx="2.5"/>
+    <rect x="304" y="25" width="16" height="5" rx="2.5"/>
+  </g>
+  <rect x="96" y="41" width="1" height="123" fill="#EEF0F3"/>
+  <g fill="#373D48">
+    <rect x="28" y="54" width="52" height="5" rx="2.5"/>
+    <rect x="28" y="78" width="44" height="5" rx="2.5"/>
+    <rect x="28" y="102" width="56" height="5" rx="2.5"/>
+    <rect x="28" y="126" width="40" height="5" rx="2.5"/>
+    <rect x="28" y="150" width="48" height="5" rx="2.5" fill="#979EAA"/>
+  </g>
+  <rect x="106" y="50" width="72" height="13" rx="4" fill="#10B981"/>
+  <rect x="160" y="74" width="92" height="13" rx="4" fill="#2A52C4"/>
+  <rect x="160" y="74" width="52" height="13" rx="4" fill="#2242A0"/>
+  <rect x="236" y="98" width="68" height="13" rx="4" fill="#6488EA"/>
+  <rect x="196" y="122" width="56" height="13" rx="4" fill="#F59E0B"/>
+  <path d="M296 150 l6 -6 l6 6 l-6 6 z" fill="#2A52C4"/>
+  <path d="M178 56 h-4 q6 0 6 6 v12" stroke="#979EAA" stroke-width="1.2"/>
+  <path d="M252 80 q10 0 10 8 v10" stroke="#979EAA" stroke-width="1.2"/>
+  <rect x="226" y="41" width="1.5" height="123" fill="#E11D48"/>
+  <circle cx="226.75" cy="44" r="3" fill="#E11D48"/>
+</svg>

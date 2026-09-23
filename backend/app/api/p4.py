@@ -39,7 +39,7 @@ from ..models import (
     Contact, Company, User, TotpBackupCode,
 )
 from ..schemas.common import Message
-from .deps import TenantContext, get_current_context, log_action
+from .deps import TenantContext, get_current_context, log_action, require
 
 
 router = APIRouter(tags=["p4"])
@@ -128,11 +128,24 @@ def list_project_roles(project_id: int, ctx: TenantContext = Depends(get_current
     return db.query(ProjectRoleAssignment).filter(ProjectRoleAssignment.project_id == project_id).all()
 
 
-@router.post("/api/projects/{project_id}/roles", response_model=ProjectRoleOut, status_code=201)
-def assign_project_role(project_id: int, payload: ProjectRoleAssign, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def _project_in_tenant(db: Session, ctx: TenantContext, project_id: int) -> Project:
     proj = db.get(Project, project_id)
     if not proj or proj.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Проект не найден")
+    return proj
+
+
+@router.post("/api/projects/{project_id}/roles", response_model=ProjectRoleOut, status_code=201)
+def assign_project_role(project_id: int, payload: ProjectRoleAssign, ctx: TenantContext = Depends(require("projects.update")), db: Session = Depends(get_db)):
+    _project_in_tenant(db, ctx, project_id)
+    # Назначать можно только сотрудника этой же компании.
+    member = (
+        db.query(TenantMembership)
+        .filter(TenantMembership.tenant_id == ctx.tenant.id, TenantMembership.user_id == payload.user_id)
+        .first()
+    )
+    if not member:
+        raise HTTPException(404, "Пользователь не найден в компании")
     row = ProjectRoleAssignment(project_id=project_id, user_id=payload.user_id, role_name=payload.role_name)
     db.add(row)
     try:
@@ -145,7 +158,8 @@ def assign_project_role(project_id: int, payload: ProjectRoleAssign, ctx: Tenant
 
 
 @router.delete("/api/projects/{project_id}/roles/{rid}", response_model=Message)
-def remove_project_role(project_id: int, rid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def remove_project_role(project_id: int, rid: int, ctx: TenantContext = Depends(require("projects.update")), db: Session = Depends(get_db)):
+    _project_in_tenant(db, ctx, project_id)
     row = db.get(ProjectRoleAssignment, rid)
     if not row or row.project_id != project_id:
         raise HTTPException(404, "Роль не найдена")

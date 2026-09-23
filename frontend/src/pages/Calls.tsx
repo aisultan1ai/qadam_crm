@@ -14,6 +14,7 @@ import { FormField } from "@/components/lib/FormField";
 import { DataTable, Column } from "@/components/lib/DataTable";
 import type { Page } from "@/types";
 
+import { Tabs } from "@/components/page";
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
 type ContactBrief = { id: number; first_name: string; last_name?: string | null };
 
@@ -81,11 +82,11 @@ export default function CallsPage() {
       width: 130,
       render: (c) =>
         c.direction === "inbound" ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
+          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-200 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
             <PhoneIncoming size={11} /> Входящий
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-sky-200 px-2 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+          <span className="inline-flex items-center gap-1 rounded-md bg-sky-200 px-2 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
             <PhoneOutgoing size={11} /> Исходящий
           </span>
         ),
@@ -177,42 +178,27 @@ export default function CallsPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Звонки</h1>
-          <p className="text-sm text-neutral-500">История звонков. Twilio/Voximplant подключаются через webhook</p>
+          <h1 className="page-title">Звонки</h1>
+          <p className="page-subtitle">История звонков. Twilio/Voximplant подключаются через webhook</p>
         </div>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenLog(true)}>
           Записать звонок
         </Button>
       </div>
 
-      <div role="tablist" className="flex border-b border-neutral-200 dark:border-neutral-800">
-        {(
-          [
-            ["all", "Все", Phone],
-            ["inbound", "Входящие", PhoneIncoming],
-            ["outbound", "Исходящие", PhoneOutgoing],
-          ] as const
-        ).map(([k, label, Icon]) => (
-          <button
-            key={k}
-            role="tab"
-            aria-selected={filter === k}
-            onClick={() => setFilter(k)}
-            className={clsx(
-              "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm",
-              filter === k
-                ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
-                : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400",
-            )}
-          >
-            <Icon size={14} />
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Направление звонков"
+        value={filter}
+        onChange={setFilter}
+        items={[
+          { key: "all", label: "Все", icon: Phone },
+          { key: "inbound", label: "Входящие", icon: PhoneIncoming },
+          { key: "outbound", label: "Исходящие", icon: PhoneOutgoing },
+        ]}
+      />
 
       {!isPending && (!data || data.length === 0) ? (
         <EmptyState

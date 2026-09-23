@@ -15,6 +15,7 @@ import { FormField } from "@/components/lib/FormField";
 import { DataTable, Column } from "@/components/lib/DataTable";
 import type { Page } from "@/types";
 
+import { Tabs } from "@/components/page";
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
 
 type TimeOffKind = "vacation" | "sick" | "personal" | "remote";
@@ -41,16 +42,16 @@ const KIND_LABEL: Record<TimeOffKind, string> = {
 };
 
 const KIND_COLOR: Record<TimeOffKind, string> = {
-  vacation: "bg-emerald-200 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
-  sick: "bg-rose-200 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
-  personal: "bg-sky-200 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
-  remote: "bg-violet-200 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200",
+  vacation: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+  sick: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
+  personal: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25",
+  remote: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25",
 };
 
 const STATUS_COLOR: Record<TimeOffStatus, string> = {
-  pending: "bg-amber-200 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
-  approved: "bg-emerald-200 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
-  rejected: "bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300",
+  pending: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
+  approved: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+  rejected: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25",
 };
 
 const STATUS_LABEL: Record<TimeOffStatus, string> = {
@@ -127,7 +128,7 @@ export default function TimeOffPage() {
       header: "Тип",
       width: 140,
       render: (row) => (
-        <span className={clsx("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", KIND_COLOR[row.kind])}>
+        <span className={clsx("inline-flex rounded-md px-2 py-0.5 text-xs font-medium", KIND_COLOR[row.kind])}>
           {KIND_LABEL[row.kind]}
         </span>
       ),
@@ -155,7 +156,7 @@ export default function TimeOffPage() {
       header: "Статус",
       width: 130,
       render: (row) => (
-        <span className={clsx("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLOR[row.status])}>
+        <span className={clsx("inline-flex rounded-md px-2 py-0.5 text-xs font-medium", STATUS_COLOR[row.status])}>
           {STATUS_LABEL[row.status]}
         </span>
       ),
@@ -217,40 +218,26 @@ export default function TimeOffPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Отпуска и больничные</h1>
-          <p className="text-sm text-neutral-500">Календарь отсутствий команды</p>
+          <h1 className="page-title">Отпуска и больничные</h1>
+          <p className="page-subtitle">Календарь отсутствий команды</p>
         </div>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
           Новая заявка
         </Button>
       </div>
 
-      <div role="tablist" className="flex border-b border-neutral-200 dark:border-neutral-800">
-        {(
-          [
-            ["all", "Вся команда"],
-            ["mine", "Мои"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => setTab(key)}
-            className={clsx(
-              "-mb-px border-b-2 px-3 py-2 text-sm",
-              tab === key
-                ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
-                : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Чьи заявки показать"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { key: "all", label: "Вся команда" },
+          { key: "mine", label: "Мои" },
+        ]}
+      />
 
       {!isPending && (!data || data.length === 0) ? (
         <EmptyState

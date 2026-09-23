@@ -43,7 +43,7 @@ export default function VerifyEmail() {
   }, [token, fetchMe]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] p-4 dark:bg-[#0F0F14]">
+    <div className="flex min-h-screen items-center justify-center bg-[#F6F7F9] p-4 dark:bg-[#0D0F13]">
       <div className="card w-full max-w-md p-8 text-center">
         <div className="mb-6 flex flex-col items-center gap-3">
           <LogoMark size={56} className="rounded-[14px]" />

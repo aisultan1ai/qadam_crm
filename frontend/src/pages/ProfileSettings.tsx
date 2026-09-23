@@ -11,6 +11,7 @@ import { fromNow } from "@/lib/date";
 import { Button } from "@/components/lib/Button";
 import { FormField } from "@/components/lib/FormField";
 
+import { SettingsLayout } from "@/components/page";
 type Tab = "notifications" | "security" | "sessions" | "linked";
 
 const TABS: { key: Tab; label: string; icon: typeof Bell }[] = [
@@ -23,45 +24,19 @@ const TABS: { key: Tab; label: string; icon: typeof Bell }[] = [
 export default function ProfileSettings() {
   const [tab, setTab] = useState<Tab>("notifications");
   return (
-    <div className="space-y-4">
-      <div>
-        <Link to="/profile" className="mb-1 inline-flex items-center gap-1 text-xs text-neutral-500 hover:text-brand-600">
-          <ArrowLeft size={12} /> К профилю
-        </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Настройки профиля</h1>
-        <p className="text-sm text-neutral-500">Уведомления, безопасность, сессии, интеграции</p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-        <nav className="space-y-1">
-          {TABS.map((t) => {
-            const Icon = t.icon;
-            const active = tab === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={clsx(
-                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                    : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
-                )}
-              >
-                <Icon size={15} />
-                {t.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="space-y-5">
+      <Link to="/profile" className="inline-flex items-center gap-1 text-[13px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+        <ArrowLeft size={14} /> К профилю
+      </Link>
+      <SettingsLayout title="Настройки профиля" items={TABS} value={tab} onChange={setTab}>
+        <section className="card p-5 sm:p-6">
+          <h2 className="mb-4 text-base font-semibold">{TABS.find((t) => t.key === tab)?.label}</h2>
           {tab === "notifications" && <NotificationsTab />}
           {tab === "security" && <SecurityTab />}
           {tab === "sessions" && <SessionsTab />}
           {tab === "linked" && <LinkedTab />}
-        </div>
-      </div>
+        </section>
+      </SettingsLayout>
     </div>
   );
 }
@@ -181,7 +156,7 @@ function SecurityTab() {
 
       {totpEnabled && <BackupCodesSection />}
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+      <div className="card p-4">
         <div className="mb-2 flex items-center gap-2 font-semibold">
           <ShieldCheck size={16} /> Двухфакторная аутентификация (TOTP)
         </div>
@@ -331,7 +306,7 @@ function BackupCodesSection() {
   const s = status.data;
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="card p-4">
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <KeyRound size={16} /> Резервные коды
       </div>

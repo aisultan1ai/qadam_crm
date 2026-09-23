@@ -22,7 +22,7 @@ export default function LegalPage({
   }, [title]);
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] text-neutral-800 dark:bg-[#0F0F14] dark:text-neutral-200">
+    <div className="min-h-screen bg-[#F6F7F9] text-neutral-800 dark:bg-[#0D0F13] dark:text-neutral-200">
       <header className="border-b border-neutral-200 bg-white/70 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/40">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-2">

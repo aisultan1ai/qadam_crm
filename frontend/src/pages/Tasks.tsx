@@ -26,6 +26,7 @@ import { useToast } from "@/components/Toast";
 import { VirtualList } from "@/components/VirtualList";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 
+import { SearchInput, Segmented } from "@/components/page";
 const TASKS_VIEW_STORAGE_KEY = "tasks:view";
 const TASKS_SIDEBAR_STORAGE_KEY = "tasks:sidebar";
 
@@ -270,8 +271,8 @@ export default function Tasks() {
         />
       )}
 
-    <div className="min-w-0 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="min-w-0 space-y-5">
+      <div className="page-header">
         <div className="flex items-center gap-2">
           {!sidebarOpen && (
             <Button
@@ -285,7 +286,7 @@ export default function Tasks() {
             </Button>
           )}
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="page-title">
               {activeScopeTab && activeScopeTab.key !== "all" ? activeScopeTab.label : "Задачи"}
               {activeProject && (
                 <span className="ml-2 text-lg font-normal text-neutral-500">
@@ -293,42 +294,21 @@ export default function Tasks() {
                 </span>
               )}
             </h1>
-            <p className="text-sm text-neutral-500">{tasks?.length ?? 0} задач</p>
+            <p className="page-subtitle">{tasks?.length ?? 0} задач</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
-            {(
-              [
-                ["kanban", <LayoutGrid size={15} />],
-                ["table", <TableIcon size={15} />],
-                ["list", <ListIcon size={15} />],
-                ["calendar", <CalendarDays size={15} />],
-              ] as const
-            ).map(([v, icon]) => {
-              // На мобилке скрываем table (всё равно нечитаемо).
-              if (isMobile && v === "table") return null;
-              return (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  aria-pressed={view === v}
-                  aria-label={v === "kanban" ? "Kanban" : v === "table" ? "Таблица" : v === "list" ? "Список" : "Календарь"}
-                  className={clsx(
-                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium capitalize",
-                    view === v
-                      ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-white"
-                      : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/50",
-                  )}
-                >
-                  {icon}
-                  <span className="hidden sm:inline">
-                    {v === "kanban" ? "Kanban" : v === "table" ? "Таблица" : v === "list" ? "Список" : "Календарь"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <Segmented
+            label="Вид задач"
+            value={view}
+            onChange={setView}
+            items={[
+              { key: "kanban", label: <span className="hidden sm:inline">Канбан</span>, icon: LayoutGrid, title: "Канбан" },
+              { key: "table", label: <span className="hidden sm:inline">Таблица</span>, icon: TableIcon, title: "Таблица", hidden: isMobile },
+              { key: "list", label: <span className="hidden sm:inline">Список</span>, icon: ListIcon, title: "Список" },
+              { key: "calendar", label: <span className="hidden sm:inline">Календарь</span>, icon: CalendarDays, title: "Календарь" },
+            ]}
+          />
           {can("analytics.reports") && (
             <Button
               variant="ghost"
@@ -358,21 +338,12 @@ export default function Tasks() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
-        <div className="relative min-w-[180px] flex-1 md:max-w-xs">
-          <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input
-            className="input pl-8"
-            placeholder="Поиск задач…"
-            value={qLocal}
-            onChange={(e) => setQLocal(e.target.value)}
-            aria-label="Поиск задач"
-          />
-        </div>
+        <SearchInput value={qLocal} onChange={setQLocal} placeholder="Поиск задач" />
 
         {/* Десктоп: селекты в одну строку */}
         <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
           <select
-            className="input min-w-0 flex-1"
+            className="input !h-8 !py-0 min-w-0 flex-1 text-[13px]"
             value={projectId}
             onChange={(e) => updateParam("project", e.target.value)}
             aria-label="Проект"
@@ -381,7 +352,7 @@ export default function Tasks() {
             {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <select
-            className="input min-w-0 flex-1"
+            className="input !h-8 !py-0 min-w-0 flex-1 text-[13px]"
             value={assigneeId}
             onChange={(e) => updateParam("assignee", e.target.value)}
             aria-label="Исполнитель"
@@ -390,7 +361,7 @@ export default function Tasks() {
             {users?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           <select
-            className="input min-w-0 flex-1"
+            className="input !h-8 !py-0 min-w-0 flex-1 text-[13px]"
             value={status}
             onChange={(e) => updateParam("status", e.target.value)}
             aria-label="Статус"
@@ -399,7 +370,7 @@ export default function Tasks() {
             {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
           <select
-            className="input min-w-0 flex-1"
+            className="input !h-8 !py-0 min-w-0 flex-1 text-[13px]"
             value={priority}
             onChange={(e) => updateParam("priority", e.target.value)}
             aria-label="Приоритет"
@@ -724,7 +695,7 @@ function TasksSidebar({
                 >
                   <span
                     className="ml-1 inline-flex h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: (p as any).color || "#7C5CFF" }}
+                    style={{ backgroundColor: (p as any).color || "#2A52C4" }}
                   />
                   <span className="truncate">{p.name}</span>
                 </button>
@@ -770,10 +741,10 @@ function KanbanColumn({
       className={clsx(
         "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border-2 p-2.5 transition-all duration-[180ms] ease-out-soft",
         isOver
-          ? "border-brand-500 bg-brand-50 shadow-[0_0_0_4px_rgba(124,92,255,0.12)] dark:border-brand-500 dark:bg-brand-900/15"
+          ? "border-brand-500 bg-brand-50 shadow-[0_0_0_4px_rgba(42,82,196,0.12)] dark:border-brand-500 dark:bg-brand-900/15"
           : isDraggingSomething
-          ? "border-dashed border-neutral-300 bg-neutral-50/40 dark:border-neutral-700/60 dark:bg-[#17171F]"
-          : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-700/50 dark:bg-[#17171F]",
+          ? "border-dashed border-neutral-300 bg-neutral-50/40 dark:border-neutral-700/60 dark:bg-[#14171C]"
+          : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-700/50 dark:bg-[#14171C]",
       )}
     >
       <div className="mb-2 flex items-center justify-between px-1.5">
@@ -834,7 +805,7 @@ const KanbanCard = memo(function KanbanCard({
       {...attributes}
       onClick={() => nav(`/tasks/${task.id}`)}
       className={clsx(
-        "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#2b2b34]",
+        "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#1B1F26]",
         landed && "animate-settle",
       )}
     >
@@ -867,7 +838,7 @@ const KanbanCard = memo(function KanbanCard({
 function KanbanCardGhost({ task }: { task: TaskListItem }) {
   return (
     <div
-      className="rounded-xl border border-brand-300 bg-white p-3 shadow-[0_18px_40px_-12px_rgba(23,23,31,0.35)] dark:border-brand-500/60 dark:bg-[#2b2b34]"
+      className="rounded-xl border border-brand-300 bg-white p-3 shadow-[0_18px_40px_-12px_rgba(23,23,31,0.35)] dark:border-brand-500/60 dark:bg-[#1B1F26]"
       style={{
         width: 240,
         transform: "rotate(2.5deg) scale(1.03)",
@@ -1591,20 +1562,28 @@ function BulkToolbar({
   onOpen: (action: "status" | "priority" | "assignee" | "deadline") => void;
   onDelete: () => void;
 }) {
+  // Тёмная панель массовых действий (шаблон списка): плавает над таблицей внизу экрана.
+  const act = "rounded-md px-2.5 py-1.5 text-[13px] text-zinc-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400";
   return (
-    <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 pointer-events-none">
-      <div className="card pointer-events-auto flex flex-wrap items-center gap-2 px-3 py-2 shadow-lg animate-slide-up">
-        <span className="pl-1 pr-2 text-sm font-medium">Выбрано: {count}</span>
-        <div className="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
-        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("status")}>Статус</Button>
-        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("priority")}>Приоритет</Button>
-        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("assignee")}>Исполнитель</Button>
-        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => onOpen("deadline")}>Дедлайн</Button>
-        <Button variant="ghost" size="sm" className="!py-1 !px-2 text-rose-500" onClick={onDelete}>
-          <Trash2 size={12} /> Удалить
-        </Button>
-        <div className="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
-        <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={onClear}>Отмена</Button>
+    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
+      <div
+        role="toolbar"
+        aria-label="Действия с выбранными задачами"
+        className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl bg-sidebar px-2 py-1.5 text-white shadow-pop animate-slide-up"
+      >
+        <span className="px-2 text-[13px] font-medium tabular-nums">Выбрано: {count}</span>
+        <span className="mx-1 h-4 w-px bg-white/15" />
+        <button type="button" className={act} onClick={() => onOpen("status")}>Статус</button>
+        <button type="button" className={act} onClick={() => onOpen("priority")}>Приоритет</button>
+        <button type="button" className={act} onClick={() => onOpen("assignee")}>Исполнитель</button>
+        <button type="button" className={act} onClick={() => onOpen("deadline")}>Срок</button>
+        <span className="mx-1 h-4 w-px bg-white/15" />
+        <button type="button" className={act + " !text-rose-300 hover:!bg-rose-500/15"} onClick={onDelete}>
+          <Trash2 size={13} className="mr-1 inline" /> Удалить
+        </button>
+        <button type="button" className={act} onClick={onClear} aria-label="Снять выделение">
+          Отмена
+        </button>
       </div>
     </div>
   );
@@ -1749,7 +1728,7 @@ function FilterDrawer({
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Фильтры задач">
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#17171F]">
+      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#14171C]">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold">Фильтры</h3>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Закрыть фильтры">

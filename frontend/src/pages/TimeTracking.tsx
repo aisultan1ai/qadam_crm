@@ -81,9 +81,9 @@ export default function TimeTracking() {
   }, [weekStart]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Тайм-трекинг</h1>
+    <div className="space-y-5">
+      <div className="page-header">
+        <h1 className="page-title">Тайм-трекинг</h1>
         <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-1 text-sm dark:border-neutral-700 dark:bg-neutral-900">
           {(["week", "reports", "timesheets"] as const).map((k) => (
             <button
@@ -232,16 +232,16 @@ function WeekView({
         <Loader />
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500 dark:border-neutral-700">
-                <th className="py-2 pr-3">Задача / описание</th>
+          <table className="min-w-full">
+            <thead className="table-head">
+              <tr>
+                <th className="table-head-cell">Задача / описание</th>
                 {days.map((d) => (
                   <th key={d.toISOString()} className="px-2 py-2 text-center tabular-nums">
                     {d.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric" })}
                   </th>
                 ))}
-                <th className="pl-3 pr-2 text-right">Итого</th>
+                <th className="table-head-cell text-right">Итого</th>
               </tr>
             </thead>
             <tbody>
@@ -264,7 +264,7 @@ function WeekView({
                       )}
                     </td>
                     {row.perDay.map((s, i) => (
-                      <td key={i} className="px-2 py-2 text-center text-xs tabular-nums text-neutral-600 dark:text-neutral-400">
+                      <td key={i} className="table-cell text-center text-xs tabular-nums text-neutral-600 dark:text-neutral-400">
                         {fmtSecShort(s)}
                       </td>
                     ))}
@@ -272,10 +272,10 @@ function WeekView({
                   </tr>
                 );
               })}
-              <tr className="border-t border-neutral-200 bg-neutral-50 font-medium dark:border-neutral-700 dark:bg-neutral-900/50">
+              <tr className="table-row">
                 <td className="py-2 pr-3 text-neutral-500">Итого по дню</td>
                 {dayTotals.map((s, i) => (
-                  <td key={i} className="px-2 py-2 text-center text-xs tabular-nums">{fmtSecShort(s)}</td>
+                  <td key={i} className="table-cell text-center text-xs tabular-nums">{fmtSecShort(s)}</td>
                 ))}
                 <td className="pl-3 pr-2 text-right tabular-nums">{fmtSec(weekTotal)}</td>
               </tr>
@@ -602,10 +602,10 @@ function TimesheetsView({ canApprove }: { canApprove: boolean }) {
 function StatusBadge({ status }: { status: string }) {
   const cls =
     status === "approved"
-      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+      ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25"
       : status === "rejected"
-      ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200"
-      : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200";
+      ? "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/25"
+      : "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25";
   const label = status === "approved" ? "Утверждён" : status === "rejected" ? "Отклонён" : "На утверждении";
-  return <span className={clsx("rounded-full px-2 py-0.5 text-xs font-medium", cls)}>{label}</span>;
+  return <span className={clsx("rounded-md px-2 py-0.5 text-xs font-medium", cls)}>{label}</span>;
 }

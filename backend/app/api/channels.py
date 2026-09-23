@@ -1079,6 +1079,8 @@ def close_poll(
     msg = db.get(Message, poll.message_id)
     if not msg:
         raise HTTPException(404, "Опрос не найден")
+    # Опрос должен быть в канале этой компании, где пользователь состоит.
+    _require_member(db, ctx, msg.channel_id)
     if msg.author_id != ctx.user.id and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Закрыть может только автор")
     poll.closed_at = datetime.now(timezone.utc)

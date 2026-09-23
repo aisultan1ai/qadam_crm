@@ -208,10 +208,10 @@ export default function CalendarPage() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold">Календарь</h1>
-          <p className="text-sm text-neutral-500">Встречи, события, дедлайны задач</p>
+          <h1 className="page-title">Календарь</h1>
+          <p className="page-subtitle">Встречи, события, дедлайны задач</p>
         </div>
         <Button variant="primary" onClick={() => setEditorOpen({ mode: "create" })}>
           <Plus size={14} /> Новое событие
@@ -231,7 +231,7 @@ export default function CalendarPage() {
           }}
         />
 
-        <div className="relative min-h-0 overflow-hidden rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <div className="relative min-h-0 overflow-hidden card p-3">
           {isFetching && (
             <div className="absolute right-3 top-3 z-10">
               <Loader2 size={14} className="animate-spin text-neutral-400" />
@@ -250,7 +250,7 @@ export default function CalendarPage() {
             onSelectEvent={handleSelectEvent}
             popup
             eventPropGetter={(evt) => {
-              const color = (evt.resource as EventOcc).color || "#7C5CFF";
+              const color = (evt.resource as EventOcc).color || "#2A52C4";
               return {
                 style: {
                   backgroundColor: color,
@@ -318,10 +318,10 @@ function CalendarSidebar({
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#7C5CFF");
+  const [color, setColor] = useState("#2A52C4");
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="flex min-h-0 flex-col overflow-hidden card">
       <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2 dark:border-neutral-800">
         <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Календари</span>
         <Button variant="ghost" size="icon" className="!p-1" onClick={() => setCreateOpen(true)} title="Новый календарь">
@@ -732,9 +732,9 @@ function EventDetailsModal({
                   <span>User #{p.user_id} {p.is_organizer && <span className="chip bg-brand-100 text-brand-700">организатор</span>}</span>
                   <span className={clsx(
                     "chip",
-                    p.status === "accepted" && "bg-emerald-100 text-emerald-700",
-                    p.status === "declined" && "bg-rose-100 text-rose-700",
-                    p.status === "tentative" && "bg-amber-100 text-amber-700",
+                    p.status === "accepted" && "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+                    p.status === "declined" && "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
+                    p.status === "tentative" && "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
                     p.status === "pending" && "bg-neutral-100 text-neutral-600",
                   )}>{p.status}</span>
                 </div>

@@ -1,10 +1,11 @@
+import re
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
@@ -47,6 +48,24 @@ from .api import (
     task_inbox as task_inbox_api,
     p4 as p4_api,
 )
+
+
+_PUBLIC_MEDIA_RE = re.compile(r"^(?:\d+/(?:avatars|branding|wiki)|avatars)/[^/]")
+
+
+class PublicMediaFiles(StaticFiles):
+    """StaticFiles, отдающий только публичные подпапки UPLOAD_DIR и запрещающий исполнение скриптов."""
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        norm = path.replace("\\", "/").lstrip("/")
+        if ".." in norm.split("/") or not _PUBLIC_MEDIA_RE.match(norm):
+            return PlainTextResponse("Not Found", status_code=404)
+        response = await super().get_response(path, scope)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox"
+        )
+        return response
 
 
 logging.basicConfig(
@@ -150,9 +169,10 @@ def create_app() -> FastAPI:
 
     uploads_dir = Path(settings.UPLOAD_DIR)
     uploads_dir.mkdir(parents=True, exist_ok=True)
-    # /media/{tenant_id}/... (аватары, брендинг). Аттачменты не отдаём статикой —
-    # там нужны permission-проверки, они идут через /api/tasks/{id}/attachments/{aid}.
-    app.mount("/media", StaticFiles(directory=str(uploads_dir)), name="media")
+    # /media/{tenant_id}/{avatars|branding|wiki}/... и legacy /media/avatars/... — публично.
+    # Вложения и документы лежат в том же UPLOAD_DIR, но статикой НЕ отдаются: только через
+    # API с проверкой прав (/api/tasks/{id}/attachments/{aid} и т.п.).
+    app.mount("/media", PublicMediaFiles(directory=str(uploads_dir)), name="media")
 
     for r in (
         auth.router,

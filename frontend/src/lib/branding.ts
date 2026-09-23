@@ -1,39 +1,50 @@
 /**
- * Применяет primary_color tenant'а как CSS-переменные --brand-*.
+ * Применяет primary_color tenant'а как CSS-переменные --brand-50…950 (RGB-каналы).
+ * Tailwind читает brand-* через rgb(var(--brand-N) / α), поэтому смена переменных
+ * перекрашивает кнопки, ссылки, фокус и бейджи по всему приложению.
  * Используется в Layout — вызывается при загрузке `me.current_tenant`.
  */
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+type RGB = { r: number; g: number; b: number };
+
+function hexToRgb(hex: string): RGB | null {
   const m = /^#?([a-fA-F0-9]{6})$/.exec(hex);
   if (!m) return null;
   const int = parseInt(m[1], 16);
   return { r: (int >> 16) & 0xff, g: (int >> 8) & 0xff, b: int & 0xff };
 }
 
-function mix(a: number, b: number, t: number) {
-  return Math.round(a * (1 - t) + b * t);
-}
+const mixTo = (c: RGB, target: number, t: number): RGB => ({
+  r: Math.round(c.r * (1 - t) + target * t),
+  g: Math.round(c.g * (1 - t) + target * t),
+  b: Math.round(c.b * (1 - t) + target * t),
+});
+
+const channels = (c: RGB) => `${c.r} ${c.g} ${c.b}`;
+
+// Шаг → (куда смешивать, насколько). 600 = цвет компании как есть.
+const SCALE: Record<number, [number, number]> = {
+  50: [255, 0.92],
+  100: [255, 0.84],
+  200: [255, 0.68],
+  300: [255, 0.48],
+  400: [255, 0.28],
+  500: [255, 0.12],
+  600: [255, 0],
+  700: [0, 0.18],
+  800: [0, 0.32],
+  900: [0, 0.45],
+  950: [0, 0.62],
+};
 
 export function applyBrandColor(hex: string | null | undefined) {
   const root = document.documentElement;
-  if (!hex) {
-    // Возвращаем дефолт (Qadam brand из tailwind.config).
-    const defaults: Record<string, string> = {
-      "--brand-50": "#EAF3FF",
-      "--brand-500": "#3B88FE",
-      "--brand-600": "#0F67FD",
-      "--brand-700": "#0C52CC",
-    };
-    for (const [k, v] of Object.entries(defaults)) root.style.setProperty(k, v);
+  const rgb = hex ? hexToRgb(hex) : null;
+  if (!rgb) {
+    // Возвращаем дефолт из src/index.css (Qadam cobalt).
+    for (const step of Object.keys(SCALE)) root.style.removeProperty(`--brand-${step}`);
     return;
   }
-  const rgb = hexToRgb(hex);
-  if (!rgb) return;
-  const toHex = (r: number, g: number, b: number) =>
-    "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
-
-  // 600 = базовый; 700 темнее, 500 светлее, 50 очень светлый
-  root.style.setProperty("--brand-600", toHex(rgb.r, rgb.g, rgb.b));
-  root.style.setProperty("--brand-700", toHex(mix(rgb.r, 0, 0.2), mix(rgb.g, 0, 0.2), mix(rgb.b, 0, 0.2)));
-  root.style.setProperty("--brand-500", toHex(mix(rgb.r, 255, 0.12), mix(rgb.g, 255, 0.12), mix(rgb.b, 255, 0.12)));
-  root.style.setProperty("--brand-50", toHex(mix(rgb.r, 255, 0.9), mix(rgb.g, 255, 0.9), mix(rgb.b, 255, 0.9)));
+  for (const [step, [target, t]] of Object.entries(SCALE)) {
+    root.style.setProperty(`--brand-${step}`, channels(mixTo(rgb, target, t)));
+  }
 }

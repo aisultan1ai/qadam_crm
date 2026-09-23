@@ -52,17 +52,18 @@ export function Avatar({
       .slice(0, 2)
       .join("")
       .toUpperCase();
+  // Приглушённые -700 оттенки: белые инициалы ≥ 4.5:1 на каждом.
   const palette = [
-    "bg-indigo-500",
-    "bg-emerald-500",
-    "bg-rose-500",
-    "bg-amber-500",
-    "bg-sky-500",
-    "bg-fuchsia-500",
-    "bg-teal-500",
-    "bg-violet-500",
-    "bg-orange-500",
-    "bg-cyan-500",
+    "bg-indigo-700",
+    "bg-emerald-700",
+    "bg-rose-700",
+    "bg-amber-700",
+    "bg-sky-700",
+    "bg-fuchsia-700",
+    "bg-teal-700",
+    "bg-blue-700",
+    "bg-orange-700",
+    "bg-cyan-700",
   ];
   const idx = hashString(name || "?") % palette.length;
   return (
@@ -79,31 +80,31 @@ export function Avatar({
   );
 }
 
-// Planfix-style: цветные пилюли по статусам (новые = розовый, в работе = голубой,
-// на проверке = янтарь, готово = зелёный, отменено = серый).
+// Статусы: плоские бейджи (светлая заливка + тонкая рамка + тёмный текст).
+// Новая = фиолетово-синий, в работе = голубой, проверка = янтарь, готово = зелёный, отмена = серый.
 const STATUS_STYLE: Record<TaskStatus, { chip: string; dot: string; icon: ReactNode }> = {
   new: {
-    chip: "bg-pink-200 text-pink-900 dark:bg-pink-950/50 dark:text-pink-200",
-    dot: "bg-pink-500",
+    chip: "bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/25",
+    dot: "bg-indigo-500",
     icon: <Circle size={10} className="fill-current opacity-70" />,
   },
   in_progress: {
-    chip: "bg-sky-200 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
+    chip: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25",
     dot: "bg-sky-500",
     icon: <Loader2 size={11} />,
   },
   review: {
-    chip: "bg-amber-200 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
+    chip: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
     dot: "bg-amber-500",
     icon: <Eye size={11} />,
   },
   done: {
-    chip: "bg-emerald-200 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
+    chip: "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
     dot: "bg-emerald-500",
     icon: <CheckCircle2 size={11} />,
   },
   cancelled: {
-    chip: "bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300",
+    chip: "bg-zinc-100 text-zinc-600 ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25",
     dot: "bg-neutral-400",
     icon: <XCircle size={11} />,
   },
@@ -130,19 +131,19 @@ export function StatusDot({ status, size = 10 }: { status: TaskStatus; size?: nu
 
 const PRIORITY_STYLE: Record<TaskPriority, { chip: string; icon: ReactNode }> = {
   low: {
-    chip: "bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300",
+    chip: "bg-zinc-100 text-zinc-600 ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25",
     icon: <ArrowDown size={11} />,
   },
   medium: {
-    chip: "bg-sky-200 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
+    chip: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25",
     icon: <Minus size={11} />,
   },
   high: {
-    chip: "bg-amber-200 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
+    chip: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
     icon: <ArrowUp size={11} />,
   },
   critical: {
-    chip: "bg-rose-200 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
+    chip: "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
     icon: <Flame size={11} />,
   },
 };
@@ -241,7 +242,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 animate-fade-in"
       onClick={onClose}
       role="presentation"
     >
@@ -253,11 +254,11 @@ export function Modal({
         aria-label={title ? undefined : "Диалог"}
         aria-describedby={contentId}
         tabIndex={-1}
-        className={clsx("card w-full animate-slide-up p-0 outline-none", width)}
+        className={clsx("card w-full animate-slide-up p-0 shadow-pop outline-none", width)}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3.5 dark:border-neutral-800">
+          <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 dark:border-zinc-800">
             <h3 id={titleId} className="text-base font-semibold">{title}</h3>
             <button className="btn-ghost !p-1.5" onClick={onClose} aria-label="Закрыть">
               <X size={18} />
@@ -282,10 +283,14 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      {icon && <div className="mb-3 text-neutral-400 dark:text-neutral-500">{icon}</div>}
-      <div className="text-base font-medium">{title}</div>
-      {description && <div className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{description}</div>}
+    <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
+      {icon && (
+        <div className="mb-4 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-[#1B1F26] dark:text-zinc-400">
+          {icon}
+        </div>
+      )}
+      <div className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">{title}</div>
+      {description && <div className="mt-1 max-w-md text-sm text-zinc-500 dark:text-zinc-400">{description}</div>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -299,7 +304,7 @@ export function FieldError({ msg }: { msg?: string | null }) {
 export function FormError({ msg }: { msg?: string | null }) {
   if (!msg) return null;
   return (
-    <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+    <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-300">
       {msg}
     </div>
   );
@@ -308,7 +313,7 @@ export function FormError({ msg }: { msg?: string | null }) {
 export function Loader() {
   return (
     <div className="flex items-center justify-center py-16">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-brand-600 dark:border-neutral-800 dark:border-t-brand-500" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-brand-600 dark:border-zinc-800 dark:border-t-brand-400" />
     </div>
   );
 }

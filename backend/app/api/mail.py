@@ -15,6 +15,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from ..core.html_sanitize import sanitize_email_html
 from ..core.secrets import decrypt, encrypt
 from ..database import get_db
 from ..models import (
@@ -135,7 +136,8 @@ def _msg_out(m: MailMessage) -> dict:
         "cc_addrs": m.cc_addrs or [],
         "subject": m.subject,
         "body_text": m.body_text,
-        "body_html": m.body_html,
+        # HTML от внешних отправителей: только очищенная разметка (без скриптов/стилей/on*).
+        "body_html": sanitize_email_html(m.body_html),
         "is_read": m.is_read,
         "error": m.error,
         "sent_at": m.sent_at.isoformat() if m.sent_at else None,

@@ -345,7 +345,7 @@ export default function AutomationEditor() {
       {/* Body: palette | canvas | inspector */}
       <div className="flex min-h-0 flex-1 gap-3">
         {/* Palette */}
-        <div className="w-56 shrink-0 space-y-3 overflow-y-auto rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <div className="w-56 shrink-0 space-y-3 overflow-y-auto card p-3">
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Триггер
@@ -405,12 +405,12 @@ export default function AutomationEditor() {
           >
             <Background gap={16} size={1} />
             <Controls showInteractive={false} />
-            <MiniMap zoomable pannable style={{ background: "#f7f7fa" }} />
+            <MiniMap zoomable pannable style={{ background: "#F6F7F9" }} />
           </ReactFlow>
         </div>
 
         {/* Inspector */}
-        <div className="w-72 shrink-0 overflow-y-auto rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <div className="w-72 shrink-0 overflow-y-auto card p-3">
           {!selectedNode && (
             <div className="text-sm text-neutral-500">Выберите узел, чтобы настроить его</div>
           )}
@@ -890,7 +890,7 @@ function TestRunModal({
         {test.data && (
           <div className="rounded-lg border border-neutral-200 p-3 text-xs dark:border-neutral-800">
             <div className="mb-2">
-              Результат: <span className={clsx("chip", test.data.status === "succeeded" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{test.data.status}</span>
+              Результат: <span className={clsx("chip", test.data.status === "succeeded" ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25" : "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25")}>{test.data.status}</span>
             </div>
             <div className="space-y-1">
               {test.data.actions.map((a) => (

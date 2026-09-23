@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { Button } from "@/components/lib/Button";
 import { useCountUp } from "@/hooks/useCountUp";
 
+import { SearchInput, Tabs } from "@/components/page";
 type Employees = {
   since: string;
   employees: {
@@ -55,33 +56,23 @@ type Tab = "tasks" | "leads";
 export default function Analytics() {
   const [tab, setTab] = useState<Tab>("tasks");
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Аналитика</h1>
-          <p className="text-sm text-neutral-500">Отчёты за последние 30 дней</p>
+          <h1 className="page-title">Аналитика</h1>
+          <p className="page-subtitle">Отчёты за последние 30 дней</p>
         </div>
-        <div className="flex overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700">
-          <button
-            className={clsx(
-              "flex items-center gap-1.5 px-3 py-1.5 text-sm",
-              tab === "tasks" ? "bg-neutral-100 dark:bg-neutral-800" : "hover:bg-neutral-50 dark:hover:bg-neutral-800/50",
-            )}
-            onClick={() => setTab("tasks")}
-          >
-            <BarChart3 size={14} /> Задачи
-          </button>
-          <button
-            className={clsx(
-              "flex items-center gap-1.5 px-3 py-1.5 text-sm",
-              tab === "leads" ? "bg-neutral-100 dark:bg-neutral-800" : "hover:bg-neutral-50 dark:hover:bg-neutral-800/50",
-            )}
-            onClick={() => setTab("leads")}
-          >
-            <Zap size={14} /> Лиды
-          </button>
-        </div>
+        
       </div>
+      <Tabs
+        label="Раздел аналитики"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { key: "tasks", label: "Задачи", icon: BarChart3 },
+          { key: "leads", label: "Лиды", icon: Zap },
+        ]}
+      />
       {tab === "tasks" ? <TasksAnalytics /> : <LeadsAnalyticsPanel />}
     </div>
   );
@@ -178,15 +169,7 @@ function TasksAnalytics() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 sm:flex-none">
-                <Search size={14} className="absolute left-3 top-2.5 text-neutral-400" />
-                <input
-                  className="input pl-8 sm:w-64"
-                  placeholder="Поиск по имени / email…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
+              <SearchInput value={query} onChange={setQuery} placeholder="Поиск по имени или email" />
               <Button variant="secondary" onClick={exportCSV}>Экспорт CSV</Button>
             </div>
           </div>
@@ -322,15 +305,7 @@ function LeadsAnalyticsPanel() {
           <h2 className="text-lg font-semibold tracking-tight">Лиды по менеджерам</h2>
           <p className="text-xs text-neutral-500">За последние 30 дней · показано {rows.length} из {data.managers.length}</p>
         </div>
-        <div className="relative flex-1 sm:flex-none">
-          <Search size={14} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input
-            className="input pl-8 sm:w-64"
-            placeholder="Поиск по имени…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+        <SearchInput value={query} onChange={setQuery} placeholder="Поиск по имени" />
       </div>
 
       {/* Desktop: таблица */}

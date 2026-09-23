@@ -110,12 +110,12 @@ export default function Wiki() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="page-header">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold">
+          <h1 className="page-title flex items-center gap-2">
             <BookOpen size={22} /> База знаний
           </h1>
-          <p className="text-sm text-neutral-500">
+          <p className="page-subtitle">
             Внутренняя wiki: инструкции, регламенты, база FAQ
           </p>
         </div>
@@ -136,9 +136,9 @@ export default function Wiki() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[280px_1fr]">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[280px_1fr] dark:border-zinc-800 dark:bg-[#14171C]">
         <TreeSidebar activeSlug={slug} />
-        <div className="min-h-0 overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
+        <div className="min-h-0 overflow-hidden border-b border-zinc-200 md:border-b-0 md:border-r dark:border-zinc-800">
           {!slug && <EmptyState />}
           {slug === "new" && <ArticleEditor mode="create" />}
           {slug && slug !== "new" && <ArticlePage slug={slug} />}
@@ -388,7 +388,7 @@ function TreeSidebar({ activeSlug }: { activeSlug?: string }) {
   };
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="flex min-h-0 flex-col overflow-hidden bg-white dark:bg-[#14171C]">
       <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2 dark:border-neutral-800">
         <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Дерево</span>
         <Button
@@ -528,7 +528,7 @@ function ArticleView({ article, onEdit }: { article: ArticleFull; onEdit: () => 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {article.is_published ? (
-              <span className="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <span className="chip bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">
                 <Globe size={11} /> Опубликовано
               </span>
             ) : (
@@ -838,7 +838,7 @@ function ArticleEditor({
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Превью
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/40">
+          <div className="min-h-0 flex-1 overflow-y-auto card p-4">
             <div className="prose prose-neutral max-w-none dark:prose-invert prose-sm">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
             </div>

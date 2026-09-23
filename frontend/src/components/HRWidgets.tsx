@@ -29,10 +29,10 @@ type Kudos = {
 };
 
 const BADGE_LABEL: Record<Kudos["badge"], { label: string; color: string }> = {
-  teamwork: { label: "Team", color: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300" },
-  innovation: { label: "Innovation", color: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300" },
-  help_other: { label: "Helpful", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
-  excellence: { label: "Excellence", color: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
+  teamwork: { label: "Team", color: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25" },
+  innovation: { label: "Innovation", color: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25" },
+  help_other: { label: "Helpful", color: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25" },
+  excellence: { label: "Excellence", color: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25" },
 };
 
 // ============================================================================

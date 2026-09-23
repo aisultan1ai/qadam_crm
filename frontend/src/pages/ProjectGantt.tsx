@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Gantt from "frappe-gantt";
+// @ts-ignore no types for CSS side-effect import in 0.8.1
 import "frappe-gantt/dist/frappe-gantt.css";
 import { api } from "@/api/client";
 import type { TaskListItem, Project, Page } from "@/types";
 import { EmptyState } from "@/components/ui";
 import { CalendarClock, ArrowLeft } from "lucide-react";
 
+import { Segmented } from "@/components/page";
 type ViewMode = "Day" | "Week" | "Month";
 
 export default function ProjectGanttPage() {
@@ -74,29 +76,24 @@ export default function ProjectGanttPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="page-header">
         <div>
           <Link to={`/projects/${projectId}`} className="mb-1 inline-flex items-center gap-1 text-xs text-neutral-500 hover:text-brand-600">
             <ArrowLeft size={12} /> К проекту
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">Диаграмма Ганта</h1>
-          <p className="text-sm text-neutral-500">{project?.name || `Проект #${projectId}`}</p>
+          <h1 className="page-title">Диаграмма Ганта</h1>
+          <p className="page-subtitle">{project?.name || `Проект #${projectId}`}</p>
         </div>
-        <div className="flex overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
-          {(["Day", "Week", "Month"] as ViewMode[]).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={
-                view === v
-                  ? "bg-brand-500 px-3 py-1.5 text-xs font-medium text-white"
-                  : "px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/50"
-              }
-            >
-              {v === "Day" ? "День" : v === "Week" ? "Неделя" : "Месяц"}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Масштаб"
+          value={view}
+          onChange={setView}
+          items={[
+            { key: "Day", label: "День" },
+            { key: "Week", label: "Неделя" },
+            { key: "Month", label: "Месяц" },
+          ]}
+        />
       </div>
 
       {isPending ? (
@@ -104,7 +101,7 @@ export default function ProjectGanttPage() {
       ) : !tasks || tasks.length === 0 ? (
         <EmptyState icon={<CalendarClock size={32} />} title="Задач в проекте нет" description="Создайте задачи с дедлайнами, чтобы увидеть диаграмму" />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <div className="card overflow-x-auto p-3">
           <div ref={containerRef} />
         </div>
       )}
@@ -112,7 +109,7 @@ export default function ProjectGanttPage() {
       <style>{`
         .bar-done .bar { fill: #10B981 !important; }
         .bar-cancelled .bar { fill: #9CA3AF !important; }
-        .bar-active .bar { fill: #7C5CFF !important; }
+        .bar-active .bar { fill: #2A52C4 !important; }
       `}</style>
     </div>
   );

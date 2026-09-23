@@ -9,6 +9,7 @@ import { Button } from "@/components/lib/Button";
 import { Pencil, Trash2, Search, Building2, Power, ChevronRight, Users as UsersIcon, HardDrive, Loader2, CreditCard, Plus, Check } from "lucide-react";
 import clsx from "clsx";
 
+import { SearchInput, Tabs, Toolbar } from "@/components/page";
 type AdminTenant = {
   id: number;
   name: string;
@@ -158,60 +159,35 @@ export default function Admin() {
   }, [data, planKeys]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold">Платформа</h1>
-          <p className="text-sm text-neutral-500">
-            {tab === "tenants" ? "Все компании Qadam CRM" : "Все пользователи платформы"}
+          <h1 className="page-title">Платформа</h1>
+          <p className="page-subtitle">
+            {tab === "tenants" ? "Все компании Qadam CRM" : tab === "users" ? "Все пользователи платформы" : "Тарифы и лимиты"}
           </p>
-        </div>
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input
-            className="input pl-8 w-64"
-            placeholder={tab === "tenants" ? "Поиск по названию / slug…" : "Поиск по email / имени…"}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
         </div>
       </div>
 
-      <nav className="flex gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900/60 w-fit">
-        <button
-          className={clsx(
-            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
-            tab === "tenants"
-              ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
-              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
-          )}
-          onClick={() => setTab("tenants")}
-        >
-          <Building2 size={14} /> Компании
-        </button>
-        <button
-          className={clsx(
-            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
-            tab === "users"
-              ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
-              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
-          )}
-          onClick={() => setTab("users")}
-        >
-          <UsersIcon size={14} /> Пользователи
-        </button>
-        <button
-          className={clsx(
-            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
-            tab === "plans"
-              ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200"
-              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800/60",
-          )}
-          onClick={() => setTab("plans")}
-        >
-          <CreditCard size={14} /> Тарифы
-        </button>
-      </nav>
+      <Tabs
+        label="Разделы платформы"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { key: "tenants", label: "Компании", icon: Building2 },
+          { key: "users", label: "Пользователи", icon: UsersIcon },
+          { key: "plans", label: "Тарифы", icon: CreditCard },
+        ]}
+      />
+      {tab !== "plans" && (
+        <Toolbar>
+          <SearchInput
+            value={q}
+            onChange={setQ}
+            placeholder={tab === "tenants" ? "Поиск по названию или slug" : "Поиск по email или имени"}
+          />
+        </Toolbar>
+      )}
 
       {tab === "users" ? (
         <GlobalUsersTab query={q} />
@@ -238,21 +214,21 @@ export default function Admin() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 dark:bg-neutral-900/40 text-left text-xs uppercase tracking-wide text-neutral-500">
+      <div className="table-container table-scroll">
+        <table className="w-full">
+          <thead className="table-head">
             <tr>
-              <th className="w-8 px-3 py-2" />
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Название</th>
-              <th className="px-3 py-2">Slug</th>
-              <th className="px-3 py-2">Subdomain</th>
-              <th className="px-3 py-2 text-right">Users</th>
-              <th className="px-3 py-2 text-right">Projects</th>
-              <th className="px-3 py-2 text-right">Tasks</th>
-              <th className="px-3 py-2">Plan</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-right w-24">Действия</th>
+              <th className="table-head-cell" />
+              <th className="table-head-cell">ID</th>
+              <th className="table-head-cell">Название</th>
+              <th className="table-head-cell">Slug</th>
+              <th className="table-head-cell">Subdomain</th>
+              <th className="table-head-cell text-right">Users</th>
+              <th className="table-head-cell text-right">Projects</th>
+              <th className="table-head-cell text-right">Tasks</th>
+              <th className="table-head-cell">Plan</th>
+              <th className="table-head-cell">Status</th>
+              <th className="table-head-cell text-right w-24">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -274,9 +250,9 @@ export default function Admin() {
                 <>
                   <tr
                     key={t.id}
-                    className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20"
+                    className="table-row"
                   >
-                    <td className="px-3 py-2">
+                    <td className="table-cell">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -288,19 +264,19 @@ export default function Admin() {
                         <ChevronRight size={14} className={clsx("transition-transform", isOpen && "rotate-90")} />
                       </Button>
                     </td>
-                    <td className="px-3 py-2 text-neutral-500 tabular-nums">{t.id}</td>
-                    <td className="px-3 py-2">
+                    <td className="table-cell text-neutral-500 tabular-nums">{t.id}</td>
+                    <td className="table-cell">
                       <div className="font-medium">{t.name}</div>
                       {t.company_display_name && t.company_display_name !== t.name && (
                         <div className="text-xs text-neutral-500">«{t.company_display_name}»</div>
                       )}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{t.slug}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{t.subdomain ?? "—"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{t.users}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{t.projects}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{t.tasks}</td>
-                    <td className="px-3 py-2">
+                    <td className="table-cell font-mono text-xs text-neutral-500">{t.slug}</td>
+                    <td className="table-cell font-mono text-xs text-neutral-500">{t.subdomain ?? "—"}</td>
+                    <td className="table-cell text-right tabular-nums">{t.users}</td>
+                    <td className="table-cell text-right tabular-nums">{t.projects}</td>
+                    <td className="table-cell text-right tabular-nums">{t.tasks}</td>
+                    <td className="table-cell">
                       <select
                         className="input !py-1"
                         value={t.plan}
@@ -311,13 +287,13 @@ export default function Admin() {
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="table-cell">
                       <button
                         className={clsx(
                           "chip",
                           t.is_active
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                            : "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
+                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25"
+                            : "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
                         )}
                         title={t.is_active ? "Нажмите чтобы деактивировать" : "Нажмите чтобы активировать"}
                         onClick={() => patch.mutate({ id: t.id, body: { is_active: !t.is_active } })}
@@ -325,7 +301,7 @@ export default function Admin() {
                         {t.is_active ? "active" : "inactive"}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="table-cell text-right">
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
@@ -349,7 +325,7 @@ export default function Admin() {
                     </td>
                   </tr>
                   {isOpen && (
-                    <tr className="border-t border-neutral-100 bg-neutral-50/40 dark:border-neutral-800 dark:bg-neutral-900/40">
+                    <tr className="table-row">
                       <td colSpan={11} className="px-3 py-3">
                         <TenantUsagePanel tenantId={t.id} plan={t.plan} />
                       </td>
@@ -400,7 +376,7 @@ function StatCard({
   tone?: "success";
 }) {
   return (
-    <div className="card p-4">
+    <div className="card p-5">
       <div className="flex items-center gap-2 text-xs text-neutral-500">
         {icon}
         {label}
@@ -716,16 +692,16 @@ function GlobalUsersTab({ query }: { query: string }) {
   }, [data, query]);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
-      <table className="w-full text-sm">
-        <thead className="bg-neutral-50 dark:bg-neutral-900/40 text-left text-xs uppercase tracking-wide text-neutral-500">
+    <div className="table-container table-scroll">
+      <table className="w-full">
+        <thead className="table-head">
           <tr>
-            <th className="px-3 py-2">ID</th>
-            <th className="px-3 py-2">Email</th>
-            <th className="px-3 py-2">Имя</th>
-            <th className="px-3 py-2">Статус</th>
-            <th className="px-3 py-2">Роли</th>
-            <th className="px-3 py-2">Создан</th>
+            <th className="table-head-cell">ID</th>
+            <th className="table-head-cell">Email</th>
+            <th className="table-head-cell">Имя</th>
+            <th className="table-head-cell">Статус</th>
+            <th className="table-head-cell">Роли</th>
+            <th className="table-head-cell">Создан</th>
           </tr>
         </thead>
         <tbody>
@@ -746,24 +722,24 @@ function GlobalUsersTab({ query }: { query: string }) {
           {filtered.map((u) => (
             <tr
               key={u.id}
-              className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20"
+              className="table-row"
             >
-              <td className="px-3 py-2 tabular-nums text-neutral-500">{u.id}</td>
-              <td className="px-3 py-2 font-mono text-xs">{u.email}</td>
-              <td className="px-3 py-2 font-medium">{u.name}</td>
-              <td className="px-3 py-2">
+              <td className="table-cell tabular-nums text-neutral-500">{u.id}</td>
+              <td className="table-cell font-mono text-xs">{u.email}</td>
+              <td className="table-cell font-medium">{u.name}</td>
+              <td className="table-cell">
                 <span
                   className={clsx(
                     "chip",
                     u.is_active
-                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25"
                       : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
                   )}
                 >
                   {u.is_active ? "active" : "inactive"}
                 </span>
               </td>
-              <td className="px-3 py-2">
+              <td className="table-cell">
                 <div className="flex flex-wrap gap-1">
                   {u.is_platform_admin && (
                     <span className="chip bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
@@ -771,7 +747,7 @@ function GlobalUsersTab({ query }: { query: string }) {
                     </span>
                   )}
                   {u.is_superuser && (
-                    <span className="chip bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                    <span className="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25">
                       super
                     </span>
                   )}
@@ -780,7 +756,7 @@ function GlobalUsersTab({ query }: { query: string }) {
                   )}
                 </div>
               </td>
-              <td className="px-3 py-2 text-xs text-neutral-500">
+              <td className="table-cell text-xs text-neutral-500">
                 {u.created_at ? new Date(u.created_at).toLocaleDateString("ru-RU") : "—"}
               </td>
             </tr>
@@ -834,11 +810,11 @@ function PlansTab() {
       </div>
 
       {isLoading && (
-        <div className="card p-6 text-center text-sm text-neutral-500">Загрузка…</div>
+        <div className="card p-5 text-center text-sm text-neutral-500">Загрузка…</div>
       )}
 
       {!isLoading && sorted.length === 0 && (
-        <div className="card p-6 text-center text-sm text-neutral-500">Тарифов ещё нет</div>
+        <div className="card p-5 text-center text-sm text-neutral-500">Тарифов ещё нет</div>
       )}
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -921,7 +897,7 @@ function PlanCard({
               <span className="chip bg-neutral-100 text-neutral-500 dark:bg-neutral-800">выключен</span>
             )}
             {!plan.is_public && plan.is_active && (
-              <span className="chip bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">скрыт</span>
+              <span className="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25">скрыт</span>
             )}
           </div>
           {plan.tagline && <div className="mt-1 text-xs text-neutral-500">{plan.tagline}</div>}

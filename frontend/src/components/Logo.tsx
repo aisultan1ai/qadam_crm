@@ -5,9 +5,11 @@ type LogoMarkProps = {
   className?: string;
   title?: string;
   animated?: boolean;
+  /** Белое кольцо — для тёмного фона (сайдбар), в обеих темах. */
+  inverted?: boolean;
 };
 
-export function LogoMark({ size = 72, className, title = "Qadam CRM", animated = false }: LogoMarkProps) {
+export function LogoMark({ size = 72, className, title = "Qadam CRM", animated = false, inverted = false }: LogoMarkProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -17,7 +19,7 @@ export function LogoMark({ size = 72, className, title = "Qadam CRM", animated =
       role="img"
       aria-label={title}
       className={clsx(
-        "text-[#0A0A12] dark:text-white",
+        inverted ? "text-white" : "text-[#0D0F13] dark:text-white",
         animated && "animate-pop",
         className,
       )}
@@ -28,9 +30,9 @@ export function LogoMark({ size = 72, className, title = "Qadam CRM", animated =
         fillRule="evenodd"
       />
       <path d="M372 300 L409 399 L330 360 Z" fill="currentColor" />
-      <rect x="274" y="176" width="80" height="60" rx="12" fill="#CBB8FF" />
-      <rect x="224" y="228" width="80" height="60" rx="12" fill="#9678FF" />
-      <g fill="#7C5CFF">
+      <rect x="274" y="176" width="80" height="60" rx="12" fill="#BFD0FA" />
+      <rect x="224" y="228" width="80" height="60" rx="12" fill="#6488EA" />
+      <g fill="#2A52C4">
         <rect x="184" y="278" width="70" height="50" rx="12" />
         <path d="M249 296 L318 340 L199 328 Z" />
       </g>
@@ -53,20 +55,20 @@ export function Wordmark({ className, align = "center" }: WordmarkProps) {
   return (
     <div className={`flex flex-col gap-1 ${ALIGN_CLASS[align]} ${className ?? ""}`}>
       <span
-        className="text-[#0A0A12] dark:text-white"
+        className="text-[#0D0F13] dark:text-white"
         style={{
-          fontFamily: "Manrope, Inter, sans-serif",
-          fontWeight: 800,
+          fontFamily: "\"IBM Plex Sans\", sans-serif",
+          fontWeight: 700,
           fontSize: 30,
           lineHeight: 1,
         }}
       >
-        Qadam<span style={{ color: "#7C5CFF" }}>.</span>
+        Qadam<span style={{ color: "#2A52C4" }}>.</span>
       </span>
       <span
         className="text-neutral-500 dark:text-neutral-400"
         style={{
-          fontFamily: "Inter, sans-serif",
+          fontFamily: "\"IBM Plex Sans\", sans-serif",
           fontWeight: 600,
           fontSize: 11,
           letterSpacing: "0.22em",

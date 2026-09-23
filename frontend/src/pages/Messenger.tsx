@@ -17,6 +17,7 @@ import { Button } from "@/components/lib/Button";
 import { VirtualList } from "@/components/VirtualList";
 import { fromNow } from "@/lib/date";
 
+import { SearchInput } from "@/components/page";
 // =========================================================================
 // Types
 // =========================================================================
@@ -92,34 +93,26 @@ export default function Messenger() {
   }, [channels, searchQ]);
 
   return (
-    <div className="grid h-[calc(100vh-140px)] gap-3 md:grid-cols-[300px_1fr]">
+    <div className="grid h-[calc(100vh-8rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[300px_1fr] dark:border-zinc-800 dark:bg-[#14171C]">
       <aside
         className={clsx(
-          "flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/60",
+          "flex flex-col overflow-hidden border-zinc-200 md:border-r dark:border-zinc-800",
           activeId ? "hidden md:flex" : "flex",
         )}
       >
-        <div className="border-b border-neutral-100 p-3 dark:border-neutral-800">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Чаты</h2>
+        <div className="space-y-2.5 border-b border-zinc-200 p-3 dark:border-zinc-800">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">Мессенджер</h1>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" title="Новый DM" onClick={() => setNewDmOpen(true)}>
+              <Button variant="ghost" size="icon" title="Новый личный чат" aria-label="Новый личный чат" onClick={() => setNewDmOpen(true)}>
                 <MessageSquarePlus size={16} />
               </Button>
-              <Button variant="ghost" size="icon" title="Новая группа" onClick={() => setNewGroupOpen(true)}>
+              <Button variant="ghost" size="icon" title="Новая группа" aria-label="Новая группа" onClick={() => setNewGroupOpen(true)}>
                 <UsersIcon size={16} />
               </Button>
             </div>
           </div>
-          <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-2 text-neutral-400" />
-            <input
-              className="input pl-7 text-sm"
-              placeholder="Поиск чата…"
-              value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-            />
-          </div>
+          <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Поиск чата" className="sm:w-full" />
         </div>
         <div className="flex-1 overflow-y-auto">
           {isPending ? (
@@ -134,7 +127,7 @@ export default function Messenger() {
 
       <section
         className={clsx(
-          "flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/60",
+          "flex flex-col overflow-hidden bg-[#F6F7F9] dark:bg-[#0D0F13]",
           activeId ? "flex" : "hidden md:flex",
         )}
       >
@@ -177,7 +170,7 @@ function ChannelList({
     if (!list?.length) return null;
     return (
       <div key={kind}>
-        <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
+        <div className="section-label px-4 pb-1 pt-4">{label}</div>
         {list.map((c) => (
           <ChannelListRow key={c.id} channel={c} active={c.id === activeId} onOpen={onOpen} />
         ))}
@@ -209,32 +202,34 @@ function ChannelListRow({
       type="button"
       onClick={() => onOpen(channel.id)}
       className={clsx(
-        "flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors",
-        active ? "bg-brand-50 text-brand-800 dark:bg-brand-900/25 dark:text-brand-200" : "hover:bg-neutral-100 dark:hover:bg-neutral-800/60",
+        "flex w-full items-start gap-3 px-4 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500",
+        active
+          ? "bg-brand-50 shadow-[inset_3px_0_0_rgb(var(--brand-600))] dark:bg-brand-500/10"
+          : "hover:bg-zinc-50 dark:hover:bg-[#1B1F26]",
       )}
     >
       {channel.peer ? (
-        <Avatar name={channel.peer.name} url={channel.peer.avatar_url} size={30} />
+        <Avatar name={channel.peer.name} url={channel.peer.avatar_url} size={34} />
       ) : (
-        <div className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-neutral-200 text-xs font-semibold text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200">
+        <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg bg-zinc-100 text-sm font-semibold text-zinc-600 dark:bg-[#1B1F26] dark:text-zinc-300">
           {channel.kind === "project" ? "#" : displayName.charAt(0).toUpperCase()}
         </div>
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-1">
-          <span className="truncate font-medium">{displayName}</span>
+          <span className={clsx("truncate", channel.unread_count > 0 ? "font-semibold text-zinc-900 dark:text-white" : "font-medium")}>{displayName}</span>
           {channel.last_message_at && (
-            <span className="shrink-0 text-[10px] text-neutral-400">
+            <span className="shrink-0 text-xs text-zinc-500">
               {fromNow(channel.last_message_at)}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">
+          <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-500">
             {channel.last_message_preview || <em className="text-neutral-400">Нет сообщений</em>}
           </span>
           {channel.unread_count > 0 && (
-            <span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-white">
+            <span className="min-w-[18px] rounded-full bg-brand-600 px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">
               {channel.unread_count > 99 ? "99+" : channel.unread_count}
             </span>
           )}
@@ -461,10 +456,10 @@ function MessageRow({
           {!grouped && (
             <div className="mb-0.5 flex items-baseline gap-2">
               <span className="text-sm font-semibold">{m.author?.name || "—"}</span>
-              <span className="text-[10px] text-neutral-400" title={new Date(m.created_at).toLocaleString("ru-RU")}>
+              <span className="text-xs text-zinc-500" title={new Date(m.created_at).toLocaleString("ru-RU")}>
                 {fromNow(m.created_at)}
               </span>
-              {m.edited_at && <span className="text-[10px] text-neutral-400">(изм.)</span>}
+              {m.edited_at && <span className="text-xs text-zinc-500">(изменено)</span>}
             </div>
           )}
           {m.reply_preview && m.reply_to_id && (
@@ -743,22 +738,24 @@ function MessageComposer({
           ))}
         </div>
       )}
-      <div className="flex items-end gap-2">
-        <label className="cursor-pointer rounded-md p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800" title="Прикрепить">
+      <div className="flex items-end gap-1 rounded-xl border border-zinc-300 bg-white p-1.5 shadow-soft focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/15 dark:border-zinc-700 dark:bg-[#14171C]">
+        <label className="cursor-pointer rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#1B1F26]" title="Прикрепить файл" aria-label="Прикрепить файл">
           <Paperclip size={16} />
           <input type="file" multiple className="hidden" onChange={onPickFile} disabled={uploading} />
         </label>
         <button
           type="button"
-          className="rounded-md p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          className="rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#1B1F26]"
           title="Создать опрос"
+          aria-label="Создать опрос"
           onClick={onOpenPoll}
         >
           <BarChart3 size={16} />
         </button>
         <textarea
           ref={taRef}
-          className="input flex-1 resize-none text-sm"
+          aria-label="Сообщение"
+          className="max-h-40 min-h-[36px] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-zinc-400"
           rows={1}
           placeholder={editing ? "Редактируйте…" : "Написать сообщение… (Shift+Enter — новая строка)"}
           value={text}

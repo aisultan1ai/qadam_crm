@@ -33,7 +33,7 @@ LOGO_EXT_BY_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
-    "image/svg+xml": ".svg",
+    # SVG не принимаем: он может содержать скрипты и раздаётся с домена приложения.
 }
 LOGO_CHUNK = 256 * 1024
 

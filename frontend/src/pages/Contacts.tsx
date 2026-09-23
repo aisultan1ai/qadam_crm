@@ -16,6 +16,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import type { Page } from "@/types";
 
+import { SearchInput, Tabs } from "@/components/page";
 // ============================================================================
 // Types
 // ============================================================================
@@ -85,11 +86,11 @@ export default function Contacts() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Контакты</h1>
-          <p className="text-sm text-neutral-500">Адресная книга: люди и компании</p>
+          <h1 className="page-title">Контакты</h1>
+          <p className="page-subtitle">Адресная книга: люди и компании</p>
         </div>
         {canCreate && (
           <div className="flex items-center gap-2">
@@ -103,43 +104,9 @@ export default function Contacts() {
         )}
       </div>
 
-      <div
-        role="tablist"
-        aria-label="Разделы контактов"
-        className="flex flex-wrap items-center gap-1 border-b border-neutral-200 dark:border-neutral-800"
-      >
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(t.key)}
-              className={clsx(
-                "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors",
-                active
-                  ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
-                  : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
-              )}
-            >
-              <Icon size={14} />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+      <Tabs label="Разделы контактов" value={tab} onChange={setTab} items={TABS} />
 
-      <div className="relative max-w-md">
-        <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-        <input
-          className="input pl-8"
-          placeholder="Поиск…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-      </div>
+      <SearchInput value={q} onChange={setQ} placeholder="Поиск" />
 
       {tab === "companies" ? (
         <CompaniesList q={q} onEdit={setOpenCompany} />

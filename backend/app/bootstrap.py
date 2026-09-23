@@ -362,69 +362,111 @@ def migrate_uploads_to_tenant_dirs() -> None:
         db.commit()
 
 
+# Тексты тарифов из прошлых версий seed'а. Если строка в БД совпадает с одним из них
+# (админ её не редактировал) — заменяем на актуальный текст. Правки админа не трогаем.
+_LEGACY_PLAN_FEATURES = {
+    "free": "До 5 пользователей;500 задач;10 проектов;Kanban/Таблица/Календарь;Мессенджер",
+    "plan_a": (
+        "1–99 пользователей;Неограниченно задач/проектов;"
+        "Массовые операции;Связи и последовательные задачи;"
+        "Диаграмма Ганта;Расписание;Отчёты и графики;Таймер учёта времени"
+    ),
+    "plan_b": (
+        "Всё из Plan A + расширенная автоматизация;"
+        "Вычисляемые поля, кнопки, группы кнопок;"
+        "Кастомный интерфейс: логотип и корпоративные цвета;"
+        "Доступ руководителя к задачам подчинённых;"
+        "Логирование операций сотрудников;"
+        "Автоматическая генерация отчётов по расписанию;"
+        "Телефония с распознаванием разговоров"
+    ),
+    "plan_x": (
+        "Всё из Plan B + максимальная кастомизация;"
+        "Технические администраторы без доступа к данным;"
+        "SSO SAML 2.0;"
+        "Ограничение доступа по IP;"
+        "Парольные политики;"
+        "Расширенное логирование просмотра и изменения данных"
+    ),
+}
+
+
 def seed_plans(db) -> None:
-    """Тарифы Planfix-стиля (Free / Plan A / Plan B / Plan X). Обновляем идемпотентно."""
+    """Тарифы по умолчанию (Free / Plan A / Plan B / Plan X).
+
+    Создаём недостающие планы. Существующие НЕ перезаписываем — их редактирует
+    платформенный админ (PATCH /api/admin/plans/{key}); обновляем только
+    нетронутый маркетинговый текст из старых версий seed'а.
+    В marketing_features — только реально работающие возможности, по одной на строку.
+    """
     from .models import Plan
     plans_data = [
         {
-            "key": "free", "title": "Free", "tagline": "Бесплатно навсегда для маленьких команд",
+            "key": "free", "title": "Free", "tagline": "Бесплатно навсегда для небольших команд",
             "price_month": 0, "currency": "USD", "max_users": 5, "max_projects": 10, "sort_order": 1,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": False, "feature_analytics_cache": False,
             "feature_branding": False, "feature_custom_subdomain": False, "feature_priority_support": False,
-            "marketing_features": "До 5 пользователей;500 задач;10 проектов;Kanban/Таблица/Календарь;Мессенджер",
+            "marketing_features": "\n".join([
+                "Задачи: Kanban, таблица, список, календарь",
+                "Мессенджер команды",
+                "Контакты и компании",
+                "Календарь и база знаний",
+            ]),
         },
         {
-            "key": "plan_a", "title": "Plan A", "tagline": "Мощная система управления задачами и проектами",
+            "key": "plan_a", "title": "Plan A", "tagline": "Управление задачами и проектами",
             "price_month": 4, "currency": "USD", "max_users": 99, "max_projects": None, "sort_order": 2,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": True, "feature_analytics_cache": True,
             "feature_branding": False, "feature_custom_subdomain": False, "feature_priority_support": False,
-            "marketing_features": (
-                "1–99 пользователей;Неограниченно задач/проектов;"
-                "Массовые операции;Связи и последовательные задачи;"
-                "Диаграмма Ганта;Расписание;Отчёты и графики;Таймер учёта времени"
-            ),
+            "marketing_features": "\n".join([
+                "Всё из Free",
+                "Диаграмма Ганта и связи задач",
+                "Массовые операции",
+                "Учёт рабочего времени",
+                "Отчёты и аналитика",
+                "Формы захвата лидов",
+            ]),
         },
         {
-            "key": "plan_b", "title": "Plan B", "tagline": "Система управления бизнесом для всей компании",
+            "key": "plan_b", "title": "Plan B", "tagline": "CRM и управление всей компанией",
             "price_month": 6, "currency": "USD", "max_users": 250, "max_projects": None, "sort_order": 3,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": True, "feature_analytics_cache": True,
             "feature_branding": True, "feature_custom_subdomain": False, "feature_priority_support": True,
-            "marketing_features": (
-                "Всё из Plan A + расширенная автоматизация;"
-                "Вычисляемые поля, кнопки, группы кнопок;"
-                "Кастомный интерфейс: логотип и корпоративные цвета;"
-                "Доступ руководителя к задачам подчинённых;"
-                "Логирование операций сотрудников;"
-                "Автоматическая генерация отчётов по расписанию;"
-                "Телефония с распознаванием разговоров"
-            ),
+            "marketing_features": "\n".join([
+                "Всё из Plan A",
+                "Автоматизации и распределение лидов",
+                "Логотип и цвет компании в интерфейсе",
+                "Журнал действий сотрудников",
+                "Отчёты на почту по расписанию",
+                "Журнал звонков",
+            ]),
         },
         {
-            "key": "plan_x", "title": "Plan X", "tagline": "Корпоративный уровень: безопасность и контроль",
+            "key": "plan_x", "title": "Plan X", "tagline": "Безопасность и контроль для крупных команд",
             "price_month": 8, "currency": "USD", "max_users": None, "max_projects": None, "sort_order": 4,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": True, "feature_analytics_cache": True,
             "feature_branding": True, "feature_custom_subdomain": True, "feature_priority_support": True,
-            "marketing_features": (
-                "Всё из Plan B + максимальная кастомизация;"
-                "Технические администраторы без доступа к данным;"
-                "SSO SAML 2.0;"
-                "Ограничение доступа по IP;"
-                "Парольные политики;"
-                "Расширенное логирование просмотра и изменения данных"
-            ),
+            "marketing_features": "\n".join([
+                "Всё из Plan B",
+                "Ограничение входа по IP",
+                "Парольные политики",
+                "Политики хранения данных",
+                "Приоритетная поддержка",
+            ]),
         },
     ]
     for pd in plans_data:
         p = db.query(Plan).filter(Plan.key == pd["key"]).first()
         if not p:
             db.add(Plan(**pd))
-        else:
-            for k, v in pd.items():
-                setattr(p, k, v)
+            continue
+        legacy = _LEGACY_PLAN_FEATURES.get(pd["key"])
+        if legacy is not None and (p.marketing_features or "") == legacy:
+            p.marketing_features = pd["marketing_features"]
     db.commit()
 
 

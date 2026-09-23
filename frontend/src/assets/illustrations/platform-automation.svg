@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 240" width="560" height="240" fill="none" font-family="'IBM Plex Sans','Segoe UI',Arial,sans-serif">
+  <!-- Automation rule, as drawn in the visual builder: trigger → condition → actions, with a delay. -->
+  <defs>
+    <pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1.1" fill="#CBD0D8"/></pattern>
+    <filter id="s" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#0D0F13" flood-opacity="0.10"/></filter>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#6488EA"/></marker>
+  </defs>
+  <rect x="0" y="0" width="560" height="240" rx="12" fill="#F6F7F9"/>
+  <rect x="0" y="0" width="560" height="240" rx="12" fill="url(#dots)"/>
+  <rect x="0.5" y="0.5" width="559" height="239" rx="11.5" stroke="#E1E4E9"/>
+
+  <path d="M156 120 H 196" stroke="#6488EA" stroke-width="2" marker-end="url(#arr)"/>
+  <path d="M316 108 C 340 108, 340 64, 372 64" stroke="#6488EA" stroke-width="2" marker-end="url(#arr)"/>
+  <path d="M316 132 C 340 132, 340 176, 372 176" stroke="#6488EA" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+  <text x="344" y="74" text-anchor="end" font-size="9" fill="#697180">да</text>
+  <text x="362" y="206" text-anchor="end" font-size="9" fill="#697180">через 1 день</text>
+
+  <!-- trigger -->
+  <g filter="url(#s)"><rect x="24" y="92" width="132" height="56" rx="10" fill="#FFFFFF"/></g>
+  <rect x="24.5" y="92.5" width="131" height="55" rx="9.5" stroke="#E1E4E9"/>
+  <rect x="24" y="92" width="4" height="56" rx="2" fill="#2A52C4"/>
+  <rect x="38" y="106" width="28" height="28" rx="7" fill="#EFF3FE"/>
+  <path d="M54 110 l-8 11 h6 l-2 9 l8 -11 h-6 z" fill="#2A52C4"/>
+  <text x="74" y="115" font-size="8" font-weight="600" letter-spacing="0.6" fill="#697180">ТРИГГЕР</text>
+  <text x="74" y="130" font-size="10" font-weight="600" fill="#171A20">Новый лид</text>
+
+  <!-- condition -->
+  <g filter="url(#s)"><rect x="196" y="92" width="120" height="56" rx="10" fill="#FFFFFF"/></g>
+  <rect x="196.5" y="92.5" width="119" height="55" rx="9.5" stroke="#E1E4E9"/>
+  <rect x="196" y="92" width="4" height="56" rx="2" fill="#F59E0B"/>
+  <rect x="210" y="106" width="28" height="28" rx="7" fill="#FFFBEB"/>
+  <path d="M224 111 l9 9 l-9 9 l-9 -9 z" stroke="#B45309" stroke-width="1.8" stroke-linejoin="round"/>
+  <text x="246" y="115" font-size="8" font-weight="600" letter-spacing="0.6" fill="#697180">УСЛОВИЕ</text>
+  <text x="246" y="130" font-size="10" font-weight="600" fill="#171A20">Источник</text>
+
+  <!-- action 1 -->
+  <g filter="url(#s)"><rect x="372" y="36" width="164" height="56" rx="10" fill="#FFFFFF"/></g>
+  <rect x="372.5" y="36.5" width="163" height="55" rx="9.5" stroke="#E1E4E9"/>
+  <rect x="372" y="36" width="4" height="56" rx="2" fill="#10B981"/>
+  <rect x="386" y="50" width="28" height="28" rx="7" fill="#ECFDF5"/>
+  <circle cx="400" cy="61" r="4.5" stroke="#047857" stroke-width="1.8"/>
+  <path d="M392 73 a8 6 0 0 1 16 0" stroke="#047857" stroke-width="1.8" stroke-linecap="round"/>
+  <text x="422" y="59" font-size="8" font-weight="600" letter-spacing="0.6" fill="#697180">ДЕЙСТВИЕ</text>
+  <text x="422" y="74" font-size="10" font-weight="600" fill="#171A20">Назначить менеджера</text>
+
+  <!-- action 2 (delayed) -->
+  <g filter="url(#s)"><rect x="372" y="148" width="164" height="56" rx="10" fill="#FFFFFF"/></g>
+  <rect x="372.5" y="148.5" width="163" height="55" rx="9.5" stroke="#E1E4E9"/>
+  <rect x="372" y="148" width="4" height="56" rx="2" fill="#10B981"/>
+  <rect x="386" y="162" width="28" height="28" rx="7" fill="#ECFDF5"/>
+  <rect x="393" y="169" width="14" height="14" rx="3" stroke="#047857" stroke-width="1.8"/>
+  <path d="M396.5 176 l2.5 2.5 l4.5 -5" stroke="#047857" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="422" y="171" font-size="8" font-weight="600" letter-spacing="0.6" fill="#697180">ДЕЙСТВИЕ</text>
+  <text x="422" y="186" font-size="10" font-weight="600" fill="#171A20">Создать задачу</text>
+</svg>

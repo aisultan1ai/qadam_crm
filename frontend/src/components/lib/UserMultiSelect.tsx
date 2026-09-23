@@ -72,7 +72,7 @@ export function UserMultiSelect({
         className={clsx(
           "flex min-h-[36px] w-full flex-wrap items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-sm",
           "focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/15",
-          "dark:border-zinc-700/60 dark:bg-[#17171F]",
+          "dark:border-zinc-700/60 dark:bg-[#14171C]",
           disabled && "cursor-not-allowed opacity-70",
         )}
       >
@@ -112,7 +112,7 @@ export function UserMultiSelect({
       </div>
 
       {open && !disabled && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-[#1c1c25]">
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-[#1B1F26]">
           <div className="relative border-b border-zinc-100 p-2 dark:border-zinc-800">
             <Search size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input

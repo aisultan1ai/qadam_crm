@@ -39,11 +39,11 @@ export default function DirectoriesPage() {
   const current = dirs?.find((d) => d.code === active) || dirs?.[0];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Справочники</h1>
-          <p className="text-sm text-neutral-500">Пользовательские lookup-таблицы (страны, продукты, статусы...)</p>
+          <h1 className="page-title">Справочники</h1>
+          <p className="page-subtitle">Пользовательские lookup-таблицы (страны, продукты, статусы...)</p>
         </div>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
           Справочник
@@ -143,7 +143,7 @@ function EntriesPanel({ dir }: { dir: Dir }) {
   ];
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">{dir.label} <span className="text-xs text-neutral-500">/{dir.code}</span></h2>

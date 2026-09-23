@@ -44,7 +44,7 @@ import { Button } from "@/components/lib/Button";
 import {
   ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile, Pencil,
   ChevronRight, Calendar, User as UserIcon, Flag, FolderKanban, UserCircle2,
-  AlertTriangle, Clock, Flame, Eye, Users, BellRing,
+  AlertTriangle, Clock, Flame, Eye, Users, BellRing, CircleDot,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
@@ -92,10 +92,10 @@ function deadlineInfo(deadline: string | null | undefined): { text: string; tone
 }
 
 const DEADLINE_TONE: Record<DeadlineTone, string> = {
-  neutral: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  warning: "bg-amber-200 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
-  danger: "bg-rose-200 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
-  muted: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400",
+  neutral: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+  warning: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
+  danger: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
+  muted: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25",
 };
 
 function fmtDateShort(iso: string | null | undefined): string {
@@ -300,8 +300,8 @@ export default function TaskDetail() {
   return (
     <div className="space-y-5">
       {/* ============ HEADER: breadcrumbs + title + status + deadline ============ */}
-      <div className="card p-5">
-        <nav aria-label="Хлебные крошки" className="mb-2 flex items-center gap-1.5 text-xs text-neutral-500">
+      <div className="border-b border-zinc-200 pb-5 dark:border-zinc-800">
+        <nav aria-label="Хлебные крошки" className="mb-2 flex items-center gap-1.5 text-[13px] text-zinc-500">
           <Link to="/tasks" className="inline-flex items-center gap-1 hover:text-brand-600">
             <ArrowLeft size={12} /> Задачи
           </Link>
@@ -324,14 +324,14 @@ export default function TaskDetail() {
             <div className="flex items-start gap-2">
               {isUrgent && (
                 <span
-                  className="mt-2 inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-200 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-rose-900 dark:bg-rose-950/50 dark:text-rose-200"
+                  className="mt-1.5 inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25"
                   title={task.priority === "critical" ? "Критический приоритет" : "Высокий приоритет"}
                 >
                   <Flame size={11} /> Срочная
                 </span>
               )}
               <input
-                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-2xl font-semibold tracking-tight outline-none focus:ring-0 disabled:cursor-default disabled:opacity-100"
+                className="min-w-0 flex-1 rounded-md border-0 bg-transparent px-1 py-0.5 -mx-1 text-[22px] font-semibold tracking-[-0.01em] outline-none hover:bg-zinc-100 focus:bg-white focus:ring-2 focus:ring-brand-500/30 disabled:cursor-default disabled:opacity-100 disabled:hover:bg-transparent dark:hover:bg-[#1B1F26] dark:focus:bg-[#14171C]"
                 value={titleDraft}
                 disabled={!canEditTitle}
                 onChange={(e) => setTitleDraft(e.target.value)}
@@ -363,7 +363,7 @@ export default function TaskDetail() {
           )}
           <span
             className={clsx(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+              "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium",
               DEADLINE_TONE[dl.tone],
             )}
           >
@@ -388,10 +388,10 @@ export default function TaskDetail() {
       </div>
 
       {/* ============ GRID: left (description/checklist/comments) + right sidebar ============ */}
-      <div className="grid gap-5 lg:grid-cols-3">
-      <div className="min-w-0 space-y-5 lg:col-span-2">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0 space-y-5">
         <div className="card p-5">
-          <h3 className="mb-2 text-sm font-semibold">Общее описание задачи</h3>
+          <h3 className="card-title mb-3">Общее описание задачи</h3>
           <TextareaAuto
             disabled={!can("tasks.update")}
             initial={task.description || ""}
@@ -402,7 +402,7 @@ export default function TaskDetail() {
 
         <div className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Чек-лист</h3>
+            <h3 className="card-title">Чек-лист</h3>
             <span className="text-xs text-neutral-500 tabular-nums">
               {task.checklist.filter((i) => i.done).length}/{task.checklist.length}
             </span>
@@ -458,7 +458,7 @@ export default function TaskDetail() {
 
         <div className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Комментарии</h3>
+            <h3 className="card-title">Комментарии</h3>
             <span className="text-xs text-neutral-500">{task.comments.length}</span>
           </div>
           <div className="space-y-4">
@@ -517,7 +517,7 @@ export default function TaskDetail() {
 
         <div className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">История изменений</h3>
+            <h3 className="card-title">История изменений</h3>
             {task.activities.length > 0 && (
               <span className="text-xs text-neutral-500 tabular-nums">{task.activities.length}</span>
             )}
@@ -539,15 +539,15 @@ export default function TaskDetail() {
         </div>
       </div>
 
-      <aside className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <aside className="min-w-0 space-y-4 lg:sticky lg:top-[4.5rem] lg:self-start">
         <div className="card p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          <h3 className="section-label mb-3">
             Свойства
           </h3>
-          <div className="space-y-3.5 text-sm">
-            <SidebarField icon={<StatusChip status={task.status} showIcon />} label="Статус">
+          <dl className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+            <SidebarField icon={<CircleDot size={15} />} label="Статус">
               <select
-                className="input !py-1.5"
+                className="input !h-8 !py-0 text-[13px]"
                 disabled={!can("tasks.change_status")}
                 value={task.status}
                 onChange={(e) => patch.mutate({ status: e.target.value as TaskStatus })}
@@ -556,9 +556,9 @@ export default function TaskDetail() {
               </select>
             </SidebarField>
 
-            <SidebarField icon={<Calendar size={14} className="text-neutral-400" />} label="Дата начала">
+            <SidebarField icon={<Calendar size={14} />} label="Дата начала">
               <input
-                className="input !py-1.5"
+                className="input !h-8 !py-0 text-[13px]"
                 type="datetime-local"
                 disabled={!can("tasks.update")}
                 value={task.start_date ? task.start_date.substring(0, 16) : ""}
@@ -566,9 +566,9 @@ export default function TaskDetail() {
               />
             </SidebarField>
 
-            <SidebarField icon={<Calendar size={14} className="text-neutral-400" />} label="Дата завершения">
+            <SidebarField icon={<Calendar size={14} />} label="Дата завершения">
               <input
-                className="input !py-1.5"
+                className="input !h-8 !py-0 text-[13px]"
                 type="datetime-local"
                 disabled={!can("tasks.update")}
                 value={task.deadline ? task.deadline.substring(0, 16) : ""}
@@ -576,9 +576,9 @@ export default function TaskDetail() {
               />
             </SidebarField>
 
-            <SidebarField icon={<FolderKanban size={14} className="text-neutral-400" />} label="Проект">
+            <SidebarField icon={<FolderKanban size={14} />} label="Проект">
               <select
-                className="input !py-1.5"
+                className="input !h-8 !py-0 text-[13px]"
                 disabled={!can("tasks.update")}
                 value={task.project_id ?? ""}
                 onChange={(e) => patch.mutate({ project_id: e.target.value ? Number(e.target.value) : null })}
@@ -588,7 +588,7 @@ export default function TaskDetail() {
               </select>
             </SidebarField>
 
-            <SidebarField icon={<UserIcon size={14} className="text-neutral-400" />} label="Исполнители">
+            <SidebarField icon={<UserIcon size={14} />} label="Исполнители">
               <UserMultiSelect
                 value={(task.assignees ?? []) as UserBrief[]}
                 options={(users ?? []) as UserBrief[]}
@@ -599,7 +599,7 @@ export default function TaskDetail() {
               />
             </SidebarField>
 
-            <SidebarField icon={<Eye size={14} className="text-neutral-400" />} label="Аудиторы">
+            <SidebarField icon={<Eye size={14} />} label="Аудиторы">
               <UserMultiSelect
                 value={(task.auditors ?? []) as UserBrief[]}
                 options={(users ?? []) as UserBrief[]}
@@ -611,7 +611,7 @@ export default function TaskDetail() {
               />
             </SidebarField>
 
-            <SidebarField icon={<Users size={14} className="text-neutral-400" />} label="Участники">
+            <SidebarField icon={<Users size={14} />} label="Участники">
               <UserMultiSelect
                 value={(task.participants ?? []) as UserBrief[]}
                 options={(users ?? []) as UserBrief[]}
@@ -623,10 +623,10 @@ export default function TaskDetail() {
               />
             </SidebarField>
 
-            <SidebarField icon={<Flag size={14} className="text-neutral-400" />} label="Приоритет">
+            <SidebarField icon={<Flag size={14} />} label="Приоритет">
               <div className="flex items-center gap-2">
                 <select
-                  className="input !py-1.5 flex-1"
+                  className="input !h-8 !py-0 flex-1 text-[13px]"
                   disabled={!can("tasks.change_priority")}
                   value={task.priority}
                   onChange={(e) => patch.mutate({ priority: e.target.value as TaskPriority })}
@@ -639,7 +639,7 @@ export default function TaskDetail() {
               </div>
             </SidebarField>
 
-            <SidebarField icon={<UserCircle2 size={14} className="text-neutral-400" />} label="Постановщик">
+            <SidebarField icon={<UserCircle2 size={14} />} label="Постановщик">
               <div className="inline-flex items-center gap-1.5">
                 {task.author ? (
                   <>
@@ -651,22 +651,22 @@ export default function TaskDetail() {
                 )}
               </div>
             </SidebarField>
-          </div>
+          </dl>
         </div>
 
         <div className="card p-5">
           <div className="mb-2 flex items-center gap-2">
             <BellRing size={14} className="text-neutral-400" />
-            <h3 className="text-sm font-semibold">Напоминания</h3>
+            <h3 className="card-title">Напоминания</h3>
           </div>
           {task.reminders.length === 0 ? (
-            <div className="mb-2 text-xs text-neutral-500">Ни одного не настроено</div>
+            <div className="mb-2 text-[13px] text-zinc-500">Напоминаний нет</div>
           ) : (
             <ul className="mb-2 space-y-1">
               {task.reminders.map((r) => (
                 <li
                   key={r.id}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-neutral-50 dark:hover:bg-neutral-800/60"
+                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-[13px] hover:bg-zinc-50 dark:hover:bg-[#1B1F26]"
                 >
                   <BellRing size={12} className="shrink-0 text-neutral-400" />
                   <span className="flex-1 truncate">{reminderLabel(r)}</span>
@@ -692,7 +692,7 @@ export default function TaskDetail() {
           )}
           {can("tasks.update") && (
             <select
-              className="input !py-1.5 text-xs"
+              className="input !h-8 !py-0 text-[13px]"
               value=""
               onChange={(e) => {
                 if (!e.target.value) return;
@@ -717,7 +717,7 @@ export default function TaskDetail() {
 
         <div className="card p-5">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Вложения</h3>
+            <h3 className="card-title">Вложения</h3>
             {can("files.upload") && (
               <label className="btn-secondary cursor-pointer !py-1 !px-2 text-xs">
                 {/* label — не button; используем класс напрямую */}
@@ -731,9 +731,9 @@ export default function TaskDetail() {
             )}
           </div>
           <div className="space-y-1.5">
-            {task.attachments.length === 0 && <div className="text-sm text-neutral-500">Нет вложений</div>}
+            {task.attachments.length === 0 && <div className="text-[13px] text-zinc-500">Нет вложений</div>}
             {task.attachments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 hover:bg-neutral-50 dark:hover:bg-neutral-800/60">
+              <div key={a.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-zinc-50 dark:hover:bg-[#1B1F26]">
                 <a
                   href={`${API_URL}/api/tasks/${taskId}/attachments/${a.id}`}
                   target="_blank"
@@ -764,13 +764,14 @@ function SidebarField({
   label: string;
   children: React.ReactNode;
 }) {
+  // Строка панели свойств по шаблону карточки: подпись слева, значение справа.
   return (
-    <div>
-      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3 py-1.5">
+      <dt className="flex items-center gap-2 text-[13px] text-zinc-500 dark:text-zinc-400">
         {icon}
-        {label}
-      </div>
-      {children}
+        <span className="truncate">{label}</span>
+      </dt>
+      <dd className="min-w-0 text-sm">{children}</dd>
     </div>
   );
 }

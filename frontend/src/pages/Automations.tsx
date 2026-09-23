@@ -45,11 +45,11 @@ type AutomationRun = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  succeeded: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-  failed: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
-  partial: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  running: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
-  scheduled: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  succeeded: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+  failed: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
+  partial: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
+  running: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25",
+  scheduled: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25",
   pending: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
   skipped: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
 };
@@ -111,11 +111,11 @@ export default function Automations() {
   }, [data]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold">Автоматизации</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="page-title">Автоматизации</h1>
+          <p className="page-subtitle">
             Триггеры и роботы: реагируйте на события системы без ручной работы
           </p>
         </div>
@@ -194,7 +194,7 @@ export default function Automations() {
                       className={clsx(
                         "chip",
                         a.is_active
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25"
                           : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
                       )}
                       onClick={() => toggle.mutate({ id: a.id, is_active: !a.is_active })}
@@ -280,7 +280,7 @@ function StatCard({
   tone?: "success";
 }) {
   return (
-    <div className="card p-4">
+    <div className="card p-5">
       <div className="flex items-center gap-2 text-xs text-neutral-500">
         {icon}
         {label}

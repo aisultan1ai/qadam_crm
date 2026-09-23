@@ -14,6 +14,7 @@ import { STATUS_LABEL, STATUS_ORDER } from "@/types";
 import { EmptyState } from "@/components/ui";
 import { PriorityChip, StatusChip } from "@/components/ui";
 
+import { Tabs } from "@/components/page";
 type TabKey = "my_tasks" | "my_schedule" | "table_all" | "assigned_by_me" | "kanban_all";
 
 const TABS: { key: TabKey; label: string; icon: typeof CalendarClock }[] = [
@@ -46,39 +47,13 @@ export default function Planner() {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Планировщик</h1>
-        <p className="text-sm text-neutral-500">Личная лента задач и недельное расписание</p>
+    <div className="space-y-5">
+      <div className="page-header">
+        <h1 className="page-title">Планировщик</h1>
+        <p className="page-subtitle">Личная лента задач и недельное расписание</p>
       </div>
 
-      <div
-        role="tablist"
-        aria-label="Разделы планировщика"
-        className="flex flex-wrap items-center gap-1 border-b border-neutral-200 dark:border-neutral-800"
-      >
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const active = activeTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(tab.key)}
-              className={clsx(
-                "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors",
-                active
-                  ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
-                  : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
-              )}
-            >
-              <Icon size={15} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <Tabs label="Разделы планировщика" value={activeTab} onChange={setTab} items={TABS} />
 
       {activeTab === "my_tasks" && <TasksKanban scope="incoming" />}
       {activeTab === "my_schedule" && <MySchedule />}
@@ -125,30 +100,30 @@ function TasksTable() {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <table className="w-full text-sm">
-        <thead className="bg-neutral-50 text-left text-xs uppercase text-neutral-500 dark:bg-neutral-900/60">
+      <table className="w-full">
+        <thead className="table-head">
           <tr>
-            <th className="px-3 py-2">Название</th>
-            <th className="px-3 py-2">Статус</th>
-            <th className="px-3 py-2">Приоритет</th>
-            <th className="px-3 py-2">Дедлайн</th>
+            <th className="table-head-cell">Название</th>
+            <th className="table-head-cell">Статус</th>
+            <th className="table-head-cell">Приоритет</th>
+            <th className="table-head-cell">Дедлайн</th>
           </tr>
         </thead>
         <tbody>
           {sorted.map((t) => (
-            <tr key={t.id} className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/40">
-              <td className="px-3 py-2">
+            <tr key={t.id} className="table-row">
+              <td className="table-cell">
                 <Link to={`/tasks/${t.id}`} className="font-medium hover:text-brand-700 dark:hover:text-brand-300">
                   {t.title}
                 </Link>
               </td>
-              <td className="px-3 py-2">
+              <td className="table-cell">
                 <StatusChip status={t.status} />
               </td>
-              <td className="px-3 py-2">
+              <td className="table-cell">
                 <PriorityChip priority={t.priority} />
               </td>
-              <td className="px-3 py-2 text-xs text-neutral-500 tabular-nums">
+              <td className="table-cell text-xs text-neutral-500 tabular-nums">
                 {t.deadline ? new Date(t.deadline).toLocaleDateString("ru-RU") : "—"}
               </td>
             </tr>
@@ -299,14 +274,14 @@ function MySchedule() {
         title: t.title,
         start,
         end,
-        color: t.status === "done" ? "#10B981" : t.status === "in_progress" ? "#3B82F6" : "#7C5CFF",
+        color: t.status === "done" ? "#10B981" : t.status === "in_progress" ? "#3B82F6" : "#2A52C4",
       });
     });
     return out;
   }, [tasks]);
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="card p-3">
       <BigCalendar
         localizer={localizer}
         events={events}
@@ -326,7 +301,7 @@ function MySchedule() {
           const e = event as ScheduleEvent;
           return {
             style: {
-              backgroundColor: e.color || "#7C5CFF",
+              backgroundColor: e.color || "#2A52C4",
               border: "none",
               color: "white",
               fontSize: "12px",

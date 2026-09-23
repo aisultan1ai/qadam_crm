@@ -1,496 +1,342 @@
-import { useEffect, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
-import {
-  ArrowRight, Check, CheckCircle2, Circle, KanbanSquare, LineChart, MessageSquare,
-  ShieldCheck, Sparkles, Users, Zap,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import clsx from "clsx";
+import { ArrowRight, Check, ChevronDown, Menu, X } from "lucide-react";
 
 import { api, extractApiError } from "../api/client";
 import { trackEvent } from "@/lib/analytics";
 import { LogoMark } from "@/components/Logo";
-import "./landing.css";
+import heroProduct from "@/assets/illustrations/hero-product.svg";
+import moduleSales from "@/assets/illustrations/module-sales.svg";
+import moduleProjects from "@/assets/illustrations/module-projects.svg";
+import moduleComms from "@/assets/illustrations/module-comms.svg";
+import moduleTeam from "@/assets/illustrations/module-team.svg";
+
+// ---------------------------------------------------------------------------
+// Минималистичный лендинг: видео-герой на весь экран, мало текста.
+// Видео подхватывается из /landing/hero.mp4 (frontend/public/landing/). Пока файла нет —
+// показывается анимированный фон в фирменных цветах.
+// ---------------------------------------------------------------------------
+
+const HERO_VIDEO = "/landing/hero.mp4";
+const HERO_POSTER = "/landing/hero-poster.jpg";
 
 const NAV_LINKS = [
   { href: "#product", label: "Продукт" },
-  { href: "#how", label: "Как это работает" },
+  { href: "#modules", label: "Модули" },
   { href: "#pricing", label: "Тарифы" },
-  { href: "#faq", label: "Вопросы" },
 ];
 
-const FEATURES = [
-  {
-    icon: KanbanSquare,
-    title: "Задачи и Kanban",
-    text: "Проекты, задачи, статусы. Drag-and-drop доска, приоритеты, дедлайны и приложения к задачам.",
-  },
-  {
-    icon: MessageSquare,
-    title: "Мессенджер команды",
-    text: "Каналы проектов, личные и групповые чаты, опросы, реакции — обсуждайте без прыжков между приложениями.",
-  },
-  {
-    icon: LineChart,
-    title: "Аналитика и лиды",
-    text: "Отчёты по сотрудникам, воронка лидов из форм захвата, экспорт в Excel, интеграции с сайтом.",
-  },
+const MODULES = [
+  { art: moduleSales, title: "Продажи", text: "Лиды, сделки и воронка с прогнозом." },
+  { art: moduleProjects, title: "Проекты", text: "Задачи, канбан, Ганта и учёт времени." },
+  { art: moduleComms, title: "Коммуникации", text: "Telegram, WhatsApp, Instagram и почта." },
+  { art: moduleTeam, title: "Команда", text: "Оргструктура, отпуска, цели и календарь." },
 ];
 
-const HOW_STEPS = [
-  { n: 1, title: "Создайте компанию", text: "Регистрация занимает минуту. Приглашайте команду по email." },
-  { n: 2, title: "Настройте проект", text: "Заведите первый проект, добавьте задачи, распределите роли." },
-  { n: 3, title: "Работайте в потоке", text: "Kanban, чат, уведомления и аналитика — всё в одном месте." },
-];
-
-const SUCCESS_WITH = [
-  "Один инструмент — задачи, чат, лиды, аналитика",
-  "Мгновенные обновления через WebSocket — без F5",
-  "Автоматические напоминания и дайджест-письма",
-];
-
-const SUCCESS_WITHOUT = [
-  "Задачи теряются в Excel, WhatsApp и почте",
-  "Никто не знает, что сделано и что горит",
-  "Ручная сборка отчётов и потерянные лиды",
-];
-
-const FAQ_ITEMS = [
-  {
-    q: "Сколько стоит Qadam CRM?",
-    a: "Free — 0 KZT (5 пользователей, 3 проекта, 1 ГБ). Pro — 9 990 KZT/мес (50 пользователей, 50 проектов, 20 ГБ). Enterprise — по договорённости.",
-  },
-  {
-    q: "Где хранятся данные?",
-    a: "На серверах в Казахстане. Ежедневные резервные копии, шифрование при передаче (TLS) и в покое. Данные каждой компании полностью изолированы.",
-  },
-  {
-    q: "Можно ли отменить подписку?",
-    a: "Да, в любой момент из раздела «Настройки → Тариф». Доступ сохраняется до конца оплаченного периода, затем аккаунт переводится на Free.",
-  },
-  {
-    q: "Есть ли API и интеграции?",
-    a: "REST API покрывает все основные сущности. Формы захвата через embed-скрипт для любого сайта. Webhook'и и интеграции со Slack/Telegram — в разработке.",
-  },
-];
-
-const PLANS = [
-  {
-    key: "free",
-    name: "Free",
-    price: "0",
-    priceLabel: "KZT",
-    period: "навсегда",
-    tagline: "Для команд до 5 человек — попробовать всё бесплатно",
-    features: [
-      "До 5 пользователей",
-      "До 3 проектов",
-      "1 ГБ хранилища",
-      "Kanban, задачи, комментарии",
-      "Мессенджер и опросы",
-    ],
-    cta: "Начать бесплатно",
-    highlighted: false,
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    price: "9 990",
-    priceLabel: "KZT",
-    period: "в месяц",
-    tagline: "Для растущих команд с реальной нагрузкой",
-    features: [
-      "До 50 пользователей",
-      "До 50 проектов",
-      "20 ГБ хранилища",
-      "Формы захвата лидов + embed",
-      "Экспорт в Excel, приоритетная поддержка",
-    ],
-    cta: "Перейти на Pro",
-    highlighted: true,
-  },
-  {
-    key: "enterprise",
-    name: "Enterprise",
-    price: "По запросу",
-    priceLabel: "",
-    period: "",
-    tagline: "Кастомные лимиты, SSO, on-premise",
-    features: [
-      "Без лимитов пользователей и проектов",
-      "Кастомный домен, брендирование",
-      "SSO, кастомная интеграция",
-      "SLA 99.9%, персональный менеджер",
-    ],
-    cta: "Связаться",
-    highlighted: false,
-  },
-];
-
-type FormState = {
-  name: string;
-  company: string;
-  contact: string;
-  team: "5-20" | "20-50" | "50+";
-  note: string;
+type PlanInfo = {
+  key: string;
+  title: string;
+  tagline?: string | null;
+  price_month: number | null;
+  currency: string;
+  features: string[];
+  limits: { max_users: number | null; max_projects: number | null; max_storage_bytes: number | null };
 };
+
+const container = "mx-auto w-full max-w-[1200px] px-5 sm:px-8";
 
 export default function Landing() {
   useEffect(() => {
     const prev = document.title;
-    document.title = "Qadam CRM — порядок в задачах с первого дня";
+    document.title = "Qadam CRM — клиенты, задачи и команда в одной системе";
+    // Лендинг всегда светлый: снимаем .dark на время показа.
+    const root = document.documentElement;
+    const wasDark = root.classList.contains("dark");
+    const prevBg = root.style.backgroundColor;
+    root.classList.remove("dark");
+    root.style.backgroundColor = "#0B0D11";
     return () => {
       document.title = prev;
+      if (wasDark) root.classList.add("dark");
+      root.style.backgroundColor = prevBg;
     };
   }, []);
 
-  useEffect(() => {
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".qadam-reveal"));
-    if (!nodes.length) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            e.target.classList.add("in");
-            io.unobserve(e.target);
-          }
-        }
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -80px 0px" },
-    );
-    nodes.forEach((n) => io.observe(n));
-    return () => io.disconnect();
-  }, []);
-
   return (
-    <div className="qadam-landing">
+    <div className="min-h-screen bg-white text-zinc-900 [color-scheme:light]">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-md focus:bg-brand-600 focus:px-3 focus:py-2 focus:text-sm focus:text-white"
+      >
+        Перейти к содержимому
+      </a>
       <NavBar />
-      <Hero />
-      <Benefits />
-      <HowItWorks />
-      <SuccessStories />
-      <Pricing />
-      <FAQ />
-      <CTASection />
+      <main id="main">
+        <Hero />
+        <Product />
+        <Modules />
+        <Pricing />
+        <FinalCta />
+      </main>
       <Footer />
     </div>
   );
 }
 
-// =========================================================================
-// Navigation (sticky, transparent над hero)
-// =========================================================================
+// ---------------------------------------------------------------------------
 
 function NavBar() {
   const [scrolled, setScrolled] = useState(false);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
+    const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
+  const light = scrolled || open;
   return (
-    <div
-      className="fixed inset-x-0 z-50 flex justify-center transition-all duration-300 ease-out"
-      style={{
-        top: scrolled ? 14 : 12,
-        paddingLeft: 16,
-        paddingRight: 16,
-      }}
+    <header
+      className={clsx(
+        "fixed inset-x-0 top-0 z-50 transition-colors duration-300",
+        light ? "border-b border-zinc-200 bg-white/90 backdrop-blur" : "border-b border-transparent bg-transparent",
+      )}
     >
-      <nav
-        className="flex items-center justify-between transition-all duration-300 ease-out"
-        style={{
-          width: "100%",
-          maxWidth: scrolled ? 1000 : 1140,
-          height: scrolled ? 58 : 64,
-          padding: scrolled ? "0 8px 0 22px" : "0 12px 0 26px",
-          // Светлый прозрачный pill — сочетается со светлым hero и платформой.
-          background: "rgba(255,255,255,0.85)",
-          backdropFilter: "saturate(180%) blur(18px)",
-          WebkitBackdropFilter: "saturate(180%) blur(18px)",
-          border: "1px solid rgba(10,10,18,0.08)",
-          borderRadius: 999,
-          boxShadow: scrolled
-            ? "0 14px 34px -14px rgba(10,10,18,0.15), 0 2px 6px -2px rgba(10,10,18,0.08)"
-            : "0 6px 20px -10px rgba(10,10,18,0.10)",
-        }}
-      >
-        <Link to="/" className="flex items-center gap-2">
-          <LogoMark size={26} className="!text-[#0A0A12]" />
-          <span className="text-[17px] font-bold tracking-tight" style={{ color: "#0A0A12" }}>
-            Qadam<span style={{ color: "#7C5CFF" }}>.</span>
-          </span>
+      <div className={clsx(container, "flex h-16 items-center gap-8")}>
+        <Link to="/" aria-label="Qadam CRM — главная" className={clsx("flex items-center gap-2.5", light ? "text-zinc-950" : "text-white")}>
+          <LogoMark size={26} inverted={!light} className={light ? "!text-zinc-950" : undefined} />
+          <span className="text-[17px] font-semibold tracking-tight">Qadam</span>
         </Link>
-        <div className="qadam-hide-mobile flex items-center gap-7">
+        <nav className="hidden items-center gap-7 md:flex" aria-label="Разделы">
           {NAV_LINKS.map((l) => (
             <a
               key={l.href}
               href={l.href}
-              className="text-sm font-medium transition-colors"
-              style={{ color: "#3F4457" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#0A0A12")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#3F4457")}
+              className={clsx("text-sm transition-colors", light ? "text-zinc-600 hover:text-zinc-950" : "text-white/75 hover:text-white")}
             >
               {l.label}
             </a>
           ))}
-        </div>
-        <div className="flex items-center gap-1">
-          <Link
-            to="/login"
-            className="hidden rounded-full px-4 py-1.5 text-sm font-medium transition-colors sm:inline-flex"
-            style={{ color: "#3F4457" }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(10,10,18,0.05)";
-              e.currentTarget.style.color = "#0A0A12";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = "#3F4457";
-            }}
-          >
+        </nav>
+        <div className="ml-auto hidden items-center gap-5 md:flex">
+          <Link to="/login" className={clsx("text-sm transition-colors", light ? "text-zinc-700 hover:text-zinc-950" : "text-white/80 hover:text-white")}>
             Войти
           </Link>
           <Link
             to="/register"
-            className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white transition-transform hover:scale-[1.03]"
-            style={{
-              background: "#7C5CFF",
-              boxShadow: "0 8px 20px -8px rgba(124,92,255,0.6)",
-            }}
+            onClick={() => trackEvent("cta_click", { place: "nav" })}
+            className={clsx(
+              "inline-flex h-9 items-center rounded-full px-4 text-sm font-medium transition-colors",
+              light ? "bg-zinc-950 text-white hover:bg-zinc-800" : "bg-white text-zinc-950 hover:bg-white/90",
+            )}
           >
-            Начать <ArrowRight size={13} />
+            Начать бесплатно
           </Link>
         </div>
-      </nav>
-    </div>
+        <button
+          type="button"
+          className={clsx("ml-auto rounded-md p-2 md:hidden", light ? "text-zinc-800" : "text-white")}
+          aria-label={open ? "Закрыть меню" : "Открыть меню"}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+      {open && (
+        <div className="border-t border-zinc-200 bg-white md:hidden">
+          <div className={clsx(container, "flex flex-col gap-1 py-3")}>
+            {NAV_LINKS.map((l) => (
+              <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-md px-2 py-2.5 text-[15px] text-zinc-800">
+                {l.label}
+              </a>
+            ))}
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Link to="/login" className="btn-secondary">Войти</Link>
+              <Link to="/register" className="btn-primary">Начать</Link>
+            </div>
+          </div>
+        </div>
+      )}
+    </header>
   );
 }
 
-// =========================================================================
-// Hero — dark, крупный h1 по центру
-// =========================================================================
+// ---------------------------------------------------------------------------
+
+function HeroBackdrop() {
+  const ref = useRef<HTMLVideoElement | null>(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) v.pause();
+    else v.play().catch(() => undefined);
+  }, []);
+  return (
+    <div aria-hidden className="absolute inset-0 overflow-hidden bg-[#0B0D11]">
+      {/* Фон без видео: сетка, два медленных световых пятна, плавающие «ступени» */}
+      <div className="absolute inset-0 [background-image:linear-gradient(to_right,rgb(255_255_255/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.04)_1px,transparent_1px)] [background-size:64px_64px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_45%,black,transparent)]" />
+      <div className="qd-drift-1 absolute -left-[10%] top-[8%] h-[55vmax] w-[55vmax] rounded-full bg-[radial-gradient(closest-side,rgb(42_82_196/0.55),transparent)] blur-2xl" />
+      <div className="qd-drift-2 absolute -right-[12%] bottom-[-10%] h-[50vmax] w-[50vmax] rounded-full bg-[radial-gradient(closest-side,rgb(100_136_234/0.35),transparent)] blur-2xl" />
+      <svg viewBox="0 0 612 234" className="qd-float absolute -right-10 bottom-10 hidden w-[520px] opacity-60 lg:block" fill="none">
+        {Array.from({ length: 7 }, (_, i) => (
+          <rect key={i} x={i * 84} y={150 - i * 20} width={108} height={84} rx={16} fill={i % 3 === 2 ? "rgb(42 82 196 / 0.45)" : `rgb(255 255 255 / ${i % 3 ? 0.06 : 0.035})`} />
+        ))}
+      </svg>
+
+      {/* Видео (если положить файл в public/landing/hero.mp4) — плавно проявляется поверх */}
+      <video
+        ref={ref}
+        className={clsx("absolute inset-0 h-full w-full object-cover transition-opacity duration-700", ready ? "opacity-100" : "opacity-90")}
+        src={HERO_VIDEO}
+        poster={HERO_POSTER}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        onCanPlay={() => setReady(true)}
+        onError={() => setReady(false)}
+      />
+      {/* Затемнение: общий слой + тень под текстом в центре + плавный переход вниз */}
+      <div className="absolute inset-0 bg-[#0B0D11]/50" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_50%,rgb(11_13_17/0.45),transparent)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgb(11_13_17/0.5),transparent_30%,transparent_65%,rgb(11_13_17))]" />
+      <div className="absolute inset-0 bg-[rgb(42_82_196/0.08)] mix-blend-color" />
+    </div>
+  );
+}
 
 function Hero() {
+  const nav = useNavigate();
+  const [email, setEmail] = useState("");
+  const start = (e: React.FormEvent) => {
+    e.preventDefault();
+    trackEvent("cta_click", { place: "hero" });
+    nav(`/register${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`);
+  };
   return (
-    <section
-      className="relative overflow-hidden pt-[140px] pb-[100px] text-center"
-      style={{
-        background: "linear-gradient(180deg, #FAFAFA 0%, #F3EFFF 100%)",
-      }}
-    >
-      {/* Ambient violet blobs — светлые полупрозрачные, для мягкого glow */}
-      <div
-        className="qadam-blob qadam-blob-drift"
-        style={{
-          top: "-100px",
-          left: "-100px",
-          width: 400,
-          height: 400,
-          background: "#7C5CFF",
-          opacity: 0.15,
-        }}
-      />
-      <div
-        className="qadam-blob qadam-blob-drift"
-        style={{
-          top: 100,
-          right: "-120px",
-          width: 340,
-          height: 340,
-          background: "#6B47F5",
-          opacity: 0.12,
-          animationDelay: "-8s",
-        }}
-      />
-
-      <div className="qadam-container relative">
+    <section className="relative isolate flex min-h-[640px] items-center overflow-hidden text-white [height:100svh]">
+      <HeroBackdrop />
+      <div className={clsx(container, "relative flex flex-col items-center text-center")}>
+        <span className="qd-fade-up inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
+          CRM и управление работой
+        </span>
         <h1
-          className="mx-auto max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-[72px]"
-          style={{
-            color: "#0A0A12",
-            textWrap: "balance" as CSSProperties["textWrap"],
-            letterSpacing: "-0.03em",
-          }}
+          className="qd-fade-up mt-7 max-w-4xl text-[42px] font-light leading-[1.05] tracking-[-0.035em] text-[#F4F5F7] sm:text-[60px] lg:text-[76px]"
+          style={{ animationDelay: "120ms" }}
         >
-          Порядок в задачах <br />
-          <span style={{ color: "#7C5CFF" }}>с первого дня.</span>
+          Клиенты, задачи и команда —<br className="hidden sm:block" />{" "}
+          <span className="text-brand-300">в одной системе</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed sm:text-lg" style={{ color: "#52596E" }}>
-          CRM для команд, которые устали от Excel и десяти вкладок. Задачи, мессенджер, лиды и
-          аналитика — в одном спокойном месте.
+        <p className="qd-fade-up mt-6 max-w-xl text-[17px] leading-relaxed text-white/70 sm:text-lg" style={{ animationDelay: "240ms" }}>
+          Без таблиц и разрозненных чатов. Всё, что происходит в компании, — на одном экране.
         </p>
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            to="/register"
-            className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-medium text-white transition-transform hover:scale-[1.02]"
-            style={{
-              background: "#7C5CFF",
-              boxShadow: "0 14px 34px -12px rgba(124,92,255,0.55)",
-            }}
+        <form
+          onSubmit={start}
+          className="qd-fade-up mt-10 flex w-full max-w-md items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.07] p-1.5 backdrop-blur-md focus-within:border-white/35"
+          style={{ animationDelay: "360ms" }}
+        >
+          <label htmlFor="hero-email" className="sr-only">
+            Рабочий email
+          </label>
+          <input
+            id="hero-email"
+            type="email"
+            autoComplete="email"
+            placeholder="Рабочий email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent px-4 text-[15px] text-white placeholder:text-white/45 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-white px-5 text-sm font-medium text-zinc-950 transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
-            Начать бесплатно <ArrowRight size={16} />
+            Начать бесплатно <ArrowRight size={15} />
+          </button>
+        </form>
+        <p className="qd-fade-up mt-4 text-[13px] text-white/50" style={{ animationDelay: "440ms" }}>
+          Бесплатный тариф · Работает в браузере ·{" "}
+          <Link to="/login" className="text-white/75 underline-offset-4 hover:text-white hover:underline">
+            Уже есть аккаунт
           </Link>
-          <a
-            href="#pricing"
-            className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-medium transition-colors"
-            style={{
-              color: "#0A0A12",
-              border: "1px solid rgba(10,10,18,0.15)",
-              background: "rgba(255,255,255,0.6)",
-            }}
-          >
-            Смотреть цены
-          </a>
-        </div>
-
-        {/* App peek */}
-        <div className="qadam-reveal mx-auto mt-16 max-w-5xl">
-          <div
-            className="overflow-hidden rounded-t-2xl"
-            style={{
-              background: "#ffffff",
-              border: "1px solid rgba(10,10,18,0.08)",
-              boxShadow: "0 30px 80px -30px rgba(10,10,18,0.25)",
-            }}
-          >
-            <DashboardPeek />
-          </div>
-        </div>
+        </p>
       </div>
-    </section>
-  );
-}
-
-function DashboardPeek() {
-  return (
-    <div style={{ padding: "18px 20px 0" }}>
-      <div
-        className="flex items-center gap-3 border-b pb-3"
-        style={{ borderColor: "rgba(10,10,18,0.06)" }}
+      <a
+        href="#product"
+        aria-label="Прокрутить к описанию продукта"
+        className="absolute bottom-7 left-1/2 -translate-x-1/2 rounded-full p-2 text-white/50 transition-colors hover:text-white"
       >
-        <div className="flex gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#E4DBFF" }} />
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#E4DBFF" }} />
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#E4DBFF" }} />
-        </div>
-        <div className="ml-4 flex items-center gap-2 text-xs" style={{ color: "#6B7280" }}>
-          <LogoMark size={16} className="!text-[#0A0A12]" />
-          <span>Qadam CRM</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-[220px_1fr] gap-4 pt-4 text-left">
-        <aside
-          className="rounded-lg p-3 text-xs"
-          style={{ background: "#F7F7FA", border: "1px solid rgba(10,10,18,0.04)" }}
-        >
-          <div className="mb-3 text-[10px] uppercase tracking-wide" style={{ color: "#9CA3AF" }}>
-            Меню
-          </div>
-          {["Панель", "Проекты", "Задачи", "Мессенджер", "Лиды", "Аналитика"].map((l, i) => (
-            <div
-              key={l}
-              className="mb-1 flex items-center gap-2 rounded px-2 py-1.5"
-              style={
-                i === 0
-                  ? { background: "rgba(124,92,255,0.12)", color: "#5A38DB", fontWeight: 500 }
-                  : { color: "#52596E" }
-              }
-            >
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#7C5CFF" }} />
-              {l}
-            </div>
-          ))}
-        </aside>
-        <div className="grid grid-cols-3 gap-3 pb-5">
-          {[
-            { label: "Активных задач", val: "128", delta: "+12%" },
-            { label: "В работе", val: "42", delta: "" },
-            { label: "Просрочено", val: "3", delta: "" },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="rounded-lg p-3"
-              style={{ background: "#F7F7FA", border: "1px solid rgba(10,10,18,0.04)" }}
-            >
-              <div className="text-[11px]" style={{ color: "#6B7280" }}>{s.label}</div>
-              <div className="mt-1 text-xl font-semibold" style={{ color: "#0A0A12" }}>{s.val}</div>
-              {s.delta && <div className="mt-1 text-[10px]" style={{ color: "#10B981" }}>{s.delta}</div>}
-            </div>
-          ))}
-          <div
-            className="col-span-3 rounded-lg p-3"
-            style={{ background: "#F7F7FA", border: "1px solid rgba(10,10,18,0.04)" }}
-          >
-            <div className="mb-2 text-[11px]" style={{ color: "#6B7280" }}>Динамика за неделю</div>
-            <ChartPeek />
-          </div>
-        </div>
-      </div>
-    </div>
+        <ChevronDown size={22} className="qd-float" />
+      </a>
+    </section>
   );
 }
 
-function ChartPeek() {
-  const bars = [40, 62, 54, 88, 76, 92, 70];
+// ---------------------------------------------------------------------------
+
+function Product() {
   return (
-    <div className="flex h-24 items-end gap-2">
-      {bars.map((h, i) => (
-        <div
-          key={i}
-          className="flex-1 rounded-t"
-          style={{ height: `${h}%`, background: i === 3 ? "#7C5CFF" : "rgba(124,92,255,0.35)" }}
-        />
-      ))}
-    </div>
+    <section id="product" className="scroll-mt-16 bg-white py-24 lg:py-32">
+      <div className={clsx(container, "flex flex-col items-center text-center")}>
+        <h2 className="max-w-2xl text-[32px] font-light leading-[1.15] tracking-[-0.025em] text-zinc-950 sm:text-[44px]">
+          Один экран вместо <span className="text-brand-600">десятка вкладок</span>
+        </h2>
+        <div className="relative mt-14 w-full max-w-[920px]">
+          <div aria-hidden className="absolute inset-x-10 bottom-0 top-10 rounded-[40px] bg-[radial-gradient(closest-side,rgb(var(--brand-100)),transparent)] blur-2xl" />
+          <img
+            src={heroProduct}
+            alt="Интерфейс Qadam: задачи на канбан-доске, карточка сделки, сообщение из открытых линий"
+            width={640}
+            height={480}
+            loading="lazy"
+            className="relative mx-auto w-full"
+          />
+        </div>
+        <ul className="mt-12 flex flex-wrap justify-center gap-x-10 gap-y-3 text-[15px] text-zinc-600">
+          {["Роли и права доступа", "Автоматизации без кода", "Отчёты в реальном времени"].map((t) => (
+            <li key={t} className="flex items-center gap-2">
+              <Check size={16} className="text-brand-600" /> {t}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }
 
-// =========================================================================
-// Benefits — light bg, 3 карточки фич
-// =========================================================================
-
-function Benefits() {
+function Modules() {
   return (
-    <section id="product" className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
-      <div className="qadam-container">
-        <div className="mb-14 grid gap-6 md:grid-cols-[1fr_1fr] md:items-end">
-          <div>
-            <div className="qadam-eyebrow mb-3">Почему Qadam</div>
-            <h2
-              className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
-              style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
+    <section id="modules" className="scroll-mt-16 bg-zinc-50 py-24 lg:py-32">
+      <div className={container}>
+        <h2 className="mx-auto max-w-2xl text-center text-[32px] font-light leading-[1.15] tracking-[-0.025em] text-zinc-950 sm:text-[44px]">
+          Всё, чем живёт компания
+        </h2>
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {MODULES.map((m) => (
+            <article
+              key={m.title}
+              className="group rounded-2xl border border-zinc-200 bg-white p-5 transition-[border-color,box-shadow] duration-300 hover:border-zinc-300 hover:shadow-pop"
             >
-              Просто, быстро, без лишнего.
-            </h2>
-          </div>
-          <p className="text-base leading-relaxed text-[#52596E] md:pl-8">
-            Мы собрали в одном приложении задачи, чат и лиды — чтобы вы перестали переключаться
-            между Trello, Slack и Excel. Никаких лишних кнопок и мастеров-настройщиков.
-          </p>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-3">
-          {FEATURES.map((f) => (
-            <div
-              key={f.title}
-              className="rounded-2xl p-7 transition-all hover:-translate-y-1"
-              style={{
-                background: "#F7F7FA",
-                border: "1px solid rgba(10,10,18,0.06)",
-              }}
-            >
-              <div
-                className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl text-white"
-                style={{ background: "#7C5CFF" }}
-              >
-                <f.icon size={20} />
+              <div className="overflow-hidden rounded-xl bg-zinc-50 px-3 py-4">
+                <img
+                  src={m.art}
+                  alt=""
+                  width={360}
+                  height={180}
+                  loading="lazy"
+                  className="w-full transition-transform duration-500 group-hover:scale-[1.03]"
+                />
               </div>
-              <div className="mb-2 text-lg font-semibold" style={{ color: "#0A0A12" }}>
-                {f.title}
-              </div>
-              <p className="text-sm leading-relaxed text-[#52596E]">{f.text}</p>
-            </div>
+              <h3 className="mt-5 text-[17px] font-semibold text-zinc-950">{m.title}</h3>
+              <p className="mt-1 text-sm text-zinc-500">{m.text}</p>
+            </article>
           ))}
         </div>
       </div>
@@ -498,672 +344,192 @@ function Benefits() {
   );
 }
 
-// =========================================================================
-// How it works — 3 нумерованных шага
-// =========================================================================
+// ---------------------------------------------------------------------------
 
-function HowItWorks() {
-  return (
-    <section
-      id="how"
-      className="qadam-reveal py-[110px]"
-      style={{ background: "#F7F7FA" }}
-    >
-      <div className="qadam-container">
-        <div className="mb-14 text-center">
-          <div className="qadam-eyebrow mb-3">Как это работает</div>
-          <h2
-            className="mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
-            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
-          >
-            Несколько простых шагов и готово
-          </h2>
-          <p className="mx-auto mt-4 max-w-lg text-base text-[#52596E]">
-            От регистрации до первого проекта — пять минут. Вся команда на одной волне.
-          </p>
-        </div>
+const fmtNumber = (n: number) => new Intl.NumberFormat("ru-RU").format(n);
 
-        <div className="grid gap-6 md:grid-cols-3">
-          {HOW_STEPS.map((s) => (
-            <div
-              key={s.n}
-              className="rounded-2xl bg-white p-8 text-center"
-              style={{
-                border: "1px solid rgba(10,10,18,0.06)",
-                boxShadow: "0 4px 14px -8px rgba(10,10,18,0.08)",
-              }}
-            >
-              <div
-                className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold text-white"
-                style={{ background: "#7C5CFF" }}
-              >
-                {s.n}
-              </div>
-              <div className="mb-2 text-lg font-semibold" style={{ color: "#0A0A12" }}>
-                {s.title}
-              </div>
-              <p className="text-sm leading-relaxed text-[#52596E]">{s.text}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            to="/register"
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-transform hover:scale-[1.02]"
-            style={{
-              background: "#7C5CFF",
-              boxShadow: "0 12px 30px -12px rgba(124,92,255,0.55)",
-            }}
-          >
-            Начать бесплатно <ArrowRight size={14} />
-          </Link>
-          <a
-            href="#pricing"
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium"
-            style={{
-              color: "#0A0A12",
-              border: "1px solid rgba(10,10,18,0.15)",
-            }}
-          >
-            Смотреть цены
-          </a>
-        </div>
-      </div>
-    </section>
-  );
+function planHeadline(p: PlanInfo): string {
+  const u = p.limits.max_users;
+  return u == null ? "Без ограничения пользователей" : `До ${fmtNumber(u)} пользователей`;
 }
-
-// =========================================================================
-// Success stories — dark, tab-switcher, буллеты + fake chart
-// =========================================================================
-
-function SuccessStories() {
-  const [tab, setTab] = useState<"with" | "without">("with");
-  const items = tab === "with" ? SUCCESS_WITH : SUCCESS_WITHOUT;
-  const chartColor = tab === "with" ? "#10B981" : "#EF4444";
-  const value = tab === "with" ? "+45,6%" : "−45,6%";
-  return (
-    <section className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
-      <div className="qadam-container">
-        <div className="mb-10 max-w-2xl">
-          <div className="qadam-eyebrow mb-3">Продуктивность команды</div>
-          <h2
-            className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
-            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
-          >
-            Меньше рутины — больше результата
-          </h2>
-        </div>
-
-        <div
-          className="mb-8 inline-flex gap-1 rounded-full p-1"
-          style={{ background: "rgba(10,10,18,0.05)" }}
-        >
-          <button
-            className="rounded-full px-5 py-2 text-sm font-medium transition-colors"
-            style={
-              tab === "with"
-                ? { background: "#7C5CFF", color: "#ffffff", boxShadow: "0 4px 12px -4px rgba(124,92,255,0.5)" }
-                : { color: "#52596E" }
-            }
-            onClick={() => setTab("with")}
-          >
-            С Qadam CRM
-          </button>
-          <button
-            className="rounded-full px-5 py-2 text-sm font-medium transition-colors"
-            style={
-              tab === "without"
-                ? { background: "#0A0A12", color: "#ffffff" }
-                : { color: "#52596E" }
-            }
-            onClick={() => setTab("without")}
-          >
-            Без Qadam CRM
-          </button>
-        </div>
-
-        <div className="grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-start">
-          <ul className="space-y-4">
-            {items.map((t) => (
-              <li key={t} className="flex items-start gap-3" style={{ color: "#3F4457" }}>
-                <span
-                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                  style={{ background: tab === "with" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.12)" }}
-                >
-                  {tab === "with" ? (
-                    <Check size={13} className="text-[#10B981]" />
-                  ) : (
-                    <Circle size={7} className="fill-current text-[#EF4444]" />
-                  )}
-                </span>
-                <span className="text-[15px] leading-relaxed">{t}</span>
-              </li>
-            ))}
-          </ul>
-          <div
-            className="rounded-2xl p-6"
-            style={{
-              background: "#F7F7FA",
-              border: "1px solid rgba(10,10,18,0.06)",
-              boxShadow: "0 4px 14px -8px rgba(10,10,18,0.08)",
-            }}
-          >
-            <div className="mb-2 flex items-center justify-between text-xs">
-              <span style={{ color: "#6B7280" }}>Продуктивность команды</span>
-              <span style={{ color: chartColor }}>{value}</span>
-            </div>
-            <div className="mb-3 text-2xl font-semibold" style={{ color: "#0A0A12" }}>
-              {tab === "with" ? "85 211" : "25 780"}
-            </div>
-            <FakeChart color={chartColor} up={tab === "with"} />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FakeChart({ color, up }: { color: string; up: boolean }) {
-  const points = up
-    ? [30, 42, 38, 55, 48, 65, 60, 80, 78, 92]
-    : [80, 72, 78, 60, 68, 45, 52, 30, 35, 20];
-  const path = points
-    .map((y, i) => {
-      const x = (i / (points.length - 1)) * 100;
-      return `${i === 0 ? "M" : "L"} ${x},${100 - y}`;
-    })
-    .join(" ");
-  return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-32 w-full">
-      <defs>
-        <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.4" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${path} L 100,100 L 0,100 Z`} fill={`url(#grad-${color})`} />
-      <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-// =========================================================================
-// Pricing — light, 3 плана + Popular + toggle Monthly/Yearly
-// =========================================================================
 
 function Pricing() {
-  const [yearly, setYearly] = useState(false);
-  return (
-    <section id="pricing" className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
-      <div className="qadam-container">
-        <div className="mb-8 text-center">
-          <div className="qadam-eyebrow mb-3">Тарифы</div>
-          <h2
-            className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
-            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
-          >
-            Тариф, который вам подходит
-          </h2>
-          <p className="mx-auto mt-4 max-w-lg text-base text-[#52596E]">
-            Начните с Free — переходите на Pro когда команда вырастет.
-          </p>
-        </div>
-
-        <div className="mb-10 flex items-center justify-center gap-3">
-          <div
-            className="inline-flex items-center gap-1 rounded-full p-1"
-            style={{ background: "rgba(10,10,18,0.06)" }}
-          >
-            <button
-              className={
-                "rounded-full px-5 py-2 text-sm font-medium transition-colors " +
-                (!yearly ? "bg-white text-[#0A0A12] shadow" : "text-[#52596E]")
-              }
-              onClick={() => setYearly(false)}
-            >
-              Помесячно
-            </button>
-            <button
-              className={
-                "inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition-colors " +
-                (yearly ? "bg-white text-[#0A0A12] shadow" : "text-[#52596E]")
-              }
-              onClick={() => setYearly(true)}
-            >
-              Годовая
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                style={{ background: "#7C5CFF" }}
-              >
-                −20%
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-3">
-          {PLANS.map((p) => (
-            <div
-              key={p.key}
-              className="relative rounded-2xl p-8 transition-transform hover:-translate-y-1"
-              style={{
-                background: "#ffffff",
-                border: p.highlighted ? "2px solid #7C5CFF" : "1px solid rgba(10,10,18,0.08)",
-                boxShadow: p.highlighted
-                  ? "0 20px 40px -18px rgba(124,92,255,0.35)"
-                  : "0 4px 14px -8px rgba(10,10,18,0.08)",
-              }}
-            >
-              {p.highlighted && (
-                <div
-                  className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-white"
-                  style={{ background: "#7C5CFF" }}
-                >
-                  Популярный
-                </div>
-              )}
-              <div className="mb-1 text-sm font-semibold" style={{ color: "#7C5CFF" }}>
-                {p.name}
-              </div>
-              <div className="mb-1 flex items-baseline gap-1">
-                <span className="text-4xl font-bold" style={{ color: "#0A0A12" }}>
-                  {p.key === "pro" && yearly ? "7 990" : p.price}
-                </span>
-                {p.priceLabel && (
-                  <span className="text-sm text-[#52596E]">
-                    {p.priceLabel}
-                    {p.period && ` / ${p.period}`}
-                  </span>
-                )}
-              </div>
-              <p className="mt-2 min-h-[40px] text-sm text-[#52596E]">{p.tagline}</p>
-
-              <ul className="mt-6 space-y-2.5">
-                {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-sm text-[#3F4457]">
-                    <CheckCircle2 size={16} className="mt-0.5 shrink-0" style={{ color: "#7C5CFF" }} />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                to={p.key === "enterprise" ? "#cta" : "/register"}
-                className={
-                  "mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium transition-transform hover:scale-[1.02] " +
-                  (p.highlighted ? "text-white" : "")
-                }
-                style={
-                  p.highlighted
-                    ? {
-                        background: "#7C5CFF",
-                        boxShadow: "0 10px 24px -10px rgba(124,92,255,0.55)",
-                      }
-                    : { border: "1px solid rgba(10,10,18,0.15)", color: "#0A0A12" }
-                }
-              >
-                {p.cta}
-              </Link>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// =========================================================================
-// FAQ
-// =========================================================================
-
-function FAQ() {
-  return (
-    <section id="faq" className="qadam-reveal py-[100px]" style={{ background: "#ffffff" }}>
-      <div className="qadam-container max-w-3xl">
-        <div className="mb-10 text-center">
-          <div className="qadam-eyebrow mb-3">Вопросы и ответы</div>
-          <h2
-            className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[42px]"
-            style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
-          >
-            Часто спрашивают
-          </h2>
-        </div>
-        <div className="grid gap-3">
-          {FAQ_ITEMS.map((item) => (
-            <details
-              key={item.q}
-              className="group rounded-2xl bg-[#F7F7FA] p-6 transition-colors hover:bg-[#EFEFF5]"
-            >
-              <summary className="flex items-center justify-between gap-4 text-base font-medium" style={{ color: "#0A0A12" }}>
-                <span>{item.q}</span>
-                <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-transform group-open:rotate-45"
-                  style={{ background: "#ffffff", color: "#7C5CFF", border: "1px solid rgba(10,10,18,0.06)" }}
-                >
-                  +
-                </span>
-              </summary>
-              <p className="mt-3 text-sm leading-relaxed text-[#52596E]">{item.a}</p>
-            </details>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// =========================================================================
-// CTA — dark панель с формой лидов
-// =========================================================================
-
-function CTASection() {
-  const [form, setForm] = useState<FormState>({
-    name: "",
-    company: "",
-    contact: "",
-    team: "5-20",
-    note: "",
+  const { data, isPending, isError } = useQuery({
+    queryKey: ["billing-plans", "public"],
+    queryFn: async () => (await api.get<PlanInfo[]>("/api/billing/plans")).data,
+    staleTime: 5 * 60_000,
   });
+  const plans = data ?? [];
+  const highlightIdx = plans.length >= 3 ? 1 : -1;
+
+  return (
+    <section id="pricing" className="scroll-mt-16 bg-white py-24 lg:py-32">
+      <div className={container}>
+        <h2 className="mx-auto max-w-2xl text-center text-[32px] font-light leading-[1.15] tracking-[-0.025em] text-zinc-950 sm:text-[44px]">
+          Начните бесплатно
+        </h2>
+        <p className="mt-4 text-center text-[15px] text-zinc-500">Тариф меняется в настройках в любой момент.</p>
+        {isPending ? (
+          <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-[300px] animate-breathe rounded-2xl bg-zinc-100" />
+            ))}
+          </div>
+        ) : isError || plans.length === 0 ? (
+          <p className="mt-14 text-center text-sm text-zinc-500">Тарифы временно недоступны. Напишите нам — подберём вариант.</p>
+        ) : (
+          <div
+            className={clsx(
+              "mt-14 grid gap-4",
+              plans.length <= 2 && "mx-auto max-w-3xl md:grid-cols-2",
+              plans.length === 3 && "md:grid-cols-3",
+              plans.length >= 4 && "md:grid-cols-2 lg:grid-cols-4",
+            )}
+          >
+            {plans.map((p, i) => {
+              const featured = i === highlightIdx;
+              const price = p.price_month == null ? "По запросу" : p.price_month === 0 ? "0" : fmtNumber(p.price_month);
+              return (
+                <div
+                  key={p.key}
+                  className={clsx(
+                    "flex flex-col rounded-2xl border p-7",
+                    featured ? "border-zinc-950 bg-zinc-950 text-white" : "border-zinc-200 bg-white",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[15px] font-medium">{p.title}</h3>
+                    {featured && <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs">Популярный</span>}
+                  </div>
+                  <div className="mt-6 flex items-baseline gap-1.5">
+                    <span className="text-[40px] font-light leading-none tracking-tight tabular-nums">{price}</span>
+                    {p.price_month != null && (
+                      <span className={clsx("text-sm", featured ? "text-white/60" : "text-zinc-500")}>
+                        {p.currency === "KZT" ? "₸" : p.currency} / мес
+                      </span>
+                    )}
+                  </div>
+                  <p className={clsx("mt-3 text-sm", featured ? "text-white/70" : "text-zinc-500")}>{planHeadline(p)}</p>
+                  <ul className={clsx("mt-6 flex-1 space-y-2 text-sm", featured ? "text-white/80" : "text-zinc-600")}>
+                    {p.features.slice(0, 4).map((f) => (
+                      <li key={f} className="flex gap-2">
+                        <Check size={15} className={clsx("mt-0.5 shrink-0", featured ? "text-brand-300" : "text-brand-600")} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    to="/register"
+                    onClick={() => trackEvent("pricing_cta", { plan: p.key })}
+                    className={clsx(
+                      "mt-8 inline-flex h-10 items-center justify-center rounded-full text-sm font-medium transition-colors",
+                      featured ? "bg-white text-zinc-950 hover:bg-white/90" : "border border-zinc-300 text-zinc-900 hover:border-zinc-950",
+                    )}
+                  >
+                    {p.price_month === 0 ? "Начать бесплатно" : "Выбрать"}
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function FinalCta() {
+  const [contact, setContact] = useState("");
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (sending || sent) return;
+    const value = contact.trim();
+    if (value.length < 5) return setError("Укажите email или телефон.");
     setError(null);
-    const name = form.name.trim();
-    const contact = form.contact.trim();
-    if (name.length < 2) return setError("Укажите имя (минимум 2 символа).");
-    if (contact.length < 3) return setError("Укажите телефон или email для связи.");
     setSending(true);
     try {
+      const name = value.includes("@") ? value.split("@")[0] : "Заявка с сайта";
       await api.post("/api/leads", {
-        name,
-        company: form.company.trim() || null,
-        contact,
-        team_size: form.team,
-        note: form.note.trim() || null,
+        name: name.length >= 2 ? name : "Заявка с сайта",
+        contact: value,
+        team_size: "5-20",
+        note: "Запрос демонстрации с лендинга",
       });
-      trackEvent("lead_submitted", { team_size: form.team });
+      trackEvent("lead_submitted", { place: "final_cta" });
       setSent(true);
     } catch (err) {
-      setError(extractApiError(err).message || "Не удалось отправить заявку.");
+      setError(extractApiError(err).message || "Не удалось отправить. Попробуйте ещё раз.");
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <section id="cta" className="qadam-reveal py-[120px]" style={{ background: "#ffffff" }}>
-      <div className="qadam-container">
-        <div
-          className="relative overflow-hidden rounded-3xl p-10 md:p-14"
-          style={{
-            background: "linear-gradient(135deg, #F3EFFF 0%, #FAFAFA 100%)",
-            border: "1px solid rgba(124,92,255,0.15)",
-          }}
-        >
-          <div
-            className="qadam-blob qadam-blob-drift"
-            style={{
-              top: "-100px",
-              right: "-80px",
-              width: 320,
-              height: 320,
-              background: "#7C5CFF",
-              opacity: 0.18,
-            }}
-          />
-          <div className="relative grid gap-10 md:grid-cols-[1.05fr_1fr] md:items-center">
-            <div>
-              <div className="qadam-eyebrow mb-3">Начать сегодня</div>
-              <h2
-                className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-[44px]"
-                style={{ color: "#0A0A12", letterSpacing: "-0.025em" }}
-              >
-                Соберите команду в одном месте
-              </h2>
-              <p className="mt-4 max-w-md text-base" style={{ color: "#52596E" }}>
-                Оставьте заявку — наш менеджер перезвонит, поможет с настройкой и подберёт тариф.
-                Или зарегистрируйтесь сами прямо сейчас.
-              </p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link
-                  to="/register"
-                  className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-transform hover:scale-[1.02]"
-                  style={{
-                    background: "#7C5CFF",
-                    boxShadow: "0 12px 30px -12px rgba(124,92,255,0.55)",
-                  }}
-                >
-                  Начать бесплатно <ArrowRight size={14} />
-                </Link>
-                <a
-                  href="mailto:hello@qadam.kz"
-                  className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium transition-colors"
-                  style={{
-                    color: "#0A0A12",
-                    border: "1px solid rgba(10,10,18,0.15)",
-                    background: "rgba(255,255,255,0.7)",
-                  }}
-                >
-                  hello@qadam.kz
-                </a>
-              </div>
-            </div>
-
-            <form
-              onSubmit={submit}
-              className="relative rounded-2xl p-6"
-              style={{
-                background: "#ffffff",
-                border: "1px solid rgba(10,10,18,0.08)",
-                boxShadow: "0 20px 50px -20px rgba(10,10,18,0.15)",
-              }}
+    <section id="contact" className="relative isolate scroll-mt-16 overflow-hidden bg-[#0B0D11] py-24 text-white lg:py-32">
+      <div aria-hidden className="qd-drift-1 absolute -left-40 top-0 h-[520px] w-[520px] rounded-full bg-[radial-gradient(closest-side,rgb(42_82_196/0.45),transparent)] blur-2xl" />
+      <div className={clsx(container, "relative flex flex-col items-center text-center")}>
+        <h2 className="max-w-2xl text-[32px] font-light leading-[1.15] tracking-[-0.025em] sm:text-[44px]">
+          Покажем Qadam на ваших процессах
+        </h2>
+        <p className="mt-4 text-[15px] text-white/60">Оставьте контакт — созвонимся и поможем с настройкой.</p>
+        {sent ? (
+          <p role="status" className="mt-10 inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-3 text-sm">
+            <Check size={16} className="text-emerald-400" /> Заявка отправлена. Свяжемся в течение рабочего дня.
+          </p>
+        ) : (
+          <form
+            onSubmit={submit}
+            className="mt-10 flex w-full max-w-md items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.07] p-1.5 focus-within:border-white/35"
+            noValidate
+          >
+            <label htmlFor="cta-contact" className="sr-only">
+              Email или телефон
+            </label>
+            <input
+              id="cta-contact"
+              placeholder="Email или телефон"
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              className="min-w-0 flex-1 bg-transparent px-4 text-[15px] text-white placeholder:text-white/45 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={sending}
+              className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-white px-5 text-sm font-medium text-zinc-950 transition-colors hover:bg-white/90 disabled:opacity-60"
             >
-              {sent ? (
-                <div className="py-8 text-center">
-                  <div
-                    className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full"
-                    style={{ background: "rgba(16,185,129,0.15)", color: "#10B981" }}
-                  >
-                    <Check size={22} />
-                  </div>
-                  <div className="text-lg font-semibold" style={{ color: "#0A0A12" }}>Спасибо! Мы на связи.</div>
-                  <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>Свяжемся в течение рабочего дня.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="mb-2 text-sm font-medium" style={{ color: "#0A0A12" }}>Оставить заявку</div>
-                  <div className="grid gap-2.5">
-                    <input
-                      className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                      style={{
-                        background: "#F7F7FA",
-                        color: "#0A0A12",
-                        border: "1px solid rgba(10,10,18,0.06)",
-                      }}
-                      placeholder="Имя"
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                      style={{
-                        background: "#F7F7FA",
-                        color: "#0A0A12",
-                        border: "1px solid rgba(10,10,18,0.06)",
-                      }}
-                      placeholder="Компания"
-                      value={form.company}
-                      onChange={(e) => setForm({ ...form, company: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                      style={{
-                        background: "#F7F7FA",
-                        color: "#0A0A12",
-                        border: "1px solid rgba(10,10,18,0.06)",
-                      }}
-                      placeholder="Email или телефон"
-                      value={form.contact}
-                      onChange={(e) => setForm({ ...form, contact: e.target.value })}
-                    />
-                    <div className="flex gap-1.5">
-                      {(["5-20", "20-50", "50+"] as const).map((v) => {
-                        const active = form.team === v;
-                        return (
-                          <button
-                            key={v}
-                            type="button"
-                            className="flex-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors"
-                            style={
-                              active
-                                ? { background: "#7C5CFF", color: "#ffffff" }
-                                : { background: "#F7F7FA", color: "#52596E", border: "1px solid rgba(10,10,18,0.06)" }
-                            }
-                            onClick={() => setForm({ ...form, team: v })}
-                          >
-                            {v}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <textarea
-                      rows={2}
-                      className="w-full resize-none rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                      style={{
-                        background: "#F7F7FA",
-                        color: "#0A0A12",
-                        border: "1px solid rgba(10,10,18,0.06)",
-                      }}
-                      placeholder="Задача или комментарий"
-                      value={form.note}
-                      onChange={(e) => setForm({ ...form, note: e.target.value })}
-                    />
-                    {error && (
-                      <div
-                        className="rounded-lg px-3 py-2 text-xs"
-                        style={{ background: "rgba(239,68,68,0.08)", color: "#B91C1C" }}
-                      >
-                        {error}
-                      </div>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={sending}
-                      className="mt-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white transition-transform hover:scale-[1.02] disabled:opacity-60"
-                      style={{
-                        background: "#7C5CFF",
-                        boxShadow: "0 10px 24px -10px rgba(124,92,255,0.55)",
-                      }}
-                    >
-                      {sending ? "Отправляем…" : "Отправить заявку"}
-                    </button>
-                  </div>
-                </>
-              )}
-            </form>
-          </div>
-        </div>
+              {sending ? "Отправляем…" : "Запросить демо"}
+            </button>
+          </form>
+        )}
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-rose-300">
+            {error}
+          </p>
+        )}
       </div>
     </section>
   );
 }
 
-// =========================================================================
-// Footer — light, 4 колонки
-// =========================================================================
-
 function Footer() {
   return (
-    <footer className="pb-10 pt-16" style={{ background: "#ffffff" }}>
-      <div className="qadam-container">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <LogoMark size={26} className="!text-[#0A0A12]" />
-              <span className="text-lg font-bold" style={{ color: "#0A0A12" }}>
-                Qadam<span style={{ color: "#7C5CFF" }}>.</span>
-              </span>
-            </div>
-            <p className="max-w-xs text-sm text-[#52596E]">
-              CRM с задачами, чатом и лидами — для команд, которым важен порядок и скорость.
-            </p>
-          </div>
-          <FooterCol
-            title="Продукт"
-            items={[
-              { label: "Задачи и Kanban", href: "#product" },
-              { label: "Мессенджер", href: "#product" },
-              { label: "Формы лидов", href: "#product" },
-              { label: "Аналитика", href: "#product" },
-            ]}
-          />
-          <FooterCol
-            title="Компания"
-            items={[
-              { label: "О проекте", href: "#" },
-              { label: "Контакты", href: "mailto:hello@qadam.kz" },
-              { label: "Партнёры", href: "#" },
-              { label: "Карьера", href: "#" },
-            ]}
-          />
-          <FooterCol
-            title="Ресурсы"
-            items={[
-              { label: "Тарифы", href: "#pricing" },
-              { label: "Вопросы", href: "#faq" },
-              { label: "Документация", href: "#" },
-              { label: "Блог", href: "#" },
-            ]}
-          />
-          <FooterCol
-            title="Соцсети"
-            items={[
-              { label: "Telegram", href: "#" },
-              { label: "Instagram", href: "#" },
-              { label: "LinkedIn", href: "#" },
-              { label: "YouTube", href: "#" },
-            ]}
-          />
+    <footer className="bg-[#0B0D11] pb-10 text-white/50">
+      <div className={clsx(container, "flex flex-col gap-4 border-t border-white/10 pt-8 text-[13px] sm:flex-row sm:items-center sm:justify-between")}>
+        <div className="flex items-center gap-2 text-white/70">
+          <LogoMark size={20} inverted />
+          <span>© {new Date().getFullYear()} Qadam CRM</span>
         </div>
-
-        <div
-          className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t pt-6 text-xs text-[#6B7280]"
-          style={{ borderColor: "rgba(10,10,18,0.08)" }}
-        >
-          <span>© {new Date().getFullYear()} Qadam CRM. Все права защищены.</span>
-          <span className="flex flex-wrap gap-4">
-            <Link to="/privacy" className="hover:text-[#0A0A12]">Политика конфиденциальности</Link>
-            <Link to="/terms" className="hover:text-[#0A0A12]">Условия</Link>
-            <a href="mailto:hello@qadam.kz" className="hover:text-[#0A0A12]">hello@qadam.kz</a>
-          </span>
-        </div>
+        <nav className="flex flex-wrap gap-x-6 gap-y-2" aria-label="Нижнее меню">
+          <Link to="/privacy" className="hover:text-white">Конфиденциальность</Link>
+          <Link to="/terms" className="hover:text-white">Условия</Link>
+          <span className="select-all">hello@qadam.kz</span>
+        </nav>
       </div>
     </footer>
-  );
-}
-
-function FooterCol({ title, items }: { title: string; items: { label: string; href: string }[] }) {
-  return (
-    <div>
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "#0A0A12" }}>
-        {title}
-      </div>
-      <ul className="space-y-2">
-        {items.map((i) => (
-          <li key={i.label}>
-            <a href={i.href} className="text-sm text-[#52596E] transition-colors hover:text-[#0A0A12]">
-              {i.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

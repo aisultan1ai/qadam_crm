@@ -182,13 +182,13 @@ export default function OrgChart() {
   }, [data, onOpen]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+          <h1 className="page-title flex items-center gap-2">
             <Network size={22} /> Оргструктура
           </h1>
-          <p className="text-sm text-neutral-500">
+          <p className="page-subtitle">
             Иерархия сотрудников по полю «руководитель». Кликните на карточку — откроется профиль.
           </p>
         </div>
@@ -226,7 +226,7 @@ export default function OrgChart() {
           >
             <Background gap={20} size={1} />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor={() => "#a78bfa"} maskColor="rgba(0,0,0,0.05)" />
+            <MiniMap pannable zoomable nodeColor={() => "#6488EA"} maskColor="rgba(0,0,0,0.05)" />
           </ReactFlow>
         )}
       </div>

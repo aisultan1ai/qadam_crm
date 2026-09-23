@@ -51,15 +51,15 @@ export default function ReportsPage() {
   const unit = result?.meta.unit || "";
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Отчёты</h1>
-        <p className="text-sm text-neutral-500">Готовые шаблоны и конструктор произвольных срезов</p>
+    <div className="space-y-5">
+      <div className="page-header">
+        <h1 className="page-title">Отчёты</h1>
+        <p className="page-subtitle">Готовые шаблоны и конструктор произвольных срезов</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <div className="space-y-3">
-          <div className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+          <div className="card p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
               <Sparkles size={14} className="text-brand-500" /> Готовые отчёты
             </div>
@@ -82,7 +82,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+          <div className="card p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
               <Play size={14} className="text-brand-500" /> Конструктор
             </div>
@@ -126,7 +126,7 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <div className="card p-4">
           {!selected ? (
             <EmptyState icon={<BarChart3 size={32} />} title="Выберите отчёт" description="Или соберите свой в конструкторе слева" />
           ) : isFetching ? (

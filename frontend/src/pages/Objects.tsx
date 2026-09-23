@@ -61,11 +61,11 @@ export default function ObjectsPage() {
   const active = schemas?.find((s) => s.code === activeCode) || schemas?.[0];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Объекты</h1>
-          <p className="text-sm text-neutral-500">Конструктор пользовательских сущностей (договоры, тикеты, счета…)</p>
+          <h1 className="page-title">Объекты</h1>
+          <p className="page-subtitle">Конструктор пользовательских сущностей (договоры, тикеты, счета…)</p>
         </div>
         <Button variant="primary" onClick={() => setOpenNewSchema(true)}>
           <Plus size={16} /> Новая сущность
@@ -131,7 +131,7 @@ function SchemaDetail({ schema, onEdit }: { schema: SchemaOut; onEdit: () => voi
   });
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">{schema.label} <span className="text-xs font-normal text-neutral-500">/{schema.code}</span></h2>
@@ -149,30 +149,30 @@ function SchemaDetail({ schema, onEdit }: { schema: SchemaOut; onEdit: () => voi
         <div className="py-8 text-center text-sm text-neutral-500">Записей пока нет</div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase text-neutral-500 dark:bg-neutral-900/40">
+          <table className="w-full">
+            <thead className="table-head">
               <tr>
-                <th className="px-3 py-2">Название</th>
+                <th className="table-head-cell">Название</th>
                 {schema.fields.slice(0, 4).map((f) => (
                   <th key={f.name} className="px-3 py-2">{f.label}</th>
                 ))}
-                <th className="px-3 py-2">Создана</th>
-                <th className="px-3 py-2 text-right">Действия</th>
+                <th className="table-head-cell">Создана</th>
+                <th className="table-head-cell text-right">Действия</th>
               </tr>
             </thead>
             <tbody>
               {records.map((r) => (
-                <tr key={r.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                  <td className="px-3 py-2 font-medium">{r.title || `#${r.id}`}</td>
+                <tr key={r.id} className="table-row">
+                  <td className="table-cell font-medium">{r.title || `#${r.id}`}</td>
                   {schema.fields.slice(0, 4).map((f) => (
-                    <td key={f.name} className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
+                    <td key={f.name} className="table-cell text-neutral-600 dark:text-neutral-400">
                       {formatValue(r.data[f.name], f.type)}
                     </td>
                   ))}
-                  <td className="px-3 py-2 text-xs text-neutral-500">
+                  <td className="table-cell text-xs text-neutral-500">
                     {new Date(r.created_at).toLocaleDateString("ru-RU")}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="table-cell">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => setOpenRec(r)}><Pencil size={13} /></Button>
                       <Button

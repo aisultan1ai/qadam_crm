@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
-import { Plus, Trash2, Pencil, Coins, TrendingUp } from "lucide-react";
+import { Plus, Trash2, Pencil, Coins, TrendingUp, KanbanSquare, List } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
 import { EmptyState, Modal, Avatar, FormError } from "@/components/ui";
@@ -14,6 +14,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import type { Page } from "@/types";
 
+import { FilterSelect, PageHeader, SearchInput, Segmented, Tabs, Toolbar } from "@/components/page";
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
 
 type DealStage = "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
@@ -58,13 +59,14 @@ const STAGE_LABEL: Record<DealStage, string> = {
   lost: "Провал",
 };
 
+// Цвет этапа — только тонкая полоса сверху колонки; заголовок остаётся нейтральным.
 const STAGE_HEADER: Record<DealStage, string> = {
-  new: "bg-pink-500 text-white",
-  qualified: "bg-purple-500 text-white",
-  proposal: "bg-sky-500 text-white",
-  negotiation: "bg-amber-500 text-white",
-  won: "bg-emerald-500 text-white",
-  lost: "bg-neutral-500 text-white",
+  new: "border-t-indigo-500 dark:border-t-indigo-500",
+  qualified: "border-t-violet-500 dark:border-t-violet-500",
+  proposal: "border-t-sky-500 dark:border-t-sky-500",
+  negotiation: "border-t-amber-500 dark:border-t-amber-500",
+  won: "border-t-emerald-500 dark:border-t-emerald-500",
+  lost: "border-t-zinc-400 dark:border-t-zinc-400",
 };
 
 const STAGE_PROBABILITY: Record<DealStage, number> = {
@@ -136,13 +138,56 @@ export default function DealsPage() {
     onError: (e) => toast.error("Не удалось удалить", extractApiError(e).message),
   });
 
+  const [view, setView] = useState<"kanban" | "table">("kanban");
+  const [statusTab, setStatusTab] = useState<"all" | "open" | "won" | "lost">("all");
+  const [q, setQ] = useState("");
+  const [owner, setOwner] = useState("");
+
+  const owners = useMemo(() => {
+    const m = new Map<number, string>();
+    (deals || []).forEach((d) => d.owner && m.set(d.owner.id, d.owner.name));
+    return Array.from(m, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }, [deals]);
+
+  const counts = useMemo(() => {
+    const c = { all: 0, open: 0, won: 0, lost: 0 };
+    (deals || []).forEach((d) => {
+      c.all += 1;
+      if (d.stage === "won") c.won += 1;
+      else if (d.stage === "lost") c.lost += 1;
+      else c.open += 1;
+    });
+    return c;
+  }, [deals]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return (deals || []).filter((d) => {
+      if (statusTab === "open" && (d.stage === "won" || d.stage === "lost")) return false;
+      if (statusTab === "won" && d.stage !== "won") return false;
+      if (statusTab === "lost" && d.stage !== "lost") return false;
+      if (owner && String(d.owner?.id ?? "") !== owner) return false;
+      if (needle && !d.title.toLowerCase().includes(needle)) return false;
+      return true;
+    });
+  }, [deals, statusTab, owner, q]);
+
   const grouped = useMemo(() => {
     const map: Record<DealStage, Deal[]> = {
       new: [], qualified: [], proposal: [], negotiation: [], won: [], lost: [],
     };
-    (deals || []).forEach((d) => (map[d.stage] ||= []).push(d));
+    filtered.forEach((d) => (map[d.stage] ||= []).push(d));
     return map;
-  }, [deals]);
+  }, [filtered]);
+
+  const askDelete = (d: Deal) =>
+    confirm({
+      title: "Удалить сделку?",
+      message: `«${d.title}» будет удалена.`,
+      danger: true,
+      confirmLabel: "Удалить",
+      onConfirm: () => del.mutateAsync(d.id),
+    });
 
   if (!canView) {
     return <EmptyState icon={<Coins size={32} />} title="Нет доступа к сделкам" description="Обратитесь к администратору за правом deals.view" />;
@@ -150,107 +195,244 @@ export default function DealsPage() {
 
   const currency = forecast?.currency || "KZT";
 
+  const stageTone: Record<DealStage, string> = {
+    new: "bg-indigo-500",
+    qualified: "bg-violet-500",
+    proposal: "bg-sky-500",
+    negotiation: "bg-amber-500",
+    won: "bg-emerald-500",
+    lost: "bg-zinc-400",
+  };
+  const today = new Date().setHours(0, 0, 0, 0);
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Сделки</h1>
-          <p className="text-sm text-neutral-500">Воронка продаж</p>
-        </div>
-        {canCreate && (
-          <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>
-            Новая сделка
-          </Button>
-        )}
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Сделки"
+        subtitle="Воронка продаж и все сделки компании"
+        actions={
+          canCreate && (
+            <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>
+              Новая сделка
+            </Button>
+          )
+        }
+      />
 
       {forecast && (
-        <div className="grid gap-3 md:grid-cols-4">
-          <ForecastCard label="В работе" value={fmtMoney(forecast.total_amount_cents, currency)} sub={`${forecast.open_count} шт.`} icon={<Coins size={16} />} />
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-200 bg-zinc-200 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-800">
+          <ForecastCard label="В работе" value={fmtMoney(forecast.total_amount_cents, currency)} sub={`${forecast.open_count} сделок`} icon={<Coins size={16} />} />
           <ForecastCard label="Взвешенный прогноз" value={fmtMoney(forecast.weighted_amount_cents, currency)} sub="с учётом вероятности" icon={<TrendingUp size={16} />} accent />
-          <ForecastCard label="Успешные" value={fmtMoney(forecast.won_amount_cents, currency)} sub={`${forecast.won_count} сделок`} icon={<TrendingUp size={16} />} />
-          <ForecastCard label="Провальные" value={String(forecast.lost_count)} sub="закрыты неудачно" icon={<Coins size={16} />} />
+          <ForecastCard label="Выиграно" value={fmtMoney(forecast.won_amount_cents, currency)} sub={`${forecast.won_count} сделок`} icon={<TrendingUp size={16} />} />
+          <ForecastCard label="Проиграно" value={String(forecast.lost_count)} sub="закрыты неудачно" icon={<Coins size={16} />} />
         </div>
       )}
 
+      <Tabs
+        label="Статус сделок"
+        value={statusTab}
+        onChange={setStatusTab}
+        items={[
+          { key: "all", label: "Все", count: counts.all },
+          { key: "open", label: "Открытые", count: counts.open },
+          { key: "won", label: "Выигранные", count: counts.won },
+          { key: "lost", label: "Проигранные", count: counts.lost },
+        ]}
+      />
+
+      <Toolbar
+        right={
+          <Segmented
+            label="Вид"
+            value={view}
+            onChange={setView}
+            items={[
+              { key: "kanban", label: "Канбан", icon: KanbanSquare },
+              { key: "table", label: "Таблица", icon: List },
+            ]}
+          />
+        }
+      >
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по названию сделки" />
+        <FilterSelect label="Ответственный" value={owner} onChange={setOwner}>
+          <option value="">Все ответственные</option>
+          {owners.map((o) => (
+            <option key={o.id} value={String(o.id)}>
+              {o.name}
+            </option>
+          ))}
+        </FilterSelect>
+        {(q || owner) && (
+          <Button variant="ghost" size="sm" onClick={() => { setQ(""); setOwner(""); }}>
+            Сбросить
+          </Button>
+        )}
+      </Toolbar>
+
       {isPending ? (
-        <div className="h-64 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
-      ) : (
+        <div className="h-64 animate-pulse rounded-xl bg-zinc-100 dark:bg-[#1B1F26]" />
+      ) : filtered.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            icon={<Coins size={20} />}
+            title={deals && deals.length > 0 ? "По фильтру ничего не найдено" : "Сделок пока нет"}
+            description={deals && deals.length > 0 ? "Измените поиск или сбросьте фильтры." : "Создайте первую сделку — она появится в воронке."}
+            action={
+              canCreate && !(deals && deals.length > 0) ? (
+                <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>
+                  Новая сделка
+                </Button>
+              ) : undefined
+            }
+          />
+        </div>
+      ) : view === "kanban" ? (
         <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {STAGE_ORDER.map((stage) => {
-            const items = grouped[stage] || [];
-            const stageTotal = items.reduce((s, d) => s + d.amount_cents, 0);
-            return (
-              <div key={stage} className="flex min-h-[220px] flex-col rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
-                <div className={clsx("flex items-center justify-between rounded-t-lg px-3 py-2 text-sm font-semibold", STAGE_HEADER[stage])}>
-                  <span>{STAGE_LABEL[stage]}</span>
-                  <span className="text-xs opacity-90">{items.length}</span>
-                </div>
-                <div className="px-3 py-1 text-xs text-neutral-500 border-b border-neutral-200 dark:border-neutral-800 tabular-nums">
-                  {fmtMoney(stageTotal, currency)}
-                </div>
-                <div className="flex flex-1 flex-col gap-2 p-2">
-                  {items.map((d) => (
-                    <div key={d.id} className="group rounded-md border border-neutral-200 bg-white p-2.5 text-sm shadow-sm transition-shadow hover:shadow-md dark:border-neutral-800 dark:bg-neutral-800/70">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 font-medium">{d.title}</div>
-                        <div className="opacity-0 transition-opacity group-hover:opacity-100 flex gap-0.5">
-                          {canUpdate && (
-                            <Button variant="ghost" size="icon" onClick={() => setOpenDeal(d)} title="Редактировать">
-                              <Pencil size={12} />
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-rose-500"
-                              onClick={() =>
-                                confirm({
-                                  title: "Удалить сделку?",
-                                  message: `«${d.title}» будет удалена.`,
-                                  danger: true,
-                                  confirmLabel: "Удалить",
-                                  onConfirm: () => del.mutateAsync(d.id),
-                                })
-                              }
-                            >
-                              <Trash2 size={12} />
-                            </Button>
-                          )}
+            {STAGE_ORDER.map((stage) => {
+              const items = grouped[stage] || [];
+              const stageTotal = items.reduce((s, d) => s + d.amount_cents, 0);
+              return (
+                <div key={stage} className={clsx("flex min-h-[220px] flex-col rounded-lg border border-t-2 border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-[#14171C]", STAGE_HEADER[stage])}>
+                  <div className="flex items-center justify-between px-3 py-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    <span>{STAGE_LABEL[stage]}</span>
+                    <span className="rounded bg-zinc-200/70 px-1.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-[#1B1F26] dark:text-zinc-400">{items.length}</span>
+                  </div>
+                  <div className="px-3 py-1 text-xs text-neutral-500 border-b border-neutral-200 dark:border-neutral-800 tabular-nums">
+                    {fmtMoney(stageTotal, currency)}
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2 p-2">
+                    {items.map((d) => (
+                      <div key={d.id} className="group rounded-md border border-zinc-200 bg-white p-2.5 text-sm transition-[border-color,box-shadow] hover:border-zinc-300 hover:shadow-pop dark:border-zinc-800 dark:bg-[#1B1F26]">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 font-medium">{d.title}</div>
+                          <div className="opacity-0 transition-opacity group-hover:opacity-100 flex gap-0.5">
+                            {canUpdate && (
+                              <Button variant="ghost" size="icon" onClick={() => setOpenDeal(d)} title="Редактировать">
+                                <Pencil size={12} />
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-rose-500"
+                                onClick={() =>
+                                  confirm({
+                                    title: "Удалить сделку?",
+                                    message: `«${d.title}» будет удалена.`,
+                                    danger: true,
+                                    confirmLabel: "Удалить",
+                                    onConfirm: () => del.mutateAsync(d.id),
+                                  })
+                                }
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="mt-1 flex items-center justify-between text-xs">
-                        <span className="font-semibold text-brand-700 dark:text-brand-300 tabular-nums">{fmtMoney(d.amount_cents, d.currency)}</span>
-                        <span className="text-neutral-500">{d.probability}%</span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
-                        {d.owner && <Avatar name={d.owner.name} url={d.owner.avatar_url} size={18} />}
-                        {d.close_date && <span className="tabular-nums">{new Date(d.close_date).toLocaleDateString("ru-RU")}</span>}
-                      </div>
-                      {canUpdate && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {STAGE_ORDER.filter((s) => s !== d.stage).slice(0, 3).map((s) => (
-                            <button
-                              key={s}
-                              className="rounded-full border border-neutral-200 px-2 py-0.5 text-[10px] text-neutral-600 hover:border-brand-500 hover:text-brand-600 dark:border-neutral-700 dark:text-neutral-400"
-                              onClick={() => changeStage.mutate({ id: d.id, stage: s })}
-                              title={`Перевести в «${STAGE_LABEL[s]}»`}
-                            >
-                              → {STAGE_LABEL[s]}
-                            </button>
-                          ))}
+                        <div className="mt-1 flex items-center justify-between text-xs">
+                          <span className="font-semibold text-brand-700 dark:text-brand-300 tabular-nums">{fmtMoney(d.amount_cents, d.currency)}</span>
+                          <span className="text-neutral-500">{d.probability}%</span>
                         </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
+                          {d.owner && <Avatar name={d.owner.name} url={d.owner.avatar_url} size={18} />}
+                          {d.close_date && <span className="tabular-nums">{new Date(d.close_date).toLocaleDateString("ru-RU")}</span>}
+                        </div>
+                        {canUpdate && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {STAGE_ORDER.filter((s) => s !== d.stage).slice(0, 3).map((s) => (
+                              <button
+                                key={s}
+                                className="rounded-md border border-zinc-200 px-1.5 py-0.5 text-[10px] text-neutral-600 hover:border-brand-500 hover:text-brand-600 dark:border-neutral-700 dark:text-neutral-400"
+                                onClick={() => changeStage.mutate({ id: d.id, stage: s })}
+                                title={`Перевести в «${STAGE_LABEL[s]}»`}
+                              >
+                                → {STAGE_LABEL[s]}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {items.length === 0 && (
+                      <div className="py-3 text-center text-xs text-neutral-400">Пусто</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+      ) : (
+        <div className="table-container table-scroll">
+          <table className="w-full min-w-[760px]">
+            <thead className="table-head">
+              <tr>
+                <th className="table-head-cell">Сделка</th>
+                <th className="table-head-cell">Этап</th>
+                <th className="table-head-cell">Ответственный</th>
+                <th className="table-head-cell text-right">Сумма</th>
+                <th className="table-head-cell text-right">Вероятность</th>
+                <th className="table-head-cell">Срок</th>
+                <th className="table-head-cell w-20" aria-label="Действия" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((d) => {
+                const overdue = !!d.close_date && new Date(d.close_date).getTime() < today && d.stage !== "won" && d.stage !== "lost";
+                return (
+                  <tr key={d.id} className="table-row group">
+                    <td className="table-cell">
+                      <button
+                        type="button"
+                        className="text-left font-medium text-zinc-900 hover:text-brand-700 dark:text-zinc-100 dark:hover:text-brand-300"
+                        onClick={() => canUpdate && setOpenDeal(d)}
+                      >
+                        {d.title}
+                      </button>
+                    </td>
+                    <td className="table-cell">
+                      <span className="inline-flex items-center gap-2">
+                        <span className={clsx("h-2 w-2 rounded-sm", stageTone[d.stage])} />
+                        {STAGE_LABEL[d.stage]}
+                      </span>
+                    </td>
+                    <td className="table-cell">
+                      {d.owner ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Avatar name={d.owner.name} url={d.owner.avatar_url} size={22} />
+                          {d.owner.name}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400">—</span>
                       )}
-                    </div>
-                  ))}
-                  {items.length === 0 && (
-                    <div className="py-3 text-center text-xs text-neutral-400">Пусто</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    </td>
+                    <td className="table-cell text-right font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
+                      {fmtMoney(d.amount_cents, d.currency)}
+                    </td>
+                    <td className="table-cell text-right tabular-nums">{d.probability}%</td>
+                    <td className={clsx("table-cell tabular-nums", overdue && "font-medium text-rose-600 dark:text-rose-400")}>
+                      {d.close_date ? new Date(d.close_date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "—"}
+                    </td>
+                    <td className="table-cell text-right">
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                        {canUpdate && (
+                          <Button variant="ghost" size="icon" onClick={() => setOpenDeal(d)} aria-label="Редактировать сделку">
+                            <Pencil size={14} />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button variant="ghost" size="icon" className="text-rose-600" onClick={() => askDelete(d)} aria-label="Удалить сделку">
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -266,13 +448,13 @@ export default function DealsPage() {
 
 function ForecastCard({ label, value, sub, icon, accent }: { label: string; value: string; sub?: string; icon: React.ReactNode; accent?: boolean }) {
   return (
-    <div className={clsx("rounded-lg border p-3", accent ? "border-brand-300 bg-brand-50 dark:border-brand-500/40 dark:bg-brand-500/10" : "border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50")}>
-      <div className="flex items-center justify-between text-xs text-neutral-500">
+    <div className="bg-white p-5 dark:bg-[#14171C]">
+      <div className="flex items-center justify-between text-[13px] font-medium text-zinc-500 dark:text-zinc-400">
         <span>{label}</span>
-        {icon}
+        <span className={accent ? "text-brand-600 dark:text-brand-400" : undefined}>{icon}</span>
       </div>
-      <div className={clsx("mt-1 text-lg font-semibold tabular-nums", accent && "text-brand-700 dark:text-brand-300")}>{value}</div>
-      {sub && <div className="text-xs text-neutral-500">{sub}</div>}
+      <div className={clsx("mt-3 text-xl font-semibold tabular-nums tracking-tight", accent && "text-brand-700 dark:text-brand-300")}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
     </div>
   );
 }

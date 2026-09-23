@@ -54,15 +54,15 @@ export default function SecurityPolicyPage() {
   };
 
   return (
-    <div className="space-y-4 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+    <div className="space-y-5 max-w-3xl">
+      <div className="page-header">
+        <h1 className="page-title flex items-center gap-2">
           <Shield size={20} /> Безопасность компании
         </h1>
-        <p className="text-sm text-neutral-500">Политики паролей, IP-ограничения, сессии, 2FA</p>
+        <p className="page-subtitle">Политики паролей, IP-ограничения, сессии, 2FA</p>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50 space-y-4">
+      <div className="card p-4 space-y-4">
         <h2 className="text-lg font-semibold">Пароли</h2>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Минимальная длина</span>
@@ -86,7 +86,7 @@ export default function SecurityPolicyPage() {
         </label>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50 space-y-4">
+      <div className="card p-4 space-y-4">
         <h2 className="text-lg font-semibold">2FA (двухфакторка)</h2>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.require_2fa} onChange={(e) => setForm({ ...form, require_2fa: e.target.checked })} />
@@ -98,14 +98,14 @@ export default function SecurityPolicyPage() {
         </label>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50 space-y-4">
+      <div className="card p-4 space-y-4">
         <h2 className="text-lg font-semibold">IP-ограничения</h2>
         <p className="text-xs text-neutral-500">Список CIDR/IP, с которых разрешён доступ (по одному в строку). Пусто = без ограничений.</p>
         <textarea className="input min-h-[120px] font-mono text-xs" value={ipInput} onChange={(e) => setIpInput(e.target.value)} placeholder="192.168.0.0/24&#10;10.0.0.5" />
         <div className="text-xs text-amber-600">⚠️ Осторожно: неверный CIDR может заблокировать вас же. Проверьте свой IP.</div>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50 space-y-3">
+      <div className="card p-4 space-y-3">
         <h2 className="text-lg font-semibold">Сессии</h2>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Таймаут неактивности (мин; пусто = без таймаута)</span>

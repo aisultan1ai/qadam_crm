@@ -7,15 +7,16 @@ import type { Role, PermissionGroup } from "@/types";
 import { Loader, Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 import {
-  Plus, Copy, Trash2, Save, CreditCard, Palette, UserPlus, Mail, Check,
-  Clock, XCircle, RefreshCw, Users, HardDrive, Zap, Sparkles, Shield,
-  GripVertical, Eye, Phone, Hash, AlignLeft, ChevronDown, MessageCircle,
-  Loader2, ExternalLink, CalendarClock, Link2, LogOut,
+  AlignLeft, BookText, CalendarClock, Check, ChevronDown, Clock, Copy, CreditCard, ExternalLink, Eye, GripVertical, HardDrive, Hash, Link2, Loader2, LogOut, Mail, MessageCircle, Palette, Phone, Plus, Puzzle, RefreshCw, Save, Shield, Sparkles, Trash2, UserPlus, Users, XCircle, Zap,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 
+import { SettingsRouteLayout } from "@/components/page";
+import SecurityPolicy from "./SecurityPolicy";
+import IntegrationsPage from "./Integrations";
+import Directories from "./Directories";
 type TabDef = {
   to: string;
   label: string;
@@ -35,6 +36,9 @@ const SETTINGS_TABS: TabDef[] = [
   { to: "integrations", label: "Интеграции", icon: Link2, perm: "calendar.use" },
   { to: "branding", label: "Брендинг", icon: Palette, ownerOnly: true },
   { to: "billing", label: "Тариф", icon: CreditCard, ownerOnly: true },
+  { to: "security", label: "Безопасность", icon: Shield, perm: "settings.system" },
+  { to: "services", label: "Сервисы и хранилища", icon: Puzzle },
+  { to: "directories", label: "Справочники", icon: BookText },
 ];
 
 export default function Settings() {
@@ -42,35 +46,17 @@ export default function Settings() {
   const isOwner = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin;
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Настройки</h1>
-        <p className="text-sm text-neutral-500">Компания, тариф и права доступа</p>
-      </div>
+    <SettingsRouteLayout
+      subtitle="Компания, тариф и права доступа"
+      items={SETTINGS_TABS.map((t) => ({
+        to: t.to,
+        label: t.label,
+        icon: t.icon,
+        hidden: (t.ownerOnly && !isOwner) || (!!t.perm && !can(t.perm) && !isOwner),
+      }))}
+    >
 
-      <nav className="flex flex-wrap gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900/60">
-        {SETTINGS_TABS.map((t) => {
-          if (t.ownerOnly && !isOwner) return null;
-          if (t.perm && !can(t.perm) && !isOwner) return null;
-          return (
-            <NavLink
-              key={t.to}
-              to={t.to}
-              className={({ isActive }) =>
-                clsx(
-                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
-                  isActive
-                    ? "bg-brand-600 font-medium text-white shadow-sm hover:bg-brand-700"
-                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
-                )
-              }
-            >
-              <t.icon size={15} />
-              {t.label}
-            </NavLink>
-          );
-        })}
-      </nav>
+      
 
       <Routes>
         <Route index element={<Navigate to="roles" replace />} />
@@ -99,8 +85,11 @@ export default function Settings() {
         />
         <Route path="branding" element={isOwner ? <BrandingSettings /> : <Forbid />} />
         <Route path="billing" element={isOwner ? <BillingSettings /> : <Forbid />} />
+        <Route path="security" element={can("settings.system") || isOwner ? <SecurityPolicy /> : <Forbid />} />
+        <Route path="services" element={<IntegrationsPage />} />
+        <Route path="directories" element={<Directories />} />
       </Routes>
-    </div>
+    </SettingsRouteLayout>
   );
 }
 
@@ -452,7 +441,7 @@ function TeamSettings() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="card p-5">
         <div className="mb-3 flex items-center gap-2">
           <UserPlus size={18} className="text-brand-500" />
@@ -607,7 +596,7 @@ function InviteStatusChip({
 }) {
   if (status === "accepted") {
     return (
-      <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+      <span className="chip bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">
         <Check size={11} /> Принято
         {acceptedAt && ` · ${new Date(acceptedAt).toLocaleDateString("ru-RU")}`}
       </span>
@@ -615,14 +604,14 @@ function InviteStatusChip({
   }
   if (status === "expired") {
     return (
-      <span className="chip bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+      <span className="chip bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25">
         <XCircle size={11} /> Просрочено
       </span>
     );
   }
   const days = Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 86400_000));
   return (
-    <span className="chip bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+    <span className="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25">
       <Clock size={11} /> Ожидает · ещё {days} д.
     </span>
   );
@@ -717,7 +706,7 @@ function BrandingSettings() {
           <label className="btn-ghost cursor-pointer">
             <input
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              accept="image/png,image/jpeg,image/webp"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -729,7 +718,7 @@ function BrandingSettings() {
           {data.logo_url && (
             <Button variant="ghost" className="ml-2 text-rose-600" onClick={() => removeLogo.mutate()}>Удалить</Button>
           )}
-          <div className="mt-1 text-xs text-neutral-500">PNG, JPEG, WebP или SVG · до 2 МБ</div>
+          <div className="mt-1 text-xs text-neutral-500">PNG, JPEG или WebP · до 2 МБ</div>
         </div>
       </div>
 
@@ -746,7 +735,7 @@ function BrandingSettings() {
         <input
           className="input"
           type="text"
-          placeholder="#0F67FD"
+          placeholder="#2A52C4"
           value={color}
           onChange={(e) => setColor(e.target.value)}
         />
@@ -890,19 +879,19 @@ function BillingSettings() {
           </div>
         </div>
       )}
-      <div className="card p-6">
+      <div className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-wide text-neutral-500">Текущий план</div>
             <div className="mt-1 flex items-center gap-2">
               <div className="text-2xl font-semibold">{currentPlanInfo?.title ?? sub?.plan ?? "—"}</div>
               {sub?.status === "active" && (
-                <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <span className="chip bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">
                   <Check size={11} /> Активен
                 </span>
               )}
               {sub?.status === "past_due" && (
-                <span className="chip bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                <span className="chip bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25">
                   Просрочен платёж
                 </span>
               )}
@@ -928,7 +917,7 @@ function BillingSettings() {
       </div>
 
       {usage && (
-        <div className="card p-6">
+        <div className="card p-5">
           <div className="mb-4 text-sm font-medium text-neutral-700 dark:text-neutral-300">Использование</div>
           <div className="grid gap-4 sm:grid-cols-3">
             <UsageBar
@@ -975,7 +964,7 @@ function BillingSettings() {
               >
                 {isPopular && !current && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-500 to-brand-600 px-3 py-0.5 text-[11px] font-semibold text-white shadow">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">
                       <Sparkles size={11} /> Популярный
                     </span>
                   </div>
@@ -1051,7 +1040,7 @@ function BillingSettings() {
         </div>
       </div>
 
-      <div className="card p-4 text-xs text-neutral-500">
+      <div className="card p-5 text-xs text-neutral-500">
         <div className="flex items-start gap-2">
           <Shield size={14} className="mt-0.5 shrink-0" />
           <span>
@@ -1316,7 +1305,7 @@ function LeadFormsSettings() {
                 <div className="truncate font-medium">{f.name}</div>
                 <div className="truncate text-xs text-neutral-500">/{f.slug}</div>
               </div>
-              {!f.is_active && <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>}
+              {!f.is_active && <span className="chip bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25">off</span>}
             </button>
           ))}
           {(!forms || forms.length === 0) && (
@@ -1670,7 +1659,7 @@ function LeadFormEditor({
       </div>
 
       <div className="space-y-3">
-        <div className="card p-4">
+        <div className="card p-5">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Превью</span>
             <Eye size={14} className="text-neutral-400" />
@@ -1678,7 +1667,7 @@ function LeadFormEditor({
           <FormPreview form={draft} />
         </div>
 
-        <div className="card p-4">
+        <div className="card p-5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Прямая ссылка</div>
           <div className="flex gap-1">
             <input className="input flex-1 text-xs" readOnly value={directLink} onClick={(e) => (e.target as HTMLInputElement).select()} />
@@ -1714,7 +1703,7 @@ function LeadFormEditor({
           </Button>
         </div>
 
-        <div className="card p-4">
+        <div className="card p-5">
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">API endpoint</div>
           <p className="mb-2 text-[11px] text-neutral-500">
             Если у вас уже есть своя форма, шлите заявки прямо на этот URL — авторизация не нужна.
@@ -1915,7 +1904,7 @@ function fieldPlaceholder(f: FormFieldT): string {
 
 function FormPreview({ form }: { form: LeadFormT }) {
   const [tab, setTab] = useState<"form" | "success">("form");
-  const color = form.brand_color || "#0f67fd";
+  const color = form.brand_color || "#2A52C4";
 
   return (
     <div className="space-y-2">
@@ -2166,7 +2155,7 @@ function ManagerAvailabilitySettings() {
           const rowDirty = dirty.has(row.user_id);
 
           return (
-            <div key={row.user_id} className="card p-4">
+            <div key={row.user_id} className="card p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -2180,7 +2169,7 @@ function ManagerAvailabilitySettings() {
                       className={clsx(
                         "chip",
                         row.on_shift_now
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25"
                           : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
                       )}
                     >
@@ -2424,7 +2413,7 @@ function MessengersSettings() {
 
   return (
     <div className="space-y-4">
-      <nav className="flex gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900/60 w-fit">
+      <nav className="flex gap-1 card p-1 w-fit">
         <button
           className={clsx(
             "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
@@ -2485,10 +2474,10 @@ function MessengersSettings() {
                     <div className="truncate text-xs text-neutral-500">{M_KIND_LABEL[c.kind]}</div>
                   </div>
                   {!c.is_active && (
-                    <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>
+                    <span className="chip bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25">off</span>
                   )}
                   {c.last_error && (
-                    <span className="chip bg-rose-100 text-rose-700 dark:bg-rose-950/30" title={c.last_error}>
+                    <span className="chip bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25" title={c.last_error}>
                       !
                     </span>
                   )}
@@ -2892,7 +2881,7 @@ function AutoReplyRulesEditor({ channelId }: { channelId: number }) {
                   {r.kind === "welcome" ? "Приветствие" : r.kind === "off_hours" ? "Вне рабочих часов" : "По ключевому слову"}
                 </span>
                 {!r.is_active && (
-                  <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>
+                  <span className="chip bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25">off</span>
                 )}
                 {r.kind === "keyword" && (r.trigger_config as { keywords?: string[] })?.keywords && (
                   <span className="text-xs text-neutral-500">
@@ -3091,7 +3080,7 @@ function MessageTemplatesSettings() {
                 <span className="font-semibold">{t.name}</span>
                 <span className="chip bg-neutral-100 text-neutral-600 dark:bg-neutral-800">{t.language}</span>
                 {t.whatsapp_template_name && (
-                  <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                  <span className="chip bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">
                     WhatsApp: {t.whatsapp_template_name}
                   </span>
                 )}
@@ -3613,7 +3602,7 @@ function BookingSettings() {
                 <div className="truncate font-medium">{p.title}</div>
                 <div className="truncate text-xs text-neutral-500">{p.duration_min} мин · /{p.slug}</div>
               </div>
-              {!p.is_active && <span className="chip bg-neutral-200 text-neutral-600 dark:bg-neutral-800">off</span>}
+              {!p.is_active && <span className="chip bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25">off</span>}
             </button>
           ))}
         </div>
@@ -3947,9 +3936,9 @@ function BookingPageEditor({
                   <div>{new Date(b.start_at).toLocaleString("ru-RU")}</div>
                   <span className={clsx(
                     "chip !text-[10px]",
-                    b.status === "confirmed" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30",
-                    b.status === "canceled" && "bg-rose-100 text-rose-800 dark:bg-rose-950/30",
-                    b.status === "pending" && "bg-amber-100 text-amber-800 dark:bg-amber-950/30",
+                    b.status === "confirmed" && "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+                    b.status === "canceled" && "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
+                    b.status === "pending" && "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
                   )}>{b.status}</span>
                 </div>
               </div>
@@ -4041,7 +4030,7 @@ function IntegrationsSettings() {
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold">Мой Google Calendar</h3>
               {s?.connected && (
-                <span className="chip bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <span className="chip bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">
                   <Check size={11} /> Подключён
                 </span>
               )}

@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 
+import { SearchInput, Segmented } from "@/components/page";
 type MailboxRow = {
   id: number;
   email: string;
@@ -142,17 +143,17 @@ export default function Mail() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold">
+          <h1 className="page-title">
             Почта
             {totalUnread > 0 && (
-              <span className="ml-2 rounded-full bg-rose-500 px-2 py-0.5 text-xs font-semibold text-white">
+              <span className="ml-2 rounded-md bg-rose-500 px-2 py-0.5 text-xs font-semibold text-white">
                 {totalUnread}
               </span>
             )}
           </h1>
-          <p className="text-sm text-neutral-500">
+          <p className="page-subtitle">
             {mailbox.email}
             {mailbox.last_sync_at && ` · синхр. ${formatWhen(mailbox.last_sync_at)}`}
             {mailbox.last_error && (
@@ -175,39 +176,25 @@ export default function Mail() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[340px_1fr]">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[340px_1fr] dark:border-zinc-800 dark:bg-[#14171C]">
         {/* Threads list */}
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
-          <div className="space-y-2 border-b border-neutral-100 p-3 dark:border-neutral-800">
-            <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-2.5 text-neutral-400" />
-              <input
-                className="input !py-1.5 pl-7 text-sm"
-                placeholder="Поиск по теме…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-2 text-xs text-neutral-500">
-              <label className="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-brand-600"
-                  checked={onlyUnread}
-                  onChange={(e) => setOnlyUnread(e.target.checked)}
-                />
-                непрочитанные
-              </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-brand-600"
-                  checked={showArchived}
-                  onChange={(e) => setShowArchived(e.target.checked)}
-                />
-                архив
-              </label>
-            </div>
+        <div className="flex min-h-0 flex-col overflow-hidden border-b border-zinc-200 md:border-b-0 md:border-r dark:border-zinc-800">
+          <div className="space-y-2.5 border-b border-zinc-200 p-3 dark:border-zinc-800">
+            <SearchInput value={search} onChange={setSearch} placeholder="Поиск по теме" className="sm:w-full" />
+            <Segmented
+              label="Какие письма показать"
+              value={showArchived ? "archive" : onlyUnread ? "unread" : "all"}
+              onChange={(v) => {
+                setOnlyUnread(v === "unread");
+                setShowArchived(v === "archive");
+              }}
+              className="w-full [&>button]:flex-1 [&>button]:justify-center"
+              items={[
+                { key: "all", label: "Входящие" },
+                { key: "unread", label: "Непрочитанные" },
+                { key: "archive", label: "Архив" },
+              ]}
+            />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {threadsLoading && (
@@ -229,30 +216,29 @@ export default function Mail() {
                   key={t.id}
                   onClick={() => setSelectedId(t.id)}
                   className={clsx(
-                    "w-full border-b border-neutral-100 px-3 py-2.5 text-left transition-colors dark:border-neutral-800",
+                    "w-full border-b border-zinc-100 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:border-zinc-800/70",
                     isSelected
-                      ? "bg-brand-50 dark:bg-brand-950/25"
-                      : "hover:bg-neutral-50 dark:hover:bg-neutral-800/40",
-                    t.unread_count > 0 && "font-semibold",
+                      ? "bg-brand-50 shadow-[inset_3px_0_0_rgb(var(--brand-600))] dark:bg-brand-500/10"
+                      : "hover:bg-zinc-50 dark:hover:bg-[#1B1F26]",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm">{senders || "—"}</span>
-                    <span className="shrink-0 text-[10px] text-neutral-400">
+                    <span className={clsx("flex min-w-0 items-center gap-2 truncate text-sm", t.unread_count > 0 ? "font-semibold text-zinc-900 dark:text-white" : "font-medium")}>{t.unread_count > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label="Непрочитано" />}<span className="truncate">{senders || "—"}</span></span>
+                    <span className="shrink-0 text-xs tabular-nums text-zinc-500">
                       {formatWhen(t.last_message_at)}
                     </span>
                   </div>
-                  <div className="truncate text-sm">{t.subject || "(без темы)"}</div>
+                  <div className={clsx("mt-0.5 truncate text-[13px]", t.unread_count > 0 ? "font-medium text-zinc-800 dark:text-zinc-200" : "text-zinc-700 dark:text-zinc-300")}>{t.subject || "(без темы)"}</div>
                   <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <span className="truncate text-xs text-neutral-500">
+                    <span className="truncate text-[13px] text-zinc-500">
                       {t.last_message_preview || "—"}
                     </span>
                     <div className="flex shrink-0 items-center gap-1">
                       {t.total_count > 1 && (
-                        <span className="text-[10px] text-neutral-400">{t.total_count}</span>
+                        <span className="rounded bg-zinc-100 px-1 text-[11px] tabular-nums text-zinc-500 dark:bg-[#1B1F26]" title="Писем в цепочке">{t.total_count}</span>
                       )}
                       {t.unread_count > 0 && (
-                        <span className="rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] text-white">
+                        <span className="min-w-[18px] rounded-full bg-brand-600 px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">
                           {t.unread_count}
                         </span>
                       )}
@@ -261,12 +247,12 @@ export default function Mail() {
                   {(t.linked_lead_id || t.linked_task_id) && (
                     <div className="mt-1 flex gap-1">
                       {t.linked_lead_id && (
-                        <span className="chip !text-[10px] !px-1.5 !py-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                        <span className="chip !px-1.5 !py-0 !text-[11px] bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300">
                           Лид #{t.linked_lead_id}
                         </span>
                       )}
                       {t.linked_task_id && (
-                        <span className="chip !text-[10px] !px-1.5 !py-0 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300">
+                        <span className="chip !px-1.5 !py-0 !text-[11px] bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300">
                           Задача #{t.linked_task_id}
                         </span>
                       )}
@@ -279,10 +265,16 @@ export default function Mail() {
         </div>
 
         {/* Thread view */}
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
+        <div className="flex min-h-0 flex-col overflow-hidden bg-white dark:bg-[#14171C]">
           {!selected && (
-            <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
-              Выберите тред слева
+            <div className="flex flex-1 items-center justify-center p-6">
+              <div className="text-center">
+                <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-[#1B1F26]">
+                  <MailIcon size={20} />
+                </span>
+                <div className="text-[15px] font-semibold">Выберите письмо</div>
+                <p className="mt-1 text-sm text-zinc-500">Вся переписка по цепочке откроется здесь.</p>
+              </div>
             </div>
           )}
           {selected && <ThreadView thread={selected} onChanged={() => qc.invalidateQueries({ queryKey: ["mail-threads"] })} />}
@@ -479,8 +471,8 @@ function MessageCard({ m }: { m: MailMsg }) {
       )}
       <div className="mt-3">
         {m.body_html && showHtml ? (
-          // ВАЖНО: HTML от внешних клиентов. TODO: серверный sanitize через bleach.
-          // Пока полагаемся на CSP + iframe-sandbox не используем (перегрузит DOM).
+          // HTML от внешних отправителей приходит уже очищенным на сервере
+          // (backend/app/core/html_sanitize.py: без script/style/on*/javascript:).
           <div
             className="prose prose-sm max-w-none dark:prose-invert"
             dangerouslySetInnerHTML={{ __html: m.body_html }}

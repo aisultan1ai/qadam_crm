@@ -115,7 +115,7 @@ export default function Invite() {
       };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] p-4 dark:bg-[#0F0F14]">
+    <div className="flex min-h-screen items-center justify-center bg-[#F6F7F9] p-4 dark:bg-[#0D0F13]">
       <form onSubmit={onSubmit} className="card w-full max-w-sm p-8" noValidate>
         <div className="mb-4 flex flex-col items-center gap-2">
           <LogoMark size={48} className="rounded-[12px]" />

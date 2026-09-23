@@ -15,6 +15,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { projectSchema, type ProjectForm } from "@/lib/validation";
 
+import { SearchInput, Tabs } from "@/components/page";
 type ProjectScope = "all" | "participating" | "made_by_me" | "audited_by_me";
 
 const SCOPE_TABS: { key: ProjectScope; label: string }[] = [
@@ -60,10 +61,10 @@ export default function Projects() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Проекты</h1>
-          <p className="text-sm text-neutral-500">{data?.length ?? 0} проектов</p>
+          <h1 className="page-title">Проекты</h1>
+          <p className="page-subtitle">{data?.length ?? 0} проектов</p>
         </div>
         {canCreate && (
           <Button variant="primary" onClick={() => setOpenNew(true)}>
@@ -72,34 +73,10 @@ export default function Projects() {
         )}
       </div>
 
-      <div
-        role="tablist"
-        aria-label="Область проектов"
-        className="flex flex-wrap items-center gap-1 border-b border-neutral-200 dark:border-neutral-800"
-      >
-        {SCOPE_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            role="tab"
-            aria-selected={scope === tab.key}
-            onClick={() => setScope(tab.key)}
-            className={clsx(
-              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-              scope === tab.key
-                ? "border-brand-600 font-medium text-brand-700 dark:border-brand-400 dark:text-brand-300"
-                : "border-transparent text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs label="Область проектов" value={scope} onChange={setScope} items={SCOPE_TABS} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input className="input pl-8" placeholder="Поиск…" value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск" />
         <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
           Архивные
@@ -133,7 +110,7 @@ export default function Projects() {
                 <Link to={`/projects/${p.id}`} className="text-base font-semibold hover:text-brand-600">
                   <span
                     className="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle"
-                    style={{ background: p.color || "#0F67FD" }}
+                    style={{ background: p.color || "#2A52C4" }}
                   />
                   {p.name}
                 </Link>
@@ -220,7 +197,7 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
   } = useForm<ProjectForm>({
     resolver: zodResolver(projectSchema),
     mode: "onChange",
-    defaultValues: { name: "", description: "", color: "#0F67FD", deadline: "", member_ids: [] },
+    defaultValues: { name: "", description: "", color: "#2A52C4", deadline: "", member_ids: [] },
   });
   const memberIds = watch("member_ids");
 

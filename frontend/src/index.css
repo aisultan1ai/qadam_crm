@@ -2,14 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Qadam design system — «Graphite & Cobalt».
+ * Brand-шкала хранится как RGB-каналы: tailwind читает её через rgb(var(--brand-N) / α),
+ * а applyBrandColor() (src/lib/branding.ts) перезаписывает шаги 50…950 цветом компании.
+ */
 :root {
-  color-scheme: light dark;
-  --page-bg: #F7F8FA;
-  --page-bg-dark: #0F0F14;
-  --sidebar-bg: #2A2E38;
-  --sidebar-hover: #363B49;
-  --brand: #7C5CFF;
-  --brand-strong: #6B47F5;
+  color-scheme: light;
+  --brand-50: 239 243 254;
+  --brand-100: 222 231 253;
+  --brand-200: 191 208 250;
+  --brand-300: 147 174 243;
+  --brand-400: 100 136 234;
+  --brand-500: 63 104 221;
+  --brand-600: 42 82 196;
+  --brand-700: 34 66 160;
+  --brand-800: 31 56 128;
+  --brand-900: 29 49 102;
+  --brand-950: 19 31 64;
+
+  --page-bg: #F6F7F9;
+  --surface: #FFFFFF;
+  --surface-2: #F6F7F9;
+  --line: #E1E4E9;
+  --sidebar-bg: #12151B;
+}
+
+html.dark {
+  color-scheme: dark;
+  --page-bg: #0D0F13;
+  --surface: #14171C;
+  --surface-2: #1B1F26;
+  --line: #252A32;
 }
 
 html,
@@ -23,109 +47,171 @@ html, body {
 }
 
 body {
-  @apply bg-[#F7F8FA] text-zinc-900 dark:bg-[#0F0F14] dark:text-zinc-100;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
-  letter-spacing: -0.005em;
+  @apply bg-[#F6F7F9] text-zinc-900 antialiased dark:bg-[#0D0F13] dark:text-zinc-100;
+  font-feature-settings: "kern", "liga";
   scrollbar-width: thin;
-  scrollbar-color: rgba(113, 113, 122, 0.4) transparent;
+  scrollbar-color: rgba(105, 113, 128, 0.35) transparent;
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+mark {
+  border-radius: 2px;
+  background: rgb(var(--brand-100));
+  color: inherit;
+  padding: 0 1px;
+}
+html.dark mark {
+  background: rgb(var(--brand-500) / 0.3);
+}
+
+::selection {
+  background: rgb(var(--brand-500) / 0.18);
 }
 
 @layer components {
+  /* ---------- Buttons: прямоугольные 8px, без «глянца» ---------- */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-transparent px-3.5 py-2 text-sm font-medium leading-5
            transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white
-           dark:focus-visible:ring-offset-[#0F0F14]
-           disabled:opacity-50 disabled:cursor-not-allowed select-none;
+           dark:focus-visible:ring-offset-[#0D0F13]
+           disabled:cursor-not-allowed disabled:opacity-50 select-none;
   }
   .btn-primary {
-    @apply btn bg-brand-500 text-white shadow-[0_1px_0_0_rgba(255,255,255,0.10)_inset,0_6px_18px_-6px_rgba(124,92,255,0.55)]
-           hover:bg-brand-600 active:scale-[0.98] transition-transform;
+    @apply btn bg-brand-600 text-white shadow-soft hover:bg-brand-700 active:bg-brand-800;
   }
   .btn-secondary {
-    @apply btn bg-zinc-100 text-zinc-900 hover:bg-zinc-200
-           dark:bg-zinc-800/80 dark:text-zinc-100 dark:hover:bg-zinc-700;
+    @apply btn border border-zinc-200 bg-white text-zinc-800 shadow-soft hover:border-zinc-300 hover:bg-zinc-50
+           dark:border-zinc-800 dark:bg-[#14171C] dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-[#1B1F26];
   }
   .btn-ghost {
     @apply btn text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900
-           dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white;
+           dark:text-zinc-400 dark:hover:bg-[#1B1F26] dark:hover:text-white;
   }
   .btn-danger {
-    @apply btn bg-rose-600 text-white hover:bg-rose-700 active:scale-[0.98] transition-transform;
+    @apply btn bg-rose-600 text-white shadow-soft hover:bg-rose-700;
   }
+
+  /* ---------- Forms ---------- */
   .input {
-    @apply w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm
-           placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/15
-           dark:border-zinc-700/60 dark:bg-[#17171F] dark:placeholder:text-zinc-500;
+    @apply block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-soft
+           placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-[3px] focus:ring-brand-500/15
+           disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500
+           dark:border-zinc-700 dark:bg-[#0D0F13] dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-400;
   }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-zinc-700 dark:text-zinc-300;
+  }
+
+  /* ---------- Surfaces ---------- */
   .card {
-    @apply rounded-2xl border border-zinc-200/80 bg-white shadow-soft
-           dark:border-zinc-700/50 dark:bg-[#17171F];
+    @apply rounded-xl border border-zinc-200 bg-white
+           dark:border-zinc-800 dark:bg-[#14171C];
   }
   .card-interactive {
-    @apply card transition-all duration-[220ms] ease-out-soft hover:-translate-y-[3px]
-           hover:border-zinc-300 hover:shadow-[0_10px_24px_-10px_rgb(0_0_0/0.16)]
+    @apply card transition-[border-color,box-shadow] duration-150 hover:border-zinc-300 hover:shadow-pop
            dark:hover:border-zinc-700;
   }
+  .card-header {
+    @apply flex items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3.5 dark:border-zinc-800;
+  }
+  .card-title {
+    @apply text-sm font-semibold text-zinc-900 dark:text-zinc-100;
+  }
   .nav-item-motion {
-    @apply transition-all duration-[180ms] ease-out-soft;
+    @apply transition-colors duration-150;
   }
+
+  /* ---------- Page scaffold ---------- */
+  .page-header {
+    @apply flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800;
+  }
+  .page-title {
+    @apply text-[22px] font-semibold leading-7 tracking-[-0.01em] text-zinc-900 dark:text-white;
+  }
+  .page-subtitle {
+    @apply mt-1 text-sm text-zinc-500 dark:text-zinc-400;
+  }
+  .section-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400;
+  }
+
+  /* ---------- Chips / badges: 6px, плоские ---------- */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ring-black/5 dark:ring-white/10;
   }
+
+  /* ---------- Tables ---------- */
   .table-container {
-    @apply overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-soft
-           dark:border-zinc-700/50 dark:bg-[#17171F];
+    @apply overflow-hidden rounded-xl border border-zinc-200 bg-white
+           dark:border-zinc-800 dark:bg-[#14171C];
   }
   .table-scroll {
     @apply w-full overflow-x-auto;
   }
   .table-head {
-    @apply sticky top-0 z-10 border-b border-zinc-200/80 bg-zinc-50/90 text-xs font-medium uppercase tracking-wide text-zinc-500
-           backdrop-blur supports-[backdrop-filter]:bg-zinc-50/70
-           dark:border-zinc-700/60 dark:bg-[#1c1c25]/90 dark:text-zinc-400;
+    @apply sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-500
+           dark:border-zinc-800 dark:bg-[#1B1F26] dark:text-zinc-400;
   }
   .table-row {
-    @apply border-b border-zinc-100 transition-colors hover:bg-zinc-50/70
-           dark:border-zinc-800/80 dark:hover:bg-zinc-800/40;
+    @apply border-b border-zinc-100 transition-colors last:border-b-0 hover:bg-zinc-50
+           dark:border-zinc-800/70 dark:hover:bg-[#1B1F26];
   }
   .table-cell {
-    @apply px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300;
+    @apply px-4 py-2.5 text-sm text-zinc-700 dark:text-zinc-300;
   }
   .table-head-cell {
-    @apply px-3 py-2.5 text-left;
+    @apply px-4 py-2.5 text-left;
   }
+
   .link {
-    @apply text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300;
+    @apply text-brand-600 underline-offset-2 hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300;
   }
   .kbd {
     @apply inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded border border-zinc-200
-           bg-zinc-50 px-1 font-mono text-[10px] font-medium text-zinc-500 shadow-[0_1px_0_0_rgba(0,0,0,0.03)]
-           dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400;
+           bg-zinc-50 px-1 font-mono text-[10px] font-medium text-zinc-500
+           dark:border-zinc-700 dark:bg-[#1B1F26] dark:text-zinc-400;
   }
   .surface-blur {
-    @apply bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70
-           dark:bg-[#0F0F14]/85 dark:supports-[backdrop-filter]:bg-[#0F0F14]/70;
+    @apply bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80
+           dark:bg-[#0D0F13]/90 dark:supports-[backdrop-filter]:bg-[#0D0F13]/80;
   }
 }
+
+/* ---------- Landing: фон героя и появление (уважают prefers-reduced-motion ниже) ---------- */
+@keyframes qd-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(8%, -6%, 0) scale(1.15); }
+}
+@keyframes qd-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.1); }
+  50% { transform: translate3d(-10%, 8%, 0) scale(0.95); }
+}
+@keyframes qd-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -14px, 0); }
+}
+@keyframes qd-fade-up {
+  from { opacity: 0; transform: translate3d(0, 16px, 0); }
+  to { opacity: 1; transform: none; }
+}
+.qd-fade-up { animation: qd-fade-up 0.9s cubic-bezier(.2,.8,.2,1) both; }
+.qd-drift-1 { animation: qd-drift-1 18s ease-in-out infinite; }
+.qd-drift-2 { animation: qd-drift-2 24s ease-in-out infinite; }
+.qd-float { animation: qd-float 9s ease-in-out infinite; }
 
 /* subtle scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(113,113,122,.3); border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(113,113,122,.55); }
+::-webkit-scrollbar-thumb { background: rgba(105,113,128,.28); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(105,113,128,.5); }
 
-/* Ambient login background blobs (used by Login page) */
-.login-blob {
-  position: absolute;
-  border-radius: 9999px;
-  pointer-events: none;
-  will-change: transform;
-  filter: blur(28px);
-}
+/* Legacy: фон страницы логина (блобы больше не используются) */
+.login-blob { display: none; }
 
-/* Tabular numerics for smoothly changing count-up values */
 .tabular-nums { font-variant-numeric: tabular-nums; }
 
-/* Respect user preferences and cut motion where possible */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .001ms !important;

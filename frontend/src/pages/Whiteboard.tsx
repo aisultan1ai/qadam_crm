@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types/types";
-import "@excalidraw/excalidraw/index.css";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Trash2, Pencil, PenSquare, Save } from "lucide-react";
 import { EmptyState, Modal, FieldError, FormError } from "@/components/ui";
@@ -47,11 +46,11 @@ function BoardList({ onOpen }: { onOpen: (id: number) => void }) {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Доски</h1>
-          <p className="text-sm text-neutral-500">Совместные whiteboard-доски на Excalidraw</p>
+          <h1 className="page-title">Доски</h1>
+          <p className="page-subtitle">Совместные whiteboard-доски на Excalidraw</p>
         </div>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
           Новая доска

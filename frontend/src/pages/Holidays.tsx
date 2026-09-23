@@ -100,11 +100,11 @@ export default function HolidaysPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Рабочий календарь</h1>
-          <p className="text-sm text-neutral-500">Праздники и переносы для {year} года</p>
+          <h1 className="page-title">Рабочий календарь</h1>
+          <p className="page-subtitle">Праздники и переносы для {year} года</p>
         </div>
         <div className="flex items-center gap-2">
           <select className="input !w-auto" value={year} onChange={(e) => setYear(Number(e.target.value))}>

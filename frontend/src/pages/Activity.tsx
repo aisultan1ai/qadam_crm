@@ -93,10 +93,10 @@ export default function ActivityPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Хроника</h1>
-        <p className="text-sm text-neutral-500">События по всем сущностям компании</p>
+    <div className="space-y-5">
+      <div className="page-header">
+        <h1 className="page-title">Хроника</h1>
+        <p className="page-subtitle">События по всем сущностям компании</p>
       </div>
 
       {groups.map((g) => (
@@ -104,7 +104,7 @@ export default function ActivityPage() {
           <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
             {g.day}
           </div>
-          <div className="space-y-1 rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/50">
+          <div className="space-y-1 card">
             {g.items.map((it) => {
               const meta = ACTION_META[it.action] || DEFAULT_META;
               const Icon = meta.icon;

@@ -8,6 +8,7 @@ import { Avatar, Modal, EmptyState } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 import { useToast } from "@/components/Toast";
 
+import { FilterSelect, SearchInput, Toolbar } from "@/components/page";
 type Department = { id: number; name: string };
 type User = {
   id: number;
@@ -26,10 +27,10 @@ type Skill = { id: number; name: string; category?: string | null };
 type UserSkill = { id: number; skill_id: number; skill: Skill; level: "novice" | "intermediate" | "expert" };
 
 const BADGES = [
-  { key: "teamwork", label: "Team-play", color: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300" },
-  { key: "innovation", label: "Innovation", color: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300" },
-  { key: "help_other", label: "Helpful", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
-  { key: "excellence", label: "Excellence", color: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
+  { key: "teamwork", label: "Team-play", color: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25" },
+  { key: "innovation", label: "Innovation", color: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25" },
+  { key: "help_other", label: "Helpful", color: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25" },
+  { key: "excellence", label: "Excellence", color: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25" },
 ] as const;
 
 export default function People() {
@@ -90,51 +91,38 @@ export default function People() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+      <div className="page-header">
+        <h1 className="page-title flex items-center gap-2">
           <Users2 size={22} /> Команда
         </h1>
-        <p className="text-sm text-neutral-500">
+        <p className="page-subtitle">
           Сотрудники, отделы, скиллы. Кликните по карточке — откроется профиль.
         </p>
       </div>
 
-      <div className="card p-4">
-        <div className="grid gap-3 sm:grid-cols-4">
-          <label className="relative sm:col-span-2">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-            <input
-              className="input pl-9"
-              placeholder="Поиск по имени или email"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </label>
-          <select
-            className="input"
-            value={depId}
-            onChange={(e) => setDepId(e.target.value === "all" ? "all" : Number(e.target.value))}
-          >
-            <option value="all">Все отделы</option>
-            {(depsQ.data ?? []).map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-          <select
-            className="input"
-            value={skillId}
-            onChange={(e) => setSkillId(e.target.value === "all" ? "all" : Number(e.target.value))}
-          >
-            <option value="all">Все скиллы</option>
-            {(skillsQ.data ?? []).map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="mt-2 text-xs text-neutral-500">
-          Найдено: {filtered.length} из {usersQ.data?.length ?? 0}
-        </div>
-      </div>
+      <Toolbar right={<span className="text-[13px] tabular-nums text-zinc-500">Найдено: {filtered.length} из {usersQ.data?.length ?? 0}</span>}>
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по имени или email" />
+        <FilterSelect
+          label="Отдел"
+          value={depId === "all" ? "" : String(depId)}
+          onChange={(v) => setDepId(v === "" ? "all" : Number(v))}
+        >
+          <option value="">Все отделы</option>
+          {(depsQ.data ?? []).map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </FilterSelect>
+        <FilterSelect
+          label="Навык"
+          value={skillId === "all" ? "" : String(skillId)}
+          onChange={(v) => setSkillId(v === "" ? "all" : Number(v))}
+        >
+          <option value="">Все навыки</option>
+          {(skillsQ.data ?? []).map((sk) => (
+            <option key={sk.id} value={sk.id}>{sk.name}</option>
+          ))}
+        </FilterSelect>
+      </Toolbar>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {usersQ.isPending && (
@@ -191,7 +179,7 @@ function PersonCard({
   const to = isSelf ? "/profile" : `/people/${user.id}`;
 
   return (
-    <div className="card p-4 hover:shadow-md transition-shadow">
+    <div className="card p-5 hover:shadow-md transition-shadow">
       <Link to={to} className="flex items-start gap-3">
         <Avatar name={user.name} url={user.avatar_url} size={44} />
         <div className="min-w-0 flex-1">

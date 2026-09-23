@@ -88,7 +88,13 @@ def get_limits(db: Session, plan_key: str) -> dict[str, Optional[int]]:
 
 def plan_to_dict(plan: Plan) -> dict:
     features_text = plan.marketing_features or ""
-    features_list = [line.strip() for line in features_text.splitlines() if line.strip()]
+    # Одна возможность на строку; «;» поддерживаем для старых записей.
+    features_list = [
+        item.strip()
+        for line in features_text.splitlines()
+        for item in line.split(";")
+        if item.strip()
+    ]
     return {
         "key": plan.key,
         "title": plan.title,

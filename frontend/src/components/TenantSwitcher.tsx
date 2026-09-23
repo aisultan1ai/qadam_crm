@@ -90,7 +90,7 @@ export default function TenantSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-700 hover:border-neutral-300 dark:border-neutral-700/60 dark:bg-[#17171F] dark:text-neutral-300 dark:hover:border-neutral-600"
+        className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-700 hover:border-neutral-300 dark:border-neutral-700/60 dark:bg-[#14171C] dark:text-neutral-300 dark:hover:border-neutral-600"
         aria-expanded={open}
         aria-haspopup="listbox"
       >

@@ -15,6 +15,7 @@ import { VirtualList } from "@/components/VirtualList";
 import { departmentSchema, type DepartmentForm, userCreateSchema, userUpdateSchema, type UserCreateForm, type UserUpdateForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
 
+import { SearchInput } from "@/components/page";
 const TABS = [
   { to: "list", label: "Сотрудники", icon: UsersIcon },
   { to: "departments", label: "Отделы", icon: Layers },
@@ -23,12 +24,12 @@ const TABS = [
 export default function Users() {
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Пользователи</h1>
-          <p className="text-sm text-neutral-500">Сотрудники компании и отделы</p>
+          <h1 className="page-title">Пользователи</h1>
+          <p className="page-subtitle">Сотрудники компании и отделы</p>
         </div>
-        <nav className="flex gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900/60">
+        <nav className="flex gap-1 card p-1">
           {TABS.map((t) => (
             <NavLink
               key={t.to}
@@ -94,12 +95,9 @@ function UsersList() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative max-w-md flex-1">
-          <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input className="input pl-8" placeholder="Поиск по имени или email…" value={qLocal} onChange={(e) => setQLocal(e.target.value)} />
-        </div>
+        <SearchInput value={qLocal} onChange={setQLocal} placeholder="Поиск по имени или email" />
         {can("users.create") && (
           <Button variant="primary" onClick={() => setOpenForm({ mode: "create" })}>
             <Plus size={16} /> Новый пользователь
@@ -211,7 +209,7 @@ function UsersGrid({
               <span
                 className={`chip ${
                   u.is_active
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25"
                     : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800"
                 }`}
               >

@@ -76,7 +76,6 @@ const NAV_SECTIONS: NavSection[] = [
       { to: "/documents", label: "Документы", icon: FileText },
       { to: "/whiteboard", label: "Доски", icon: PenSquare },
       { to: "/objects", label: "Объекты", icon: Boxes },
-      { to: "/directories", label: "Справочники", icon: BookText },
       { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
       { to: "/activity", label: "Хроника", icon: ActivityIcon },
       { to: "/reports", label: "Отчёты", icon: PieChart, code: "analytics.reports" },
@@ -106,8 +105,6 @@ const NAV_SECTIONS: NavSection[] = [
     title: "Система",
     items: [
       { to: "/settings", label: t.nav.settings, icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
-      { to: "/settings/security", label: "Безопасность", icon: Shield, code: ["settings.system"] },
-      { to: "/integrations", label: "Интеграции", icon: Puzzle },
       { to: "/admin", label: t.nav.platform, icon: Shield, platformAdminOnly: true },
     ],
   },
@@ -247,7 +244,7 @@ export default function Layout() {
       {mobileNavOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
-            className="absolute inset-0 bg-black/40 animate-fade-in"
+            className="absolute inset-0 bg-zinc-950/50 animate-fade-in"
             onClick={() => setMobileNavOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 w-64 max-w-[80vw] animate-slide-up">
@@ -265,7 +262,7 @@ export default function Layout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-white px-3 text-neutral-900 backdrop-blur sm:gap-3 sm:px-4 dark:border-neutral-800 dark:bg-[#0F0F14] dark:text-neutral-100">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-zinc-200 bg-white px-3 text-zinc-900 sm:gap-2.5 sm:px-5 dark:border-zinc-800 dark:bg-[#0D0F13] dark:text-zinc-100">
           <Button
             variant="ghost"
             className="!p-2 md:hidden"
@@ -287,11 +284,11 @@ export default function Layout() {
           </Button>
 
           <button
-            className="group flex flex-1 items-center gap-2 rounded-lg border border-neutral-200 bg-white/70 px-2.5 py-1.5 text-sm text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-white dark:border-neutral-700/60 dark:bg-[#17171F] dark:hover:border-neutral-600 dark:hover:bg-[#2b2b34] max-w-md"
+            className="group flex flex-1 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-zinc-800 dark:bg-[#14171C] dark:hover:border-zinc-700 max-w-md"
             onClick={() => setSearchOpen(true)}
           >
             <Search size={15} />
-            <span className="hidden truncate text-neutral-500 sm:inline">Поиск по всему CRM…</span>
+            <span className="hidden truncate text-zinc-500 sm:inline">Поиск задач, сделок, контактов…</span>
             <span className="truncate text-neutral-500 sm:hidden">Поиск…</span>
             <span className="ml-auto flex items-center gap-1">
               <span className="kbd">{modKey}</span>
@@ -342,7 +339,7 @@ export default function Layout() {
             </Button>
             {notifOpen && (
               <div
-                className="card absolute right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] animate-slide-up p-0"
+                className="card absolute right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] animate-slide-up p-0 shadow-pop"
                 role="menu"
               >
                 <div className="flex items-center justify-between border-b border-neutral-100 p-3 dark:border-neutral-800">
@@ -405,7 +402,7 @@ export default function Layout() {
 
         <EmailVerificationBanner />
 
-        <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 max-w-7xl flex-1 p-4 sm:p-6 focus:outline-none">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 max-w-[1440px] flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7 focus:outline-none">
           <ErrorBoundary>
             <Suspense fallback={<div className="min-h-[200px]" />}>
               <Outlet />
@@ -442,8 +439,8 @@ function Sidebar({
   return (
     <aside
       className={clsx(
-        // Planfix-style: сайдбар всегда тёмно-серый (#2A2E38), даже в light mode.
-        "flex shrink-0 flex-col border-r border-black/20 bg-[#2A2E38] text-neutral-200 backdrop-blur transition-[width] duration-300 ease-out-soft dark:border-neutral-800/80 dark:bg-[#1E2028]",
+        // Графитовый сайдбар — одинаковый в обеих темах, держит структуру продукта.
+        "flex shrink-0 flex-col border-r border-sidebar-line bg-sidebar text-zinc-300 transition-[width] duration-200 ease-out-soft",
         desktop
           ? clsx(
               "sticky top-0 hidden h-screen self-start overflow-hidden md:flex",
@@ -454,21 +451,21 @@ function Sidebar({
     >
       <div
         className={clsx(
-          "flex h-14 items-center gap-2",
-          showLabels ? "px-5" : "justify-center px-2",
+          "flex h-14 items-center gap-2.5 border-b border-sidebar-line",
+          showLabels ? "px-4" : "justify-center px-2",
         )}
       >
         {me?.current_tenant?.logo_url ? (
           <img
             src={me.current_tenant.logo_url}
             alt=""
-            className="h-8 w-8 rounded-lg object-contain shadow-soft"
+            className="h-7 w-7 rounded-md bg-white object-contain"
           />
         ) : (
-          <LogoMark size={32} className="shadow-soft rounded-lg" />
+          <LogoMark size={28} inverted className="shrink-0" />
         )}
         {showLabels && (
-          <span className="text-base font-semibold tracking-tight truncate">
+          <span className="truncate text-sm font-semibold text-white">
             {me?.current_tenant?.company_display_name || me?.current_tenant?.name || "Qadam CRM"}
           </span>
         )}
@@ -479,7 +476,7 @@ function Sidebar({
         )}
       </div>
 
-      <nav className={clsx("flex-1 overflow-y-auto", showLabels ? "px-2 py-1" : "px-1.5 py-1")}>
+      <nav className={clsx("flex-1 overflow-y-auto py-3", showLabels ? "px-2.5" : "px-2")} aria-label="Основная навигация">
         {NAV_SECTIONS.map((section, sIdx) => {
           const visible = section.items.filter((n) => {
             if (n.platformAdminOnly && !me?.is_platform_admin) return false;
@@ -488,9 +485,9 @@ function Sidebar({
           });
           if (visible.length === 0) return null;
           return (
-            <div key={sIdx} className={clsx(sIdx > 0 && "mt-2 pt-2 border-t border-white/10")}>
+            <div key={sIdx} className={clsx(sIdx > 0 && "mt-4")}>
               {section.title && showLabels && (
-                <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                <div className="mb-1 px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
                   {section.title}
                 </div>
               )}
@@ -506,11 +503,11 @@ function Sidebar({
                       title={showLabels ? undefined : n.label}
                       className={({ isActive }) =>
                         clsx(
-                          "relative flex items-center rounded-lg text-sm transition-all duration-[180ms] ease-out-soft",
-                          showLabels ? "gap-2.5 px-3 py-2" : "justify-center px-2 py-2",
+                          "relative flex items-center rounded-md text-[13.5px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
+                          showLabels ? "gap-2.5 px-2.5 py-[7px]" : "justify-center px-2 py-2",
                           isActive
-                            ? "bg-white/10 font-medium text-white"
-                            : "text-neutral-300 hover:translate-x-0.5 hover:bg-white/5 hover:text-white",
+                            ? "bg-white/[0.08] font-medium text-white"
+                            : "text-zinc-300 hover:bg-white/[0.05] hover:text-white",
                         )
                       }
                     >
@@ -519,12 +516,13 @@ function Sidebar({
                           <span
                             aria-hidden
                             className={clsx(
-                              "absolute inset-y-1 left-0 w-0.5 origin-center rounded-full bg-brand-400 transition-all duration-300 ease-out-soft",
-                              isActive ? "scale-y-100 opacity-100" : "scale-y-50 opacity-0",
+                              "absolute inset-y-1.5 w-[3px] rounded-r bg-brand-400 transition-opacity duration-150",
+                              showLabels ? "-left-2.5" : "-left-2",
+                              isActive ? "opacity-100" : "opacity-0",
                             )}
                           />
-                          <Icon size={16} />
-                          {showLabels && <span className="transition-opacity duration-150">{n.label}</span>}
+                          <Icon size={16} strokeWidth={1.9} className="shrink-0" />
+                          {showLabels && <span className="truncate">{n.label}</span>}
                           {n.to === "/messenger" && <MessengerUnreadBadge collapsed={!showLabels} />}
                         </>
                       )}
@@ -539,7 +537,7 @@ function Sidebar({
 
       <div
         className={clsx(
-          "border-t border-white/10",
+          "border-t border-sidebar-line",
           showLabels ? "p-3" : "p-2",
         )}
       >
@@ -561,7 +559,7 @@ function Sidebar({
               <Avatar name={me?.name} url={me?.avatar_url} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{me?.name}</div>
-                <div className="truncate text-xs text-neutral-400">{me?.email}</div>
+                <div className="truncate text-xs text-zinc-400">{me?.email}</div>
               </div>
             </NavLink>
             <button
@@ -627,7 +625,7 @@ function MessengerUnreadBadge({ collapsed }: { collapsed: boolean }) {
     );
   }
   return (
-    <span className="ml-auto min-w-[18px] rounded-full bg-brand-600 px-1.5 py-0.5 text-center text-[10px] font-medium leading-none text-white">
+    <span className="ml-auto min-w-[18px] rounded-md bg-brand-600 px-1.5 py-0.5 text-center text-[10px] font-medium leading-none text-white">
       {label}
     </span>
   );
@@ -659,7 +657,7 @@ function EmailVerificationBanner() {
       role="alert"
       className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
     >
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3">
         <span>
           Подтвердите email <b>{me.email}</b> — мы отправили ссылку. Не пришло?{" "}
           <button

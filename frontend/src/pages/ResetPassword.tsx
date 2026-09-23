@@ -3,10 +3,10 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import clsx from "clsx";
 
 import { api, extractApiError } from "@/api/client";
 import { LogoMark, Wordmark } from "@/components/Logo";
+import { AuthLayout } from "@/components/AuthLayout";
 import { PasswordStrength } from "@/components/PasswordStrength";
 import { passwordSchema } from "@/lib/validation";
 import { FormError } from "@/components/ui";
@@ -44,7 +44,7 @@ export default function ResetPassword() {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] p-4 dark:bg-[#0F0F14]">
+      <div className="flex min-h-screen items-center justify-center bg-[#F6F7F9] p-4 dark:bg-[#0D0F13]">
         <div className="card w-full max-w-md p-8 text-center">
           <div className="mb-6 flex flex-col items-center gap-3">
             <LogoMark size={56} className="rounded-[14px]" />
@@ -78,35 +78,22 @@ export default function ResetPassword() {
   const anyError = serverError || Object.keys(errors).length > 0;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] p-4 dark:bg-[#0F0F14]">
-      <form
-        onSubmit={onSubmit}
-        className={clsx("card relative w-full max-w-sm p-8 animate-rise", anyError && "animate-shake")}
-        noValidate
-      >
-        <Link
-          to="/"
-          aria-label="На главную"
-          className="mb-6 flex flex-col items-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded-md"
-        >
-          <LogoMark size={56} className="rounded-[14px]" />
-          <Wordmark />
-          <div className="text-sm text-neutral-500">Новый пароль</div>
-        </Link>
+    <AuthLayout title="Новый пароль">
+      <form onSubmit={onSubmit} noValidate>
 
         {done ? (
-          <div className="space-y-4 text-center">
-            <div className="rounded-lg bg-emerald-50 px-3 py-3 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300">
               Пароль изменён. Сейчас перенаправим на страницу входа…
             </div>
           </div>
         ) : (
           <>
-            <p className="mb-4 text-center text-sm text-neutral-500 dark:text-neutral-400">
+            <p className="mb-5 text-sm text-zinc-500 dark:text-zinc-400">
               Придумайте новый пароль — минимум 8 символов, латинские буквы и цифры.
             </p>
 
-            <FormField label="Новый пароль" error={errors.password?.message} className="mb-3">
+            <FormField label="Новый пароль" error={errors.password?.message} className="mb-4">
               <input
                 className="input"
                 type="password"
@@ -133,12 +120,12 @@ export default function ResetPassword() {
               variant="primary"
               fullWidth
               isLoading={isSubmitting}
-              className="mt-3 disabled:opacity-60"
+              className="mt-4 !h-11 !py-0 !text-[15px] disabled:opacity-60"
             >
               {isSubmitting ? "Сохраняем…" : "Установить новый пароль"}
             </Button>
 
-            <div className="mt-4 text-center text-sm text-neutral-500">
+            <div className="mt-5 text-sm text-zinc-500">
               <Link to="/login" className="link">
                 Вернуться ко входу
               </Link>
@@ -146,6 +133,6 @@ export default function ResetPassword() {
           </>
         )}
       </form>
-    </div>
+    </AuthLayout>
   );
 }

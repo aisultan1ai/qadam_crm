@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..core.html_sanitize import highlight_snippet
 from ..core.permissions import user_has
 from ..database import get_db
 from ..models import (
@@ -837,7 +838,7 @@ def search_articles(
         SELECT id, title, summary, slug,
                ts_headline('russian', coalesce(content_md, ''),
                            plainto_tsquery('russian', :q),
-                           'MaxWords=15,MinWords=5,ShortWord=2,HighlightAll=false') AS snippet,
+                           'StartSel=«HL»,StopSel=«/HL»,MaxWords=15,MinWords=5,ShortWord=2,HighlightAll=false') AS snippet,
                ts_rank(content_tsv, plainto_tsquery('russian', :q)) AS rank
         FROM wiki_articles
         WHERE tenant_id = :tid
@@ -854,6 +855,8 @@ def search_articles(
             continue
         results.append({
             "id": r.id, "title": r.title, "summary": r.summary, "slug": r.slug,
-            "snippet": r.snippet, "rank": float(r.rank) if r.rank else 0,
+            # Текст статьи — пользовательский: экранируем, подсветку ставим сами.
+            "snippet": highlight_snippet(r.snippet, "«HL»", "«/HL»"),
+            "rank": float(r.rank) if r.rank else 0,
         })
     return results

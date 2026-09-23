@@ -50,10 +50,10 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 const STATUS_STYLE: Record<string, { label: string; color: string }> = {
-  available: { label: "Доступно", color: "bg-emerald-100 text-emerald-700" },
-  beta: { label: "Beta", color: "bg-sky-100 text-sky-700" },
-  coming_soon: { label: "Скоро", color: "bg-amber-100 text-amber-700" },
-  disabled: { label: "Отключено", color: "bg-neutral-200 text-neutral-600" },
+  available: { label: "Доступно", color: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25" },
+  beta: { label: "Beta", color: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25" },
+  coming_soon: { label: "Скоро", color: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25" },
+  disabled: { label: "Отключено", color: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25" },
 };
 
 const STORAGE_CODES = new Set(["google_drive", "dropbox"]);
@@ -100,12 +100,12 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+    <div className="space-y-5">
+      <div className="page-header">
+        <h1 className="page-title flex items-center gap-2">
           <Puzzle size={20} /> Интеграции
         </h1>
-        <p className="text-sm text-neutral-500">Подключение внешних сервисов: облачные хранилища, мессенджеры, маркетинг</p>
+        <p className="page-subtitle">Подключение внешних сервисов: облачные хранилища, мессенджеры, маркетинг</p>
       </div>
 
       {Array.from(grouped.entries()).map(([cat, items]) => (
@@ -168,7 +168,7 @@ function ProviderCard({
   const configured = statusQ.data?.configured ?? false;
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
+    <div className="card p-4">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="flex items-center gap-2 font-semibold">
@@ -176,7 +176,7 @@ function ProviderCard({
             {p.code === "dropbox" && <Cloud size={14} className="text-sky-500" />}
             {p.label}
           </div>
-          <span className={clsx("mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium", style.color)}>
+          <span className={clsx("mt-1 inline-block rounded-md px-2 py-0.5 text-[10px] font-medium", style.color)}>
             {style.label}
           </span>
           {isStorage && statusQ.data && (
@@ -194,7 +194,7 @@ function ProviderCard({
           )}
         </div>
         {p.is_enabled && (
-          <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          <span className="flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
             <Check size={11} /> вкл.
           </span>
         )}

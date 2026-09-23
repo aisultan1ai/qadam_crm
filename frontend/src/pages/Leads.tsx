@@ -16,6 +16,7 @@ import { Button } from "@/components/lib/Button";
 import { Pagination } from "@/components/lib/Pagination";
 import { fromNow } from "@/lib/date";
 
+import { SearchInput } from "@/components/page";
 type LeadStatus = "new" | "contacted" | "qualified" | "converted" | "rejected";
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
@@ -29,11 +30,11 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
 const STATUS_ORDER: LeadStatus[] = ["new", "contacted", "qualified", "converted", "rejected"];
 
 const STATUS_COLOR: Record<LeadStatus, string> = {
-  new: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
-  contacted: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  qualified: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
-  converted: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-  rejected: "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+  new: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25",
+  contacted: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25",
+  qualified: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25",
+  converted: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+  rejected: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:ring-zinc-500/25",
 };
 
 type TenantLead = {
@@ -97,11 +98,11 @@ export default function Leads() {
   const openLead = data?.items.find((l) => l.id === openLeadId) ?? null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Лиды</h1>
-          <p className="text-sm text-neutral-500">Заявки через формы захвата и вручную</p>
+          <h1 className="page-title">Лиды</h1>
+          <p className="page-subtitle">Заявки через формы захвата и вручную</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700">
@@ -145,15 +146,7 @@ export default function Leads() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Search size={15} className="absolute left-3 top-2.5 text-neutral-400" />
-          <input
-            className="input pl-8"
-            placeholder="Поиск по имени или контакту…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по имени или контакту" />
         <div className="flex items-center gap-1">
           <Filter size={14} className="text-neutral-400" />
           <select
@@ -451,33 +444,33 @@ function TableView({
   onConvert: (lead: TenantLead) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
-      <table className="min-w-full text-sm">
-        <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900/50">
+    <div className="table-container table-scroll">
+      <table className="min-w-full">
+        <thead className="table-head">
           <tr>
-            <th className="px-3 py-2">Имя</th>
-            <th className="px-3 py-2">Контакт</th>
-            <th className="px-3 py-2">Форма</th>
-            <th className="px-3 py-2">Статус</th>
-            <th className="px-3 py-2">Создан</th>
-            <th className="px-3 py-2"></th>
+            <th className="table-head-cell">Имя</th>
+            <th className="table-head-cell">Контакт</th>
+            <th className="table-head-cell">Форма</th>
+            <th className="table-head-cell">Статус</th>
+            <th className="table-head-cell">Создан</th>
+            <th className="table-head-cell"></th>
           </tr>
         </thead>
         <tbody>
           {leads.map((l) => (
             <tr
               key={l.id}
-              className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50 dark:border-neutral-800/60 dark:hover:bg-neutral-900/40"
+              className="table-row cursor-pointer"
               onClick={() => onOpen(l.id)}
             >
-              <td className="px-3 py-2 font-medium">{l.name}</td>
-              <td className="px-3 py-2 text-neutral-600 dark:text-neutral-300">{l.contact}</td>
-              <td className="px-3 py-2 text-neutral-500">{l.form_name || "—"}</td>
-              <td className="px-3 py-2">
+              <td className="table-cell font-medium">{l.name}</td>
+              <td className="table-cell text-neutral-600 dark:text-neutral-300">{l.contact}</td>
+              <td className="table-cell text-neutral-500">{l.form_name || "—"}</td>
+              <td className="table-cell">
                 <span className={"chip " + STATUS_COLOR[l.status]}>{STATUS_LABEL[l.status]}</span>
               </td>
-              <td className="px-3 py-2 text-neutral-500">{fromNow(l.created_at)}</td>
-              <td className="px-3 py-2 text-right">
+              <td className="table-cell text-neutral-500">{fromNow(l.created_at)}</td>
+              <td className="table-cell text-right">
                 {canConvert && l.status !== "converted" && (
                   <Button
                     variant="ghost"

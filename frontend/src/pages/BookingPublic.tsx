@@ -160,7 +160,7 @@ export default function BookingPublic() {
           >
             <Check size={28} />
           </div>
-          <h1 className="text-2xl font-semibold">Готово!</h1>
+          <h1 className="page-title">Готово!</h1>
           <p className="mt-2 text-sm text-neutral-500">
             Встреча забронирована на{" "}
             <b>{formatFull(result.start_at, info.timezone)}</b> ({info.timezone}).
@@ -212,7 +212,7 @@ export default function BookingPublic() {
               </div>
             )}
             {slotsByDay.map((day) => (
-              <div key={day.key} className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+              <div key={day.key} className="card p-4">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                   {formatDayHeader(day.date, info.timezone)}
                 </div>

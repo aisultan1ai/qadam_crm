@@ -50,9 +50,9 @@ const SKILL_LEVEL_LABEL: Record<UserSkill["level"], string> = {
 
 const GOAL_STATUS_LABEL: Record<Goal["status"], { label: string; color: string }> = {
   not_started: { label: "Не начата", color: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400" },
-  in_progress: { label: "В работе", color: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300" },
-  completed: { label: "Завершена", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
-  cancelled: { label: "Отменена", color: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300" },
+  in_progress: { label: "В работе", color: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25" },
+  completed: { label: "Завершена", color: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25" },
+  cancelled: { label: "Отменена", color: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25" },
 };
 
 export default function Profile() {
@@ -102,9 +102,9 @@ export default function Profile() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{isSelf ? "Профиль" : user.name}</h1>
-        <p className="text-sm text-neutral-500">
+      <div className="page-header">
+        <h1 className="page-title">{isSelf ? "Профиль" : user.name}</h1>
+        <p className="page-subtitle">
           {isSelf ? "Данные вашего аккаунта и профиля" : "Профиль сотрудника"}
         </p>
       </div>
@@ -271,7 +271,7 @@ function ProfileHeader({
   };
 
   return (
-    <div className="card p-6">
+    <div className="card p-5">
       <div className="flex items-start gap-4">
         <div className="group relative">
           <Avatar name={user.name} size={72} url={user.avatar_url} />
@@ -301,7 +301,7 @@ function ProfileHeader({
             {user.is_superuser && (
               <span className="chip bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">super</span>
             )}
-            <span className={`chip ${user.is_active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800"}`}>
+            <span className={`chip ${user.is_active ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25" : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800"}`}>
               {user.is_active ? "активен" : "заблокирован"}
             </span>
           </div>
