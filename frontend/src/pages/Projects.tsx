@@ -16,6 +16,7 @@ import { useConfirm } from "@/components/Confirm";
 import { projectSchema, type ProjectForm } from "@/lib/validation";
 
 import { SearchInput, Tabs } from "@/components/page";
+import { useNewParam } from "@/hooks/useNewParam";
 type ProjectScope = "all" | "participating" | "made_by_me" | "audited_by_me";
 
 const SCOPE_TABS: { key: ProjectScope; label: string }[] = [
@@ -33,6 +34,7 @@ export default function Projects() {
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [openNew, setOpenNew] = useState(false);
+  useNewParam(() => setOpenNew(true), can("projects.create"));
   const [scope, setScope] = useState<ProjectScope>("all");
 
   const { data, isPending } = useQuery({

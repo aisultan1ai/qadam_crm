@@ -53,7 +53,9 @@ import { SaveIndicator } from "@/components/lib/SaveIndicator";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { fromNow } from "@/lib/date";
 import { UserMultiSelect } from "@/components/lib/UserMultiSelect";
-import type { TaskReminder, UserBrief } from "@/types";
+import type { TaskReminder, TaskStatusDef, UserBrief } from "@/types";
+import { statusKeyOf, statusOptions } from "./tasks/grouping";
+import { FavoriteButton } from "@/hooks/useFavorites";
 
 type RoleName = "assignees" | "auditors" | "participants";
 
@@ -112,13 +114,23 @@ type TaskPatch = {
   assignee_id?: number | null;
   start_date?: string | null;
   deadline?: string | null;
+  custom_status_id?: number;
 };
+
+/** ISO (UTC) → значение для <input type="datetime-local"> в местном времени. */
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 const AVAILABLE_EMOJIS = ["👍", "❤️", "🎉", "🚀", "😂", "🔥", "👀", "🙏", "✅", "❌"];
 
-export default function TaskDetail() {
+/** embedded — отрисовка в боковой панели списка задач (одна колонка, без sticky). */
+export default function TaskDetail({ taskId: propTaskId, embedded = false }: { taskId?: number; embedded?: boolean } = {}) {
   const { id } = useParams();
-  const taskId = Number(id);
+  const taskId = propTaskId ?? Number(id);
   const { me, can } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
@@ -134,6 +146,12 @@ export default function TaskDetail() {
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
     queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
+  });
+
+  const { data: statusDefs = [] } = useQuery({
+    queryKey: ["task-statuses"],
+    queryFn: async () => (await api.get<TaskStatusDef[]>("/api/task-statuses")).data,
+    staleTime: 5 * 60_000,
   });
 
   const patch = useMutation({
@@ -348,7 +366,10 @@ export default function TaskDetail() {
               />
             </div>
           </div>
-          <TaskTimerButton taskId={taskId} />
+          <div className="flex shrink-0 items-center gap-1">
+            <FavoriteButton entity="task" id={taskId} />
+            <TaskTimerButton taskId={taskId} />
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -388,7 +409,7 @@ export default function TaskDetail() {
       </div>
 
       {/* ============ GRID: left (description/checklist/comments) + right sidebar ============ */}
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className={clsx("grid items-start gap-6", !embedded && "lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]")}>
       <div className="min-w-0 space-y-5">
         <div className="card p-5">
           <h3 className="card-title mb-3">Общее описание задачи</h3>
@@ -539,7 +560,7 @@ export default function TaskDetail() {
         </div>
       </div>
 
-      <aside className="min-w-0 space-y-4 lg:sticky lg:top-[4.5rem] lg:self-start">
+      <aside className={clsx("min-w-0 space-y-4", embedded ? "order-first" : "lg:sticky lg:top-[4.5rem] lg:self-start")}>
         <div className="card p-5">
           <h3 className="section-label mb-3">
             Свойства
@@ -549,10 +570,13 @@ export default function TaskDetail() {
               <select
                 className="input !h-8 !py-0 text-[13px]"
                 disabled={!can("tasks.change_status")}
-                value={task.status}
-                onChange={(e) => patch.mutate({ status: e.target.value as TaskStatus })}
+                value={statusKeyOf(task, statusDefs)}
+                onChange={(e) => {
+                  const opt = statusOptions(statusDefs).find((o) => o.key === e.target.value);
+                  if (opt) patch.mutate(opt.body as TaskPatch);
+                }}
               >
-                {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                {statusOptions(statusDefs).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
               </select>
             </SidebarField>
 
@@ -561,7 +585,7 @@ export default function TaskDetail() {
                 className="input !h-8 !py-0 text-[13px]"
                 type="datetime-local"
                 disabled={!can("tasks.update")}
-                value={task.start_date ? task.start_date.substring(0, 16) : ""}
+                value={toLocalInput(task.start_date)}
                 onChange={(e) => patch.mutate({ start_date: e.target.value ? new Date(e.target.value).toISOString() : null })}
               />
             </SidebarField>
@@ -571,7 +595,7 @@ export default function TaskDetail() {
                 className="input !h-8 !py-0 text-[13px]"
                 type="datetime-local"
                 disabled={!can("tasks.update")}
-                value={task.deadline ? task.deadline.substring(0, 16) : ""}
+                value={toLocalInput(task.deadline)}
                 onChange={(e) => patch.mutate({ deadline: e.target.value ? new Date(e.target.value).toISOString() : null })}
               />
             </SidebarField>

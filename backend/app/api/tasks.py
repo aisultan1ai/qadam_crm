@@ -5,7 +5,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from ..database import get_db
-from ..models import Task, User, ChecklistItem, Notification, Project, TenantMembership
+from ..models import Task, User, ChecklistItem, Notification, Project, TenantMembership, TaskStatusDef
 from ..models.task import (
     TaskStatus, TaskPriority, TaskReminder,
     task_assignees, task_auditors, task_participants,
@@ -17,7 +17,7 @@ from ..core.cache import invalidate_analytics
 from ..schemas.task import (
     TaskOut, TaskListItem, TaskCreate, TaskUpdate, TaskBulkUpdate,
     ChecklistItemCreate, ChecklistItemOut,
-    TaskUserRefs, TaskReminderCreate, TaskReminderOut,
+    TaskUserRefs, TaskReminderCreate, TaskReminderOut, TaskReorder,
 )
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, require, get_current_context, log_action
@@ -27,6 +27,19 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _status_def_in_tenant(db: Session, tenant_id: int, sid: int) -> TaskStatusDef:
+    sdef = db.get(TaskStatusDef, sid)
+    if not sdef or sdef.tenant_id != tenant_id:
+        raise HTTPException(400, "Статус не найден")
+    return sdef
+
+
+def _assert_parent_in_tenant(db: Session, tenant_id: int, parent_id: int, self_id: int | None = None) -> None:
+    parent = db.get(Task, parent_id)
+    if not parent or parent.tenant_id != tenant_id or parent.id == self_id:
+        raise HTTPException(400, "Родительская задача не найдена")
 
 
 def _user_can_view_task(user: User, task: Task) -> bool:
@@ -186,6 +199,11 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
     if payload.assignee_id:
         _assert_user_in_tenant(db, ctx.tenant.id, payload.assignee_id, "Исполнитель не является членом компании")
     _assert_project_in_tenant(db, ctx.tenant.id, payload.project_id)
+    if payload.parent_task_id:
+        _assert_parent_in_tenant(db, ctx.tenant.id, payload.parent_task_id)
+    if payload.custom_status_id:
+        # Свой статус задаёт и базовый (по категории) — фильтры и отчёты остаются согласованными.
+        payload.status = TaskStatus(_status_def_in_tenant(db, ctx.tenant.id, payload.custom_status_id).category)
 
     task = Task(
         tenant_id=ctx.tenant.id,
@@ -198,10 +216,10 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
         start_date=payload.start_date,
         deadline=payload.deadline,
         author_id=user.id,
-        parent_task_id=payload.parent_task_id,
+        parent_task_id=payload.parent_task_id or None,
         recurrence_rule=payload.recurrence_rule,
         recurrence_next_at=payload.deadline if payload.recurrence_rule else None,
-        custom_status_id=payload.custom_status_id,
+        custom_status_id=payload.custom_status_id or None,
         custom_data=payload.custom_data or {},
     )
     for item in payload.checklist:
@@ -251,7 +269,16 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         raise HTTPException(404, "Задача не найдена")
     if not user_has(user, ["tasks.update"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нет права редактировать")
+    if not _user_can_view_task(user, task):
+        raise HTTPException(404, "Задача не найдена")
 
+    # Поля, переданные явно (в т.ч. null) — так можно снять исполнителя или срок.
+    sent = payload.model_fields_set
+    new_custom: Optional[TaskStatusDef] = None
+    if payload.custom_status_id:
+        new_custom = _status_def_in_tenant(db, ctx.tenant.id, payload.custom_status_id)
+        if payload.status is None:
+            payload.status = TaskStatus(new_custom.category)
     changes: list[str] = []
     field_changes: dict[str, tuple] = {}   # {field: (old, new)} для fire_event
     old_status: Optional[str] = None
@@ -280,25 +307,30 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
         old = task.priority.value
         task.priority = payload.priority
         changes.append(f"приоритет {old} → {payload.priority.value}")
-    if payload.project_id is not None:
-        _assert_project_in_tenant(db, ctx.tenant.id, payload.project_id)
-        task.project_id = payload.project_id
-    if payload.assignee_id is not None and payload.assignee_id != task.assignee_id:
+    if "project_id" in sent and (payload.project_id or None) != task.project_id:
+        _assert_project_in_tenant(db, ctx.tenant.id, payload.project_id or None)
+        task.project_id = payload.project_id or None
+        changes.append("проект")
+    new_assignee = (payload.assignee_id or None) if "assignee_id" in sent else task.assignee_id
+    if new_assignee != task.assignee_id:
         if not user_has(user, ["tasks.assign"], tenant_id=ctx.tenant.id):
             raise HTTPException(403, "Нет права назначать исполнителей")
-        if payload.assignee_id:
-            _assert_user_in_tenant(db, ctx.tenant.id, payload.assignee_id, "Исполнитель не является членом компании")
-        task.assignee_id = payload.assignee_id
+        if new_assignee:
+            _assert_user_in_tenant(db, ctx.tenant.id, new_assignee, "Исполнитель не является членом компании")
+        task.assignee_id = new_assignee
         changes.append("исполнитель")
         if task.assignee_id and task.assignee_id != user.id:
             _notify(db, ctx.tenant.id, task.assignee_id, "assigned", "Вам назначена задача", task.title, task.id)
-    if payload.start_date is not None:
+    if "start_date" in sent:
         task.start_date = payload.start_date
-    if payload.deadline is not None:
+    if "deadline" in sent and payload.deadline != task.deadline:
         task.deadline = payload.deadline
+        changes.append("срок")
     if payload.order_index is not None:
         task.order_index = payload.order_index
     if payload.parent_task_id is not None:
+        if payload.parent_task_id:
+            _assert_parent_in_tenant(db, ctx.tenant.id, payload.parent_task_id, task.id)
         task.parent_task_id = payload.parent_task_id or None
     if payload.recurrence_rule is not None:
         task.recurrence_rule = payload.recurrence_rule or None
@@ -309,8 +341,15 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
             task.recurrence_next_at = task.deadline
     if payload.recurrence_next_at is not None:
         task.recurrence_next_at = payload.recurrence_next_at
-    if payload.custom_status_id is not None:
+    if payload.custom_status_id is not None and (payload.custom_status_id or None) != task.custom_status_id:
         task.custom_status_id = payload.custom_status_id or None
+        if new_custom is not None and "статус" not in " ".join(changes):
+            changes.append(f"статус → {new_custom.label}")
+    elif old_status is not None and task.custom_status_id:
+        # Базовый статус сменили (канбан, старые клиенты) — свой статус другой категории больше не верен.
+        cur = db.get(TaskStatusDef, task.custom_status_id)
+        if not cur or cur.category != task.status.value:
+            task.custom_status_id = None
     if payload.custom_data is not None:
         # merge — не затираем целиком
         merged = dict(task.custom_data or {})
@@ -342,6 +381,26 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
     return task
 
 
+@router.post("/reorder", response_model=Message)
+def reorder_tasks(payload: TaskReorder, ctx: TenantContext = Depends(require("tasks.update")), db: Session = Depends(get_db)):
+    """Сохраняет порядок задач в группе: ids — задачи группы сверху вниз.
+
+    Статус здесь не меняется (для этого PATCH с его правами и событиями);
+    трогаем только задачи своей компании, которые пользователь видит.
+    """
+    ids = list(dict.fromkeys(payload.ids))
+    query = db.query(Task).filter(Task.tenant_id == ctx.tenant.id, Task.id.in_(ids)).options(
+        noload(Task.checklist), noload(Task.comments), noload(Task.attachments), noload(Task.activities),
+    )
+    visible = {t.id: t for t in _apply_view_scope(query, ctx.user, ctx.tenant.id).all()}
+    for i, tid in enumerate(ids):
+        t = visible.get(tid)
+        if t is not None:
+            t.order_index = i * 10
+    db.commit()
+    return Message(message="Порядок сохранён")
+
+
 @router.post("/bulk", response_model=Message)
 def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("tasks.bulk_update")), db: Session = Depends(get_db)):
     user = ctx.user
@@ -353,6 +412,9 @@ def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("t
         _assert_project_in_tenant(db, ctx.tenant.id, p.project_id)
     if p.assignee_id:
         _assert_user_in_tenant(db, ctx.tenant.id, p.assignee_id, "Исполнитель не является членом компании")
+    categories = {
+        sid: cat for sid, cat in db.query(TaskStatusDef.id, TaskStatusDef.category).filter(TaskStatusDef.tenant_id == ctx.tenant.id)
+    }
 
     for t in tasks:
         changes: list[str] = []
@@ -360,6 +422,8 @@ def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("t
         if p.status is not None and p.status != t.status:
             old = t.status.value
             t.status = p.status
+            if t.custom_status_id and categories.get(t.custom_status_id) != p.status.value:
+                t.custom_status_id = None
             changes.append(f"статус {old} → {p.status.value}")
             if t.assignee_id and t.assignee_id != user.id:
                 _notify(db, ctx.tenant.id, t.assignee_id, "status", f"Статус изменён: {t.title}", f"{old} → {p.status.value}", t.id)

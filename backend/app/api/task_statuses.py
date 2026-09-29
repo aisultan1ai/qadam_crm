@@ -9,12 +9,33 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from ..database import get_db
 from ..models import TaskStatusDef, STATUS_CATEGORIES
 from ..schemas.common import Message
-from .deps import TenantContext, get_current_context, log_action
+from .deps import TenantContext, get_current_context, log_action, require
 
 
 router = APIRouter(prefix="/api/task-statuses", tags=["task-statuses"])
 
 CODE_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
+COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+# Менять статусы может только тот, кто управляет справочниками (владелец — всегда).
+MANAGE = require("settings.dictionaries")
+
+
+def _check_color(v):
+    if v is not None and not COLOR_RE.match(v):
+        raise ValueError("color must be #RRGGBB")
+    return v
+
+
+def _check_category(v):
+    if v is not None and v not in STATUS_CATEGORIES:
+        raise ValueError(f"category must be one of {STATUS_CATEGORIES}")
+    return v
+
+
+def _check_label(v):
+    if v is not None and not v.strip():
+        raise ValueError("label is required")
+    return v.strip() if v else v
 
 
 class StatusOut(BaseModel):
@@ -51,9 +72,17 @@ class StatusCreate(BaseModel):
     @field_validator("category")
     @classmethod
     def _valid_category(cls, v: str) -> str:
-        if v not in STATUS_CATEGORIES:
-            raise ValueError(f"category must be one of {STATUS_CATEGORIES}")
-        return v
+        return _check_category(v)
+
+    @field_validator("color")
+    @classmethod
+    def _valid_color(cls, v: str) -> str:
+        return _check_color(v)
+
+    @field_validator("label")
+    @classmethod
+    def _valid_label(cls, v: str) -> str:
+        return _check_label(v)
 
 
 class StatusUpdate(BaseModel):
@@ -64,6 +93,21 @@ class StatusUpdate(BaseModel):
     is_default: Optional[bool] = None
     is_terminal: Optional[bool] = None
     allowed_next: Optional[list[str]] = None
+
+    @field_validator("category")
+    @classmethod
+    def _valid_category(cls, v):
+        return _check_category(v)
+
+    @field_validator("color")
+    @classmethod
+    def _valid_color(cls, v):
+        return _check_color(v)
+
+    @field_validator("label")
+    @classmethod
+    def _valid_label(cls, v):
+        return _check_label(v)
 
 
 @router.get("", response_model=list[StatusOut])
@@ -77,7 +121,7 @@ def list_statuses(ctx: TenantContext = Depends(get_current_context), db: Session
 
 
 @router.post("", response_model=StatusOut, status_code=201)
-def create_status(payload: StatusCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_status(payload: StatusCreate, ctx: TenantContext = Depends(MANAGE), db: Session = Depends(get_db)):
     exists = db.query(TaskStatusDef).filter(TaskStatusDef.tenant_id == ctx.tenant.id, TaskStatusDef.code == payload.code).first()
     if exists:
         raise HTTPException(409, f"Статус с code={payload.code} уже существует")
@@ -95,7 +139,7 @@ def create_status(payload: StatusCreate, ctx: TenantContext = Depends(get_curren
 
 
 @router.patch("/{sid}", response_model=StatusOut)
-def update_status(sid: int, payload: StatusUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def update_status(sid: int, payload: StatusUpdate, ctx: TenantContext = Depends(MANAGE), db: Session = Depends(get_db)):
     row = db.get(TaskStatusDef, sid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Статус не найден")
@@ -112,7 +156,7 @@ def update_status(sid: int, payload: StatusUpdate, ctx: TenantContext = Depends(
 
 
 @router.delete("/{sid}", response_model=Message)
-def delete_status(sid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def delete_status(sid: int, ctx: TenantContext = Depends(MANAGE), db: Session = Depends(get_db)):
     row = db.get(TaskStatusDef, sid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Статус не найден")

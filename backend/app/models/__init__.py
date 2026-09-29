@@ -47,6 +47,7 @@ from .contact import Contact, Company
 from .time_off import TimeOff, TimeOffKind, TimeOffStatus
 from .deal import Deal, DealStage, DealStatus
 from .user_prefs import UserSession, UserNotificationPref, LinkedAccount
+from .favorite import Favorite, FAVORITE_ENTITIES
 from .totp_backup import TotpBackupCode
 from .whiteboard import Whiteboard
 from .telephony import Call
@@ -171,6 +172,8 @@ __all__ = [
     "Deal",
     "DealStage",
     "DealStatus",
+    "Favorite",
+    "FAVORITE_ENTITIES",
     "UserSession",
     "UserNotificationPref",
     "LinkedAccount",

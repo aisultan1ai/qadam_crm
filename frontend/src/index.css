@@ -197,6 +197,19 @@ html.dark mark {
   from { opacity: 0; transform: translate3d(0, 16px, 0); }
   to { opacity: 1; transform: none; }
 }
+@keyframes qd-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes qd-drawer-in {
+  from { transform: translate3d(24px, 0, 0); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes qd-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+.qd-marquee { animation: qd-marquee 40s linear infinite; }
 .qd-fade-up { animation: qd-fade-up 0.9s cubic-bezier(.2,.8,.2,1) both; }
 .qd-drift-1 { animation: qd-drift-1 18s ease-in-out infinite; }
 .qd-drift-2 { animation: qd-drift-2 24s ease-in-out infinite; }

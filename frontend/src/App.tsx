@@ -43,6 +43,7 @@ const Planner = lazy(() => import("@/pages/Planner"));
 const Contacts = lazy(() => import("@/pages/Contacts"));
 const ProfileSettings = lazy(() => import("@/pages/ProfileSettings"));
 const Activity = lazy(() => import("@/pages/Activity"));
+const Notifications = lazy(() => import("@/pages/Notifications"));
 const TimeOff = lazy(() => import("@/pages/TimeOff"));
 const Deals = lazy(() => import("@/pages/Deals"));
 const Reports = lazy(() => import("@/pages/Reports"));
@@ -177,6 +178,7 @@ export default function App() {
         <Route path="planner" element={<Planner />} />
         <Route path="contacts" element={<Contacts />} />
         <Route path="activity" element={<Activity />} />
+        <Route path="notifications" element={<Notifications />} />
         <Route path="timeoff" element={<TimeOff />} />
         <Route path="deals" element={<Deals />} />
         <Route path="reports" element={<Reports />} />

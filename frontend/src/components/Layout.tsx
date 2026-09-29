@@ -8,19 +8,20 @@ import {
   Network, Contact2, CalendarClock, BookUser,
   Activity as ActivityIcon, PalmtreeIcon, Coins, PieChart,
   PenSquare, Phone, Boxes,
-  FileText, BookText, Palmtree, Puzzle,
+  FileText, BookText, Palmtree, Puzzle, ChevronDown, Plus, Star, CircleDot,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 import { useSidebar } from "@/store/sidebar";
 import { Avatar } from "./ui";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError, onApiEvent } from "@/api/client";
 import { useOnline } from "@/hooks/useOnline";
-import type { Notification, Page } from "@/types";
+import type { Notification, Page, Project } from "@/types";
 import GlobalSearch from "./GlobalSearch";
+import { ShortcutsDialog, useGlobalShortcuts } from "./Shortcuts";
 import TenantSwitcher from "./TenantSwitcher";
 import WelcomeModal from "./WelcomeModal";
 import { TimerWidget } from "./TimerWidget";
@@ -33,6 +34,7 @@ import { useToast } from "./Toast";
 import { modKey } from "@/lib/platform";
 import { fromNow } from "@/lib/date";
 import { t } from "@/lib/i18n";
+import { useFavorites } from "@/hooks/useFavorites";
 
 type NavItem = {
   to: string;
@@ -54,6 +56,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     items: [
       { to: "/", label: t.nav.dashboard, icon: LayoutDashboard, exact: true },
+      { to: "/notifications", label: "Входящие", icon: Bell },
       { to: "/planner", label: "Планировщик", icon: CalendarClock },
       { to: "/projects", label: t.nav.projects, icon: FolderKanban, code: "projects.view" },
       { to: "/tasks", label: t.nav.tasks, icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
@@ -120,6 +123,10 @@ export default function Layout() {
   const toast = useToast();
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const openPalette = useCallback(() => setSearchOpen(true), []);
+  const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
+  useGlobalShortcuts({ openPalette, openHelp: openShortcuts, canCreateTask: can("tasks.create") });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement | null>(null);
 
@@ -172,17 +179,6 @@ export default function Layout() {
   });
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setSearchOpen(true);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
     if (!notifOpen) return;
     const onClick = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
@@ -200,7 +196,13 @@ export default function Layout() {
     };
   }, [notifOpen]);
 
-  const unread = notifs.filter((n) => !n.is_read).length;
+  const { data: notifCounts } = useQuery({
+    queryKey: ["notifications", "counts"],
+    queryFn: async () => (await api.get<{ unread: number; mentions: number }>("/api/notifications/unread-count")).data,
+    refetchInterval: online ? 30000 : false,
+    staleTime: 15000,
+  });
+  const unread = notifCounts?.unread ?? notifs.filter((n) => !n.is_read).length;
   const [pulseKey, setPulseKey] = useState(0);
   const prevUnread = useRef(unread);
   useEffect(() => {
@@ -288,13 +290,15 @@ export default function Layout() {
             onClick={() => setSearchOpen(true)}
           >
             <Search size={15} />
-            <span className="hidden truncate text-zinc-500 sm:inline">Поиск задач, сделок, контактов…</span>
+            <span className="hidden truncate text-zinc-500 sm:inline">Поиск или команда…</span>
             <span className="truncate text-neutral-500 sm:hidden">Поиск…</span>
             <span className="ml-auto flex items-center gap-1">
               <span className="kbd">{modKey}</span>
               <span className="kbd">K</span>
             </span>
           </button>
+
+          <CreateMenu can={can} />
 
           <TimerWidget />
 
@@ -394,6 +398,13 @@ export default function Layout() {
                     </div>
                   ))}
                 </div>
+                <NavLink
+                  to="/notifications"
+                  onClick={() => setNotifOpen(false)}
+                  className="block border-t border-neutral-100 px-4 py-2.5 text-center text-[13px] font-medium text-brand-700 hover:bg-zinc-50 dark:border-neutral-800 dark:text-brand-300 dark:hover:bg-[#1B1F26]"
+                >
+                  Открыть «Входящие»
+                </NavLink>
               </div>
             )}
           </div>
@@ -411,7 +422,8 @@ export default function Layout() {
         </main>
       </div>
 
-      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} onShowShortcuts={openShortcuts} />
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <WelcomeModal />
     </div>
   );
@@ -436,11 +448,20 @@ function Sidebar({
 }) {
   const desktop = variant === "desktop";
   const showLabels = !(desktop && collapsed);
+  const { pathname } = useLocation();
+  const [closedSections, toggleSection] = useClosedSections();
+  const { data: notifCounts } = useQuery({
+    queryKey: ["notifications", "counts"],
+    queryFn: async () => (await api.get<{ unread: number; mentions: number }>("/api/notifications/unread-count")).data,
+    staleTime: 15000,
+  });
+  const notifCount = notifCounts?.unread ?? 0;
+  const isActivePath = (n: NavItem) => pathname === n.to || (!n.exact && pathname.startsWith(n.to + "/"));
   return (
     <aside
       className={clsx(
         // Графитовый сайдбар — одинаковый в обеих темах, держит структуру продукта.
-        "flex shrink-0 flex-col border-r border-sidebar-line bg-sidebar text-zinc-300 transition-[width] duration-200 ease-out-soft",
+        "flex shrink-0 flex-col border-r border-zinc-200 bg-white text-zinc-700 transition-[width] duration-200 ease-out-soft dark:border-zinc-800 dark:bg-[#111419] dark:text-zinc-300",
         desktop
           ? clsx(
               "sticky top-0 hidden h-screen self-start overflow-hidden md:flex",
@@ -451,7 +472,7 @@ function Sidebar({
     >
       <div
         className={clsx(
-          "flex h-14 items-center gap-2.5 border-b border-sidebar-line",
+          "flex h-14 items-center gap-2.5 border-b border-zinc-200 dark:border-zinc-800",
           showLabels ? "px-4" : "justify-center px-2",
         )}
       >
@@ -462,15 +483,15 @@ function Sidebar({
             className="h-7 w-7 rounded-md bg-white object-contain"
           />
         ) : (
-          <LogoMark size={28} inverted className="shrink-0" />
+          <LogoMark size={28} className="shrink-0" />
         )}
         {showLabels && (
-          <span className="truncate text-sm font-semibold text-white">
+          <span className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
             {me?.current_tenant?.company_display_name || me?.current_tenant?.name || "Qadam CRM"}
           </span>
         )}
         {!desktop && onClose && (
-          <button className="ml-auto rounded-lg p-1.5 text-neutral-300 hover:bg-white/10 hover:text-white" onClick={onClose} aria-label="Закрыть меню">
+          <button className="ml-auto rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#1B1F26] dark:hover:text-white" onClick={onClose} aria-label="Закрыть меню">
             <X size={16} />
           </button>
         )}
@@ -484,15 +505,17 @@ function Sidebar({
             return true;
           });
           if (visible.length === 0) return null;
+          // Свёрнутая секция (как в ClickUp) оставляет видимым только активный пункт.
+          const title = section.title;
+          const isClosed = showLabels && !!title && closedSections.has(title);
+          const shown = isClosed ? visible.filter(isActivePath) : visible;
           return (
-            <div key={sIdx} className={clsx(sIdx > 0 && "mt-4")}>
-              {section.title && showLabels && (
-                <div className="mb-1 px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-                  {section.title}
-                </div>
+            <div key={sIdx} className={clsx(sIdx > 0 && "mt-3")}>
+              {title && showLabels && (
+                <SectionToggle title={title} closed={isClosed} onToggle={() => toggleSection(title)} />
               )}
               <div className="space-y-0.5">
-                {visible.map((n) => {
+                {shown.map((n) => {
                   const Icon = n.icon;
                   return (
                     <NavLink
@@ -506,8 +529,8 @@ function Sidebar({
                           "relative flex items-center rounded-md text-[13.5px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
                           showLabels ? "gap-2.5 px-2.5 py-[7px]" : "justify-center px-2 py-2",
                           isActive
-                            ? "bg-white/[0.08] font-medium text-white"
-                            : "text-zinc-300 hover:bg-white/[0.05] hover:text-white",
+                            ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-white"
+                            : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-[#1B1F26] dark:hover:text-white",
                         )
                       }
                     >
@@ -516,7 +539,7 @@ function Sidebar({
                           <span
                             aria-hidden
                             className={clsx(
-                              "absolute inset-y-1.5 w-[3px] rounded-r bg-brand-400 transition-opacity duration-150",
+                              "absolute inset-y-1.5 w-[3px] rounded-r bg-brand-600 transition-opacity duration-150 dark:bg-brand-400",
                               showLabels ? "-left-2.5" : "-left-2",
                               isActive ? "opacity-100" : "opacity-0",
                             )}
@@ -524,12 +547,28 @@ function Sidebar({
                           <Icon size={16} strokeWidth={1.9} className="shrink-0" />
                           {showLabels && <span className="truncate">{n.label}</span>}
                           {n.to === "/messenger" && <MessengerUnreadBadge collapsed={!showLabels} />}
+                          {n.to === "/notifications" && <CountBadge count={notifCount} collapsed={!showLabels} />}
                         </>
                       )}
                     </NavLink>
                   );
                 })}
               </div>
+              {sIdx === 0 && showLabels && (
+                <FavoritesBlock
+                  closed={closedSections.has(FAVORITES_KEY)}
+                  onToggle={() => toggleSection(FAVORITES_KEY)}
+                  onLinkClick={onLinkClick}
+                />
+              )}
+              {sIdx === 0 && showLabels && can("projects.view") && (
+                <SpacesBlock
+                  closed={closedSections.has(SPACES_KEY)}
+                  onToggle={() => toggleSection(SPACES_KEY)}
+                  canCreate={can("projects.create")}
+                  onLinkClick={onLinkClick}
+                />
+              )}
             </div>
           );
         })}
@@ -537,7 +576,7 @@ function Sidebar({
 
       <div
         className={clsx(
-          "border-t border-sidebar-line",
+          "border-t border-zinc-200 dark:border-zinc-800",
           showLabels ? "p-3" : "p-2",
         )}
       >
@@ -548,10 +587,10 @@ function Sidebar({
               onClick={onLinkClick}
               className={({ isActive }) =>
                 clsx(
-                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors text-white",
+                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors text-zinc-900 dark:text-white",
                   isActive
-                    ? "bg-white/10"
-                    : "hover:bg-white/5",
+                    ? "bg-zinc-100 dark:bg-[#1B1F26]"
+                    : "hover:bg-zinc-100 dark:hover:bg-[#1B1F26]",
                 )
               }
               title="Открыть профиль"
@@ -559,11 +598,11 @@ function Sidebar({
               <Avatar name={me?.name} url={me?.avatar_url} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{me?.name}</div>
-                <div className="truncate text-xs text-zinc-400">{me?.email}</div>
+                <div className="truncate text-xs text-zinc-500 dark:text-zinc-400">{me?.email}</div>
               </div>
             </NavLink>
             <button
-              className="rounded-lg p-1.5 text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#1B1F26] dark:hover:text-white"
               onClick={logout}
               title="Выйти"
             >
@@ -577,10 +616,10 @@ function Sidebar({
               onClick={onLinkClick}
               className={({ isActive }) =>
                 clsx(
-                  "flex items-center justify-center rounded-lg p-1 transition-colors text-white",
+                  "flex items-center justify-center rounded-lg p-1 transition-colors text-zinc-900 dark:text-white",
                   isActive
-                    ? "bg-white/10"
-                    : "hover:bg-white/5",
+                    ? "bg-zinc-100 dark:bg-[#1B1F26]"
+                    : "hover:bg-zinc-100 dark:hover:bg-[#1B1F26]",
                 )
               }
               title={me?.name ? `${me.name} — открыть профиль` : "Открыть профиль"}
@@ -588,7 +627,7 @@ function Sidebar({
               <Avatar name={me?.name} url={me?.avatar_url} />
             </NavLink>
             <button
-              className="rounded-lg p-1.5 text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#1B1F26] dark:hover:text-white"
               onClick={logout}
               title="Выйти"
               aria-label="Выйти"
@@ -599,6 +638,266 @@ function Sidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+const SPACES_KEY = "Пространства";
+const FAVORITES_KEY = "Избранное";
+
+// «Избранное» — закреплённые проекты, задачи и статьи (звёздочка в шапке их страниц).
+function FavoritesBlock({ closed, onToggle, onLinkClick }: { closed: boolean; onToggle: () => void; onLinkClick: () => void }) {
+  const { favorites, toggle } = useFavorites();
+  if (favorites.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <SectionToggle title={FAVORITES_KEY} closed={closed} onToggle={onToggle} />
+      {!closed && (
+        <div className="space-y-0.5">
+          {favorites.map((f) => (
+            <div key={`${f.entity}:${f.entity_id}`} className="group/fav relative">
+              <NavLink
+                to={f.url}
+                onClick={onLinkClick}
+                className={({ isActive }) =>
+                  clsx(
+                    "flex items-center gap-2.5 rounded-md py-[6px] pl-2.5 pr-7 text-[13.5px] transition-colors",
+                    isActive
+                      ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-white"
+                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-[#1B1F26] dark:hover:text-white",
+                  )
+                }
+              >
+                {f.entity === "project" ? (
+                  <span aria-hidden className="h-[10px] w-[10px] shrink-0 rounded-[3px] bg-brand-600" style={f.color ? { backgroundColor: f.color } : undefined} />
+                ) : f.entity === "task" ? (
+                  <CircleDot size={14} className="shrink-0 text-zinc-400" />
+                ) : (
+                  <BookOpen size={14} className="shrink-0 text-zinc-400" />
+                )}
+                <span className="truncate">{f.title}</span>
+              </NavLink>
+              <button
+                type="button"
+                onClick={() => toggle(f.entity, f.entity_id)}
+                aria-label={`Убрать «${f.title}» из избранного`}
+                title="Убрать из избранного"
+                className="absolute right-1 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-amber-500 opacity-0 hover:bg-zinc-200/70 group-hover/fav:opacity-100 focus:opacity-100 dark:hover:bg-zinc-700/60"
+              >
+                <Star size={12} className="fill-current" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+const CLOSED_SECTIONS_KEY = "sidebar:closed-sections";
+
+function useClosedSections(): [Set<string>, (key: string) => void] {
+  const [closed, setClosed] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(window.localStorage.getItem(CLOSED_SECTIONS_KEY) || "[]"));
+    } catch {
+      return new Set();
+    }
+  });
+  const toggle = (key: string) =>
+    setClosed((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      try {
+        window.localStorage.setItem(CLOSED_SECTIONS_KEY, JSON.stringify([...next]));
+      } catch {
+        // localStorage недоступен (private mode) — просто не запоминаем.
+      }
+      return next;
+    });
+  return [closed, toggle];
+}
+
+function SectionToggle({ title, closed, onToggle, action }: { title: string; closed: boolean; onToggle: () => void; action?: React.ReactNode }) {
+  return (
+    <div className="group/sec mb-1 flex items-center pr-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!closed}
+        className="flex flex-1 items-center gap-1 rounded px-2.5 py-1 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-zinc-500 transition-colors hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+      >
+        {title}
+        <ChevronDown
+          size={12}
+          className={clsx("opacity-0 transition-[transform,opacity] group-hover/sec:opacity-100", closed && "-rotate-90 opacity-100")}
+        />
+      </button>
+      {action}
+    </div>
+  );
+}
+
+// «Пространства» — проекты прямо в сайдбаре, как Spaces в ClickUp.
+function SpacesBlock({
+  closed,
+  onToggle,
+  canCreate,
+  onLinkClick,
+}: {
+  closed: boolean;
+  onToggle: () => void;
+  canCreate: boolean;
+  onLinkClick: () => void;
+}) {
+  const LIMIT = 8;
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects", "sidebar"],
+    queryFn: async () => (await api.get<Page<Project>>("/api/projects")).data.items,
+    staleTime: 60_000,
+  });
+  const list = projects.filter((p) => !p.is_archived);
+  return (
+    <div className="mt-3">
+      <SectionToggle
+        title={SPACES_KEY}
+        closed={closed}
+        onToggle={onToggle}
+        action={
+          canCreate && (
+            <NavLink
+              to="/projects?new=1"
+              onClick={onLinkClick}
+              title="Новый проект"
+              aria-label="Новый проект"
+              className="grid h-5 w-5 place-items-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-[#1B1F26] dark:hover:text-white"
+            >
+              <Plus size={13} />
+            </NavLink>
+          )
+        }
+      />
+      {!closed && (
+        <div className="space-y-0.5">
+          {list.length === 0 && <div className="px-2.5 py-1 text-[12.5px] text-zinc-400">Проектов пока нет</div>}
+          {list.slice(0, LIMIT).map((p) => (
+            <NavLink
+              key={p.id}
+              to={`/projects/${p.id}`}
+              onClick={onLinkClick}
+              className={({ isActive }) =>
+                clsx(
+                  "flex items-center gap-2.5 rounded-md px-2.5 py-[6px] text-[13.5px] transition-colors",
+                  isActive
+                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-white"
+                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-[#1B1F26] dark:hover:text-white",
+                )
+              }
+            >
+              <span
+                aria-hidden
+                className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] bg-brand-600 text-[10px] font-semibold uppercase text-white"
+                style={p.color ? { backgroundColor: p.color } : undefined}
+              >
+                {p.name.trim().charAt(0)}
+              </span>
+              <span className="truncate">{p.name}</span>
+              {p.tasks_count > 0 && <span className="ml-auto text-[11px] tabular-nums text-zinc-400">{p.tasks_count}</span>}
+            </NavLink>
+          ))}
+          {list.length > LIMIT && (
+            <NavLink to="/projects" onClick={onLinkClick} className="block px-2.5 py-1 text-[12.5px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+              Все проекты ({list.length})
+            </NavLink>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// «+ Создать» в шапке: быстрый вход в создание задачи / проекта / сделки из любого экрана.
+function CreateMenu({ can }: { can: ReturnType<typeof useAuth.getState>["can"] }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const items = [
+    { label: "Задача", hint: "в список задач", icon: CheckSquare, to: "/tasks?new=1", show: can("tasks.create") },
+    { label: "Проект", hint: "новое пространство", icon: FolderKanban, to: "/projects?new=1", show: can("projects.create") },
+    { label: "Сделка", hint: "в воронку продаж", icon: Coins, to: "/deals?new=1", show: can("deals.create") },
+  ].filter((i) => i.show);
+  if (items.length === 0) return null;
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="btn-primary !px-2.5 !py-1.5 sm:!px-3"
+      >
+        <Plus size={16} />
+        <span className="hidden sm:inline">Создать</span>
+      </button>
+      {open && (
+        <div role="menu" className="card absolute left-0 z-50 mt-2 w-60 animate-slide-up p-1.5 shadow-pop sm:left-auto sm:right-0">
+          {items.map((i) => {
+            const Icon = i.icon;
+            return (
+              <button
+                key={i.to}
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  navigate(i.to);
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-[#1B1F26]"
+              >
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                  <Icon size={16} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">{i.label}</span>
+                  <span className="block text-xs text-zinc-500">{i.hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CountBadge({ count, collapsed }: { count: number; collapsed: boolean }) {
+  if (count <= 0) return null;
+  const label = count > 99 ? "99+" : String(count);
+  if (collapsed) {
+    return (
+      <span
+        aria-label={`Непрочитано: ${label}`}
+        className="absolute right-1 top-1 min-w-[16px] rounded-full bg-brand-600 px-1 py-0.5 text-center text-[9px] font-medium leading-none text-white"
+      >
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="ml-auto min-w-[18px] rounded-md bg-brand-600 px-1.5 py-0.5 text-center text-[10px] font-medium leading-none text-white">
+      {label}
+    </span>
   );
 }
 

@@ -21,4 +21,6 @@ class Notification(Base):
     body: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    # «Отложить»: до этого момента уведомление скрыто из «Входящих».
+    snoozed_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -47,6 +47,7 @@ from .api import (
     mail_rules as mail_rules_api,
     task_inbox as task_inbox_api,
     p4 as p4_api,
+    favorites as favorites_api,
 )
 
 
@@ -229,6 +230,7 @@ def create_app() -> FastAPI:
         task_inbox_api.router,
         p4_api.router,
         p4_api.public_router,
+        favorites_api.router,
     ):
         app.include_router(r)
 

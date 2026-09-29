@@ -12,6 +12,7 @@ import { PriorityChip, StatusChip } from "@/components/ui";
 import { useAuth } from "@/store/auth";
 import { fromNow } from "@/lib/date";
 import { BirthdaysWidget, MyGoalsWidget, KudosFeedWidget } from "@/components/HRWidgets";
+import { MyWork } from "./dashboard/MyWork";
 
 type DashboardStats = {
   total: number;
@@ -142,7 +143,7 @@ export default function DashboardPage() {
           {/* Две независимые колонки: блоки идут друг под другом без пустот между рядами. */}
           <div className="grid items-start gap-6 xl:grid-cols-3">
             <div className="space-y-6 xl:col-span-2">
-              {canTasks ? <MyTasks /> : <StatusBreakdown stats={stats} />}
+              {canTasks ? <MyWork /> : <StatusBreakdown stats={stats} />}
               <RecentActivity />
             </div>
             <div className="space-y-6">
@@ -209,93 +210,6 @@ function StatRow({ stats }: { stats: DashboardStats }) {
         );
       })}
     </div>
-  );
-}
-
-function MyTasks() {
-  const { data, isPending } = useQuery({
-    queryKey: ["dashboard", "my-tasks"],
-    queryFn: async () =>
-      (
-        await api.get<Page<TaskListItem>>("/api/tasks", {
-          params: { scope: "incoming", page: 1, per_page: 100 },
-        })
-      ).data.items,
-    staleTime: 30_000,
-  });
-
-  const now = Date.now();
-  const open = (data ?? [])
-    .filter((t) => t.status !== "done" && t.status !== "cancelled")
-    .sort((a, b) => {
-      const da = a.deadline ? new Date(a.deadline).getTime() : Infinity;
-      const db = b.deadline ? new Date(b.deadline).getTime() : Infinity;
-      return da - db;
-    })
-    .slice(0, 8);
-
-  return (
-    <section className="card overflow-hidden">
-      <div className="card-header">
-        <div className="flex items-center gap-2">
-          <h2 className="card-title">Мои задачи</h2>
-          {data && (
-            <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-[#1B1F26] dark:text-zinc-400">
-              {open.length}
-            </span>
-          )}
-        </div>
-        <Link to="/tasks" className="link inline-flex items-center gap-1 text-[13px]">
-          Все задачи <ArrowRight size={14} />
-        </Link>
-      </div>
-      {isPending ? (
-        <div className="space-y-2 p-5">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-9" />
-          ))}
-        </div>
-      ) : open.length === 0 ? (
-        <div className="px-5 py-12 text-center">
-          <CheckCircle2 size={22} className="mx-auto mb-2 text-emerald-500" />
-          <div className="text-sm font-medium">Открытых задач нет</div>
-          <div className="mt-1 text-[13px] text-zinc-500">Новые назначения появятся здесь</div>
-        </div>
-      ) : (
-        <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-          {open.map((t) => {
-            const overdue = !!t.deadline && new Date(t.deadline).getTime() < now;
-            return (
-              <li key={t.id}>
-                <Link
-                  to={`/tasks/${t.id}`}
-                  className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-50 focus-visible:bg-zinc-50 focus-visible:outline-none dark:hover:bg-[#1B1F26] dark:focus-visible:bg-[#1B1F26]"
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {t.title}
-                  </span>
-                  <span className="hidden sm:inline-flex">
-                    <PriorityChip priority={t.priority} />
-                  </span>
-                  <StatusChip status={t.status} />
-                  <span
-                    className={clsx(
-                      "w-24 shrink-0 text-right text-xs tabular-nums",
-                      overdue ? "font-medium text-rose-600 dark:text-rose-400" : "text-zinc-500",
-                    )}
-                    title={t.deadline ? new Date(t.deadline).toLocaleString("ru-RU") : undefined}
-                  >
-                    {t.deadline
-                      ? new Date(t.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
-                      : "без срока"}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
   );
 }
 

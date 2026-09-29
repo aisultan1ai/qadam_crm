@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -15,7 +15,7 @@ import {
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from "@dnd-kit/core";
 
-import type { TaskListItem, TaskStatus, Project, User, Page } from "@/types";
+import type { TaskListItem, TaskStatus, TaskStatusDef, Project, User, Page } from "@/types";
 import { STATUS_LABEL, STATUS_ORDER, PRIORITY_LABEL } from "@/types";
 import { Avatar, EmptyState, FieldError, FormError, Modal, PriorityChip, StatusChip } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
@@ -27,8 +27,18 @@ import { VirtualList } from "@/components/VirtualList";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 
 import { SearchInput, Segmented } from "@/components/page";
+import { useNewParam } from "@/hooks/useNewParam";
+import { GroupByButton, GroupedListView, GROUP_PILL, type ListPerms } from "./tasks/GroupedListView";
+import { GROUP_BY_OPTIONS, type GroupBy } from "./tasks/grouping";
+import { TaskDrawer } from "./tasks/TaskDrawer";
+
+// Открыть задачу в боковой панели (null — вне страницы задач: обычный переход).
+const OpenTaskContext = createContext<((id: number) => void) | null>(null);
 const TASKS_VIEW_STORAGE_KEY = "tasks:view";
+// Максимум, который отдаёт API за раз; при упоре показываем подсказку сузить фильтр.
+const TASKS_LIMIT = 200;
 const TASKS_SIDEBAR_STORAGE_KEY = "tasks:sidebar";
+const TASKS_GROUP_BY_STORAGE_KEY = "tasks:group-by";
 
 type View = "kanban" | "table" | "list" | "calendar";
 const VIEWS: View[] = ["kanban", "table", "list", "calendar"];
@@ -64,7 +74,7 @@ export default function Tasks() {
   const urlView = sp.get("view");
   const rawView: View = (urlView && VIEWS.includes(urlView as View))
     ? (urlView as View)
-    : (storedView && VIEWS.includes(storedView as View) ? (storedView as View) : "kanban");
+    : (storedView && VIEWS.includes(storedView as View) ? (storedView as View) : "list");
   // На мобилке "table" нечитаемо (min-w 900px) → показываем "list" автоматически,
   // но выбор пользователя не затираем.
   const view: View = isMobile && rawView === "table" ? "list" : rawView;
@@ -113,8 +123,8 @@ export default function Tasks() {
     } catch {
       // localStorage может быть недоступен (private mode) — не критично.
     }
-    // "kanban" — дефолт, поэтому не мусорим URL.
-    updateParam("view", v === "kanban" ? "" : v);
+    // "list" — дефолт (как в ClickUp), поэтому не мусорим URL.
+    updateParam("view", v === "list" ? "" : v);
   };
 
   useEffect(() => {
@@ -137,48 +147,40 @@ export default function Tasks() {
 
   const { data: tasks, isPending } = useQuery({
     queryKey: ["tasks", filters],
-    queryFn: async () => (await api.get<Page<TaskListItem>>("/api/tasks", { params: filters })).data.items,
+    queryFn: async () => (await api.get<Page<TaskListItem>>("/api/tasks", { params: { ...filters, per_page: TASKS_LIMIT } })).data.items,
   });
 
   const { data: projects } = useQuery({
     queryKey: ["projects"],
     queryFn: async () => (await api.get<Page<Project>>("/api/projects")).data.items,
   });
+  // Свои статусы компании (пусто — работаем на базовых статусах).
+  const { data: statusDefs } = useQuery({
+    queryKey: ["task-statuses"],
+    queryFn: async () => (await api.get<TaskStatusDef[]>("/api/task-statuses")).data,
+    staleTime: 5 * 60_000,
+  });
+  const [groupBy, setGroupByState] = useState<GroupBy>(() => {
+    try {
+      const v = window.localStorage.getItem(TASKS_GROUP_BY_STORAGE_KEY);
+      return GROUP_BY_OPTIONS.some((o) => o.key === v) ? (v as GroupBy) : "status";
+    } catch {
+      return "status";
+    }
+  });
+  const setGroupBy = (v: GroupBy) => {
+    setGroupByState(v);
+    try {
+      window.localStorage.setItem(TASKS_GROUP_BY_STORAGE_KEY, v);
+    } catch {
+      // localStorage недоступен — просто не запоминаем.
+    }
+  };
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
     queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
   });
 
-  const updateStatus = useMutation({
-    // mutationKey нужен, чтобы отслеживать pending-очередь: при быстром dnd
-    // нескольких карт invalidate делаем только после того, как последняя
-    // мутация завершилась. Иначе рефетч в середине очереди сбросит optimistic
-    // updates других карт → карты «прыгают» обратно.
-    mutationKey: ["task-status-update"],
-    mutationFn: ({ id, status }: { id: number; status: TaskStatus }) => api.patch(`/api/tasks/${id}`, { status }),
-    onMutate: async ({ id, status }) => {
-      await qc.cancelQueries({ queryKey: ["tasks"] });
-      const snapshots = qc.getQueriesData<TaskListItem[]>({ queryKey: ["tasks"] });
-      snapshots.forEach(([key, data]) => {
-        if (!data) return;
-        qc.setQueryData<TaskListItem[]>(key, data.map((t) => (t.id === id ? { ...t, status } : t)));
-      });
-      return { snapshots };
-    },
-    onError: (err, _vars, ctx) => {
-      ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
-      toast.error("Не удалось изменить статус", extractApiError(err).message);
-    },
-    onSettled: (_data, _err, vars) => {
-      const stillPending = qc
-        .getMutationCache()
-        .findAll({ mutationKey: ["task-status-update"], status: "pending" }).length;
-      if (stillPending === 0) {
-        qc.invalidateQueries({ queryKey: ["tasks"] });
-        qc.invalidateQueries({ queryKey: ["task", vars.id] });
-      }
-    },
-  });
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const deleteTask = useMutation({
@@ -207,46 +209,31 @@ export default function Tasks() {
   const canDelete = can("tasks.delete");
   const requestDelete = canDelete ? (id: number) => setConfirmDeleteId(id) : undefined;
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-
-  const [landedId, setLandedId] = useState<number | null>(null);
-  const [activeDragId, setActiveDragId] = useState<number | null>(null);
-  const activeDragTask = useMemo(
-    () => (activeDragId != null ? tasks?.find((t) => t.id === activeDragId) ?? null : null),
-    [activeDragId, tasks],
-  );
-
-  const onDragStart = (e: DragStartEvent) => {
-    const id = String(e.active.id).split(":")[1];
-    setActiveDragId(Number(id));
-  };
-
-  const onDragEnd = (e: DragEndEvent) => {
-    setActiveDragId(null);
-    const overId = e.over?.id;
-    const activeId = e.active.id;
-    if (!overId || typeof activeId !== "string" || typeof overId !== "string") return;
-    const [, taskIdStr] = activeId.split(":");
-    const [, newStatus] = overId.split(":");
-    const id = Number(taskIdStr);
-    const current = tasks?.find((t) => t.id === id);
-    if (!current || current.status === newStatus) return;
-    // Guard: не отправлять повторно для той же карты, если предыдущая мутация
-    // ещё в полёте. Иначе получаем два PATCH подряд с одинаковым body.
-    const inFlight = qc
-      .getMutationCache()
-      .findAll({ mutationKey: ["task-status-update"] })
-      .some((m) => m.state.status === "pending" && (m.state.variables as { id?: number } | undefined)?.id === id);
-    if (inFlight) return;
-    updateStatus.mutate({ id, status: newStatus as TaskStatus });
-    setLandedId(id);
-    window.setTimeout(() => setLandedId((cur) => (cur === id ? null : cur)), 460);
-  };
-
-  const onDragCancel = () => setActiveDragId(null);
 
   const filtersActive = Boolean(q || projectId || assigneeId || priority || status);
   const canCreate = can("tasks.create");
+  useNewParam(() => setOpenNew(true), canCreate);
+
+  const openTaskId = Number(sp.get("task")) || null;
+  const openTask = useCallback(
+    (id: number) => {
+      const next = new URLSearchParams(sp);
+      next.set("task", String(id));
+      setSp(next); // push — «Назад» закрывает панель
+    },
+    [sp, setSp],
+  );
+  const closeTask = useCallback(() => {
+    const next = new URLSearchParams(sp);
+    next.delete("task");
+    setSp(next, { replace: true });
+  }, [sp, setSp]);
+  const listPerms: ListPerms = {
+    update: can("tasks.update"),
+    status: can("tasks.update") && can("tasks.change_status"),
+    assign: can("tasks.update") && can("tasks.assign"),
+    priority: can("tasks.update") && can("tasks.change_priority"),
+  };
   const resetFilters = () => {
     const next = new URLSearchParams(sp);
     ["q", "project", "assignee", "status", "priority"].forEach((k) => next.delete(k));
@@ -258,6 +245,7 @@ export default function Tasks() {
   const activeProject = projectId ? projects?.find((p) => p.id === Number(projectId)) : null;
 
   return (
+    <OpenTaskContext.Provider value={openTask}>
     <div className={clsx("gap-4", sidebarOpen ? "lg:grid lg:grid-cols-[240px_minmax(0,1fr)]" : "block")}>
       {sidebarOpen && (
         <TasksSidebar
@@ -294,18 +282,23 @@ export default function Tasks() {
                 </span>
               )}
             </h1>
-            <p className="page-subtitle">{tasks?.length ?? 0} задач</p>
+            <p className="page-subtitle">
+              {(tasks?.length ?? 0) >= TASKS_LIMIT
+                ? `Показаны первые ${TASKS_LIMIT} задач — уточните фильтр`
+                : `${tasks?.length ?? 0} задач`}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {view === "list" && <GroupByButton value={groupBy} onChange={setGroupBy} />}
           <Segmented
             label="Вид задач"
             value={view}
             onChange={setView}
             items={[
+              { key: "list", label: <span className="hidden sm:inline">Список</span>, icon: ListIcon, title: "Список" },
               { key: "kanban", label: <span className="hidden sm:inline">Канбан</span>, icon: LayoutGrid, title: "Канбан" },
               { key: "table", label: <span className="hidden sm:inline">Таблица</span>, icon: TableIcon, title: "Таблица", hidden: isMobile },
-              { key: "list", label: <span className="hidden sm:inline">Список</span>, icon: ListIcon, title: "Список" },
               { key: "calendar", label: <span className="hidden sm:inline">Календарь</span>, icon: CalendarDays, title: "Календарь" },
             ]}
           />
@@ -459,32 +452,7 @@ export default function Tasks() {
           />
         )
       ) : view === "kanban" ? (
-        <DndContext
-          sensors={sensors}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onDragCancel={onDragCancel}
-        >
-          <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 md:grid-cols-3 xl:grid-cols-5">
-            {STATUS_ORDER.map((s) => (
-              <div
-                key={s}
-                className="w-[85vw] shrink-0 snap-start sm:w-auto sm:shrink"
-              >
-                <KanbanColumn
-                  status={s}
-                  tasks={tasks.filter((t) => t.status === s)}
-                  onDelete={requestDelete}
-                  landedId={landedId}
-                  activeDragId={activeDragId}
-                />
-              </div>
-            ))}
-          </div>
-          <DragOverlay dropAnimation={null}>
-            {activeDragTask ? <KanbanCardGhost task={activeDragTask} /> : null}
-          </DragOverlay>
-        </DndContext>
+        <KanbanBoard tasks={tasks} onDelete={requestDelete} onOpen={openTask} />
       ) : view === "table" ? (
         <TableView
           tasks={tasks}
@@ -494,11 +462,19 @@ export default function Tasks() {
           onToggleAll={canBulk ? (checked) => setSelectedIds(checked ? new Set(tasks.map((t) => t.id)) : new Set()) : undefined}
         />
       ) : view === "list" ? (
-        <ListView
+        <GroupedListView
           tasks={tasks}
           onDelete={requestDelete}
           selectedIds={canBulk ? selectedIds : undefined}
           onToggleSelect={canBulk ? (id) => toggleSelected(id, setSelectedIds) : undefined}
+          canCreate={canCreate}
+          projectId={projectId ? Number(projectId) : undefined}
+          users={users ?? []}
+          projects={projects ?? []}
+          statusDefs={statusDefs ?? []}
+          groupBy={groupBy}
+          onOpen={openTask}
+          perms={listPerms}
         />
       ) : (
         <CalendarView tasks={tasks} />
@@ -576,6 +552,8 @@ export default function Tasks() {
       )}
     </div>
     </div>
+    {openTaskId && <TaskDrawer taskId={openTaskId} onClose={closeTask} />}
+    </OpenTaskContext.Provider>
   );
 }
 
@@ -720,6 +698,119 @@ function TasksSidebar({
   );
 }
 
+/** Канбан по базовым статусам с перетаскиванием; клик по карточке открывает задачу (onOpen — боковая панель). */
+export function KanbanBoard({
+  tasks,
+  onDelete,
+  onOpen,
+}: {
+  tasks: TaskListItem[];
+  onDelete?: (id: number) => void;
+  onOpen?: (id: number) => void;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const updateStatus = useMutation({
+    // mutationKey нужен, чтобы отслеживать pending-очередь: при быстром dnd
+    // нескольких карт invalidate делаем только после того, как последняя
+    // мутация завершилась. Иначе рефетч в середине очереди сбросит optimistic
+    // updates других карт → карты «прыгают» обратно.
+    mutationKey: ["task-status-update"],
+    mutationFn: ({ id, status }: { id: number; status: TaskStatus }) => api.patch(`/api/tasks/${id}`, { status }),
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: ["tasks"] });
+      const snapshots = qc.getQueriesData<TaskListItem[]>({ queryKey: ["tasks"] });
+      snapshots.forEach(([key, data]) => {
+        if (!data) return;
+        qc.setQueryData<TaskListItem[]>(key, data.map((t) => (t.id === id ? { ...t, status } : t)));
+      });
+      return { snapshots };
+    },
+    onError: (err, _vars, ctx) => {
+      ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
+      toast.error("Не удалось изменить статус", extractApiError(err).message);
+    },
+    onSettled: (_data, _err, vars) => {
+      const stillPending = qc
+        .getMutationCache()
+        .findAll({ mutationKey: ["task-status-update"], status: "pending" }).length;
+      if (stillPending === 0) {
+        qc.invalidateQueries({ queryKey: ["tasks"] });
+        qc.invalidateQueries({ queryKey: ["task", vars.id] });
+      }
+    },
+  });
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  const [landedId, setLandedId] = useState<number | null>(null);
+  const [activeDragId, setActiveDragId] = useState<number | null>(null);
+  const activeDragTask = useMemo(
+    () => (activeDragId != null ? tasks.find((t) => t.id === activeDragId) ?? null : null),
+    [activeDragId, tasks],
+  );
+
+  const onDragStart = (e: DragStartEvent) => {
+    const id = String(e.active.id).split(":")[1];
+    setActiveDragId(Number(id));
+  };
+
+  const onDragEnd = (e: DragEndEvent) => {
+    setActiveDragId(null);
+    const overId = e.over?.id;
+    const activeId = e.active.id;
+    if (!overId || typeof activeId !== "string" || typeof overId !== "string") return;
+    const [, taskIdStr] = activeId.split(":");
+    const [, newStatus] = overId.split(":");
+    const id = Number(taskIdStr);
+    const current = tasks.find((t) => t.id === id);
+    if (!current || current.status === newStatus) return;
+    // Guard: не отправлять повторно для той же карты, если предыдущая мутация
+    // ещё в полёте. Иначе получаем два PATCH подряд с одинаковым body.
+    const inFlight = qc
+      .getMutationCache()
+      .findAll({ mutationKey: ["task-status-update"] })
+      .some((m) => m.state.status === "pending" && (m.state.variables as { id?: number } | undefined)?.id === id);
+    if (inFlight) return;
+    updateStatus.mutate({ id, status: newStatus as TaskStatus });
+    setLandedId(id);
+    window.setTimeout(() => setLandedId((cur) => (cur === id ? null : cur)), 460);
+  };
+
+  const onDragCancel = () => setActiveDragId(null);
+
+  return (
+    <OpenTaskContext.Provider value={onOpen ?? null}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={onDragCancel}
+    >
+      <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 md:grid-cols-3 xl:grid-cols-5">
+        {STATUS_ORDER.map((s) => (
+          <div
+            key={s}
+            className="w-[85vw] shrink-0 snap-start sm:w-auto sm:shrink"
+          >
+            <KanbanColumn
+              status={s}
+              tasks={tasks.filter((t) => t.status === s)}
+              onDelete={onDelete}
+              landedId={landedId}
+              activeDragId={activeDragId}
+            />
+          </div>
+        ))}
+      </div>
+      <DragOverlay dropAnimation={null}>
+        {activeDragTask ? <KanbanCardGhost task={activeDragTask} /> : null}
+      </DragOverlay>
+    </DndContext>
+    </OpenTaskContext.Provider>
+  );
+}
+
 function KanbanColumn({
   status,
   tasks,
@@ -739,19 +830,19 @@ function KanbanColumn({
     <div
       ref={setNodeRef}
       className={clsx(
-        "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-2xl border-2 p-2.5 transition-all duration-[180ms] ease-out-soft",
+        "flex max-h-[calc(100vh-16rem)] min-h-[220px] flex-col rounded-xl border p-2 transition-all duration-[180ms] ease-out-soft",
         isOver
           ? "border-brand-500 bg-brand-50 shadow-[0_0_0_4px_rgba(42,82,196,0.12)] dark:border-brand-500 dark:bg-brand-900/15"
           : isDraggingSomething
           ? "border-dashed border-neutral-300 bg-neutral-50/40 dark:border-neutral-700/60 dark:bg-[#14171C]"
-          : "border-neutral-200 bg-neutral-50/60 dark:border-neutral-700/50 dark:bg-[#14171C]",
+          : "border-transparent bg-neutral-100/70 dark:bg-[#14171C]",
       )}
     >
-      <div className="mb-2 flex items-center justify-between px-1.5">
-        <div className="flex items-center gap-2">
-          <StatusChip status={status} />
-        </div>
-        <span className="text-xs text-neutral-500 tabular-nums">{tasks.length}</span>
+      <div className="mb-2 flex items-center gap-2 px-1 pt-0.5">
+        <span className={clsx("rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-white", GROUP_PILL[status])}>
+          {STATUS_LABEL[status]}
+        </span>
+        <span className="text-[13px] text-neutral-500 tabular-nums">{tasks.length}</span>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto pr-0.5">
         {tasks.map((t) => (
@@ -781,6 +872,7 @@ const KanbanCard = memo(function KanbanCard({
 }) {
   const { attributes, listeners, setNodeRef } = useDraggable({ id: `task:${task.id}` });
   const nav = useNavigate();
+  const openInPanel = useContext(OpenTaskContext);
   if (isActiveDrag) {
     return (
       <div
@@ -803,7 +895,11 @@ const KanbanCard = memo(function KanbanCard({
       style={{ touchAction: "none" }}
       {...listeners}
       {...attributes}
-      onClick={() => nav(`/tasks/${task.id}`)}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey) window.open(`/tasks/${task.id}`, "_blank");
+        else if (openInPanel) openInPanel(task.id);
+        else nav(`/tasks/${task.id}`);
+      }}
       className={clsx(
         "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#1B1F26]",
         landed && "animate-settle",
@@ -985,79 +1081,8 @@ function TableView({
   );
 }
 
-function ListView({
-  tasks,
-  onDelete,
-  selectedIds,
-  onToggleSelect,
-}: {
-  tasks: TaskListItem[];
-  onDelete?: (id: number) => void;
-  selectedIds?: Set<number>;
-  onToggleSelect?: (id: number) => void;
-}) {
-  const withSelect = !!onToggleSelect;
-  return (
-    <VirtualList
-      items={tasks}
-      itemHeight={TASK_CARD_HEIGHT}
-      height={Math.min(tasks.length, 10) * TASK_CARD_HEIGHT + 4}
-      getKey={(t) => t.id}
-      threshold={50}
-      className="space-y-2"
-      rowClassName="pb-2"
-      renderItem={(t) => {
-        const isSelected = !!selectedIds?.has(t.id);
-        return (
-          <div className="group relative flex items-center gap-2">
-            {withSelect && (
-              <input
-                type="checkbox"
-                aria-label={`Выбрать «${t.title}»`}
-                checked={isSelected}
-                onChange={() => onToggleSelect?.(t.id)}
-                className="ml-1 shrink-0"
-              />
-            )}
-            <Link
-              to={`/tasks/${t.id}`}
-              className={clsx(
-                "card-interactive flex flex-1 items-center justify-between gap-3 px-4 py-3",
-                isSelected && "ring-2 ring-brand-500/40",
-              )}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">{t.title}</div>
-                <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
-                  <StatusChip status={t.status} />
-                  <PriorityChip priority={t.priority} />
-                  {t.deadline && <span>до {new Date(t.deadline).toLocaleDateString("ru-RU")}</span>}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {t.assignee && <Avatar name={t.assignee.name} size={26} url={t.assignee.avatar_url} />}
-                {onDelete && <span className="w-6" aria-hidden />}
-              </div>
-            </Link>
-            {onDelete && (
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); onDelete(t.id); }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-950/30"
-                title="Удалить задачу"
-                aria-label="Удалить задачу"
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
-          </div>
-        );
-      }}
-    />
-  );
-}
 
-function CalendarView({ tasks }: { tasks: TaskListItem[] }) {
+export function CalendarView({ tasks }: { tasks: TaskListItem[] }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const base = new Date();
   base.setMonth(base.getMonth() + monthOffset);

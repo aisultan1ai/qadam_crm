@@ -99,6 +99,20 @@ export type TaskListItem = {
   deadline?: string | null;
   created_at: string;
   order_index: number;
+  parent_task_id?: number | null;
+  custom_status_id?: number | null;
+};
+
+/** Свой статус задачи компании; category — базовый статус для фильтров, отчётов и канбана. */
+export type TaskStatusDef = {
+  id: number;
+  code: string;
+  label: string;
+  color: string;
+  category: TaskStatus;
+  order_index: number;
+  is_default: boolean;
+  is_terminal: boolean;
 };
 
 export type TaskReminderKind = "before_deadline" | "before_start";
@@ -131,6 +145,7 @@ export type Notification = {
   body?: string | null;
   task_id?: number | null;
   is_read: boolean;
+  snoozed_until?: string | null;
   created_at: string;
 };
 

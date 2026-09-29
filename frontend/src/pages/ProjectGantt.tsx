@@ -1,89 +1,72 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import Gantt from "frappe-gantt";
 // @ts-ignore no types for CSS side-effect import in 0.8.1
 import "frappe-gantt/dist/frappe-gantt.css";
-import { api } from "@/api/client";
-import type { TaskListItem, Project, Page } from "@/types";
+import type { TaskListItem } from "@/types";
 import { EmptyState } from "@/components/ui";
-import { CalendarClock, ArrowLeft } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 
 import { Segmented } from "@/components/page";
 type ViewMode = "Day" | "Week" | "Month";
 
+/** Старый адрес /projects/:id/gantt → вкладка «Ганта» на странице проекта. */
 export default function ProjectGanttPage() {
   const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/projects/${id}?view=gantt`} replace />;
+}
+
+function localDay(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Диаграмма Ганта по задачам: начало = дата начала (или создания), конец = срок (или +1 день). */
+export function GanttView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen?: (id: number) => void }) {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const ganttRef = useRef<any>(null);
   const [view, setView] = useState<ViewMode>("Week");
 
-  const projectId = id ? Number(id) : null;
-
-  const { data: project } = useQuery({
-    queryKey: ["project", projectId],
-    queryFn: async () => (await api.get<Project>(`/api/projects/${projectId}`)).data,
-    enabled: !!projectId,
-  });
-
-  const { data: tasks, isPending } = useQuery({
-    queryKey: ["project-tasks-gantt", projectId],
-    queryFn: async () =>
-      (await api.get<Page<TaskListItem>>("/api/tasks", { params: { project_id: projectId, per_page: 500 } })).data.items,
-    enabled: !!projectId,
-  });
-
   useEffect(() => {
-    if (!containerRef.current || !tasks) return;
-
-    // frappe-gantt требует start/end. У задачи есть только deadline —
-    // используем: start = created_at, end = deadline. Если deadline нет — end = start + 1d.
-    const items = tasks
-      .filter((t) => t.deadline || t.created_at)
-      .map((t) => {
-        const startISO = t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
-        const endBase = t.deadline ? new Date(t.deadline) : new Date(new Date(startISO).getTime() + 24 * 60 * 60 * 1000);
-        const endISO = endBase.toISOString().slice(0, 10);
-        const progress = t.status === "done" ? 100 : t.status === "review" ? 75 : t.status === "in_progress" ? 50 : t.status === "cancelled" ? 0 : 10;
-        return {
-          id: String(t.id),
-          name: t.title,
-          start: startISO,
-          end: endISO,
-          progress,
-          custom_class: t.status === "done" ? "bar-done" : t.status === "cancelled" ? "bar-cancelled" : "bar-active",
-        };
-      });
-
-    if (items.length === 0) return;
-
+    if (!containerRef.current || tasks.length === 0) return;
+    const items = tasks.map((t) => {
+      const start = new Date(t.start_date || t.created_at);
+      let end = t.deadline ? new Date(t.deadline) : new Date(start.getTime() + 86_400_000);
+      if (end < start) end = start;
+      const progress = t.status === "done" ? 100 : t.status === "review" ? 75 : t.status === "in_progress" ? 50 : t.status === "cancelled" ? 0 : 10;
+      return {
+        id: String(t.id),
+        name: t.title,
+        start: localDay(start),
+        end: localDay(end),
+        progress,
+        custom_class: t.status === "done" ? "bar-done" : t.status === "cancelled" ? "bar-cancelled" : "bar-active",
+      };
+    });
     containerRef.current.innerHTML = "";
-    const gantt = new (Gantt as any)(containerRef.current, items, {
+    new (Gantt as any)(containerRef.current, items, {
       view_mode: view,
       language: "ru",
-      on_click: (task: any) => navigate(`/tasks/${task.id}`),
+      on_click: (task: any) => (onOpen ? onOpen(Number(task.id)) : navigate(`/tasks/${task.id}`)),
       readonly: true,
       bar_height: 22,
       padding: 16,
     });
-    ganttRef.current = gantt;
-  }, [tasks, view, navigate]);
+  }, [tasks, view, navigate, onOpen]);
 
-  if (!projectId) {
-    return <EmptyState icon={<CalendarClock size={32} />} title="Проект не выбран" />;
+  if (tasks.length === 0) {
+    return (
+      <EmptyState
+        icon={<CalendarClock size={32} />}
+        title="Задач в проекте нет"
+        description="Создайте задачи со сроками, чтобы увидеть диаграмму"
+      />
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="page-header">
-        <div>
-          <Link to={`/projects/${projectId}`} className="mb-1 inline-flex items-center gap-1 text-xs text-neutral-500 hover:text-brand-600">
-            <ArrowLeft size={12} /> К проекту
-          </Link>
-          <h1 className="page-title">Диаграмма Ганта</h1>
-          <p className="page-subtitle">{project?.name || `Проект #${projectId}`}</p>
-        </div>
+    <div className="space-y-3">
+      <div className="flex justify-end">
         <Segmented
           label="Масштаб"
           value={view}
@@ -95,21 +78,13 @@ export default function ProjectGanttPage() {
           ]}
         />
       </div>
-
-      {isPending ? (
-        <div className="h-96 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
-      ) : !tasks || tasks.length === 0 ? (
-        <EmptyState icon={<CalendarClock size={32} />} title="Задач в проекте нет" description="Создайте задачи с дедлайнами, чтобы увидеть диаграмму" />
-      ) : (
-        <div className="card overflow-x-auto p-3">
-          <div ref={containerRef} />
-        </div>
-      )}
-
+      <div className="card overflow-x-auto p-3">
+        <div ref={containerRef} />
+      </div>
       <style>{`
         .bar-done .bar { fill: #10B981 !important; }
         .bar-cancelled .bar { fill: #9CA3AF !important; }
-        .bar-active .bar { fill: #2A52C4 !important; }
+        .bar-active .bar { fill: rgb(var(--brand-600)) !important; }
       `}</style>
     </div>
   );

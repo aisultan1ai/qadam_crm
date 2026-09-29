@@ -7,11 +7,11 @@ import { ArrowRight, Check, ChevronDown, Menu, X } from "lucide-react";
 import { api, extractApiError } from "../api/client";
 import { trackEvent } from "@/lib/analytics";
 import { LogoMark } from "@/components/Logo";
-import heroProduct from "@/assets/illustrations/hero-product.svg";
 import moduleSales from "@/assets/illustrations/module-sales.svg";
-import moduleProjects from "@/assets/illustrations/module-projects.svg";
-import moduleComms from "@/assets/illustrations/module-comms.svg";
 import moduleTeam from "@/assets/illustrations/module-team.svg";
+import platformAutomation from "@/assets/illustrations/platform-automation.svg";
+import securityAccess from "@/assets/illustrations/security-access.svg";
+import { ProductDemo } from "./landing/ProductDemo";
 
 // ---------------------------------------------------------------------------
 // Минималистичный лендинг: видео-герой на весь экран, мало текста.
@@ -26,13 +26,6 @@ const NAV_LINKS = [
   { href: "#product", label: "Продукт" },
   { href: "#modules", label: "Модули" },
   { href: "#pricing", label: "Тарифы" },
-];
-
-const MODULES = [
-  { art: moduleSales, title: "Продажи", text: "Лиды, сделки и воронка с прогнозом." },
-  { art: moduleProjects, title: "Проекты", text: "Задачи, канбан, Ганта и учёт времени." },
-  { art: moduleComms, title: "Коммуникации", text: "Telegram, WhatsApp, Instagram и почта." },
-  { art: moduleTeam, title: "Команда", text: "Оргструктура, отпуска, цели и календарь." },
 ];
 
 type PlanInfo = {
@@ -76,6 +69,7 @@ export default function Landing() {
       <main id="main">
         <Hero />
         <Product />
+        <Integrations />
         <Modules />
         <Pricing />
         <FinalCta />
@@ -228,7 +222,7 @@ function Hero() {
           CRM и управление работой
         </span>
         <h1
-          className="qd-fade-up mt-7 max-w-4xl text-[42px] font-light leading-[1.05] tracking-[-0.035em] text-[#F4F5F7] sm:text-[60px] lg:text-[76px]"
+          className="qd-fade-up mt-7 max-w-4xl font-display text-[42px] font-bold leading-[1.04] tracking-[-0.04em] text-white sm:text-[60px] lg:text-[72px]"
           style={{ animationDelay: "120ms" }}
         >
           Клиенты, задачи и команда —<br className="hidden sm:block" />{" "}
@@ -281,64 +275,98 @@ function Hero() {
 
 // ---------------------------------------------------------------------------
 
+const H2 = "font-display text-[34px] font-bold leading-[1.1] tracking-[-0.035em] text-zinc-950 sm:text-[48px]";
+
 function Product() {
   return (
-    <section id="product" className="scroll-mt-16 bg-white py-24 lg:py-32">
-      <div className={clsx(container, "flex flex-col items-center text-center")}>
-        <h2 className="max-w-2xl text-[32px] font-light leading-[1.15] tracking-[-0.025em] text-zinc-950 sm:text-[44px]">
-          Один экран вместо <span className="text-brand-600">десятка вкладок</span>
-        </h2>
-        <div className="relative mt-14 w-full max-w-[920px]">
-          <div aria-hidden className="absolute inset-x-10 bottom-0 top-10 rounded-[40px] bg-[radial-gradient(closest-side,rgb(var(--brand-100)),transparent)] blur-2xl" />
-          <img
-            src={heroProduct}
-            alt="Интерфейс Qadam: задачи на канбан-доске, карточка сделки, сообщение из открытых линий"
-            width={640}
-            height={480}
-            loading="lazy"
-            className="relative mx-auto w-full"
-          />
+    <section id="product" className="scroll-mt-16 bg-[#F4F5F8] py-24 lg:py-28">
+      <div className={container}>
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className={H2}>Вся работа компании — в одном месте</h2>
+          <p className="mt-4 text-[17px] text-zinc-500">Выберите раздел и посмотрите, как это выглядит внутри.</p>
         </div>
-        <ul className="mt-12 flex flex-wrap justify-center gap-x-10 gap-y-3 text-[15px] text-zinc-600">
-          {["Роли и права доступа", "Автоматизации без кода", "Отчёты в реальном времени"].map((t) => (
-            <li key={t} className="flex items-center gap-2">
-              <Check size={16} className="text-brand-600" /> {t}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-14">
+          <ProductDemo />
+        </div>
       </div>
     </section>
   );
 }
 
+const FEATURES: { title: string; text: string; art?: string; dark?: boolean; span: string }[] = [
+  { title: "Автоматизации без кода", text: "Событие, условие, действия и задержки — рутина выполняется сама.", art: platformAutomation, span: "lg:col-span-2" },
+  { title: "Права доступа", text: "Каждый видит только то, что ему нужно.", art: securityAccess, dark: true, span: "lg:row-span-2" },
+  { title: "Продажи", text: "Лиды, сделки и воронка с прогнозом.", art: moduleSales, span: "" },
+  { title: "Команда", text: "Оргструктура, отпуска, цели.", art: moduleTeam, span: "" },
+];
+
 function Modules() {
   return (
-    <section id="modules" className="scroll-mt-16 bg-zinc-50 py-24 lg:py-32">
+    <section id="modules" className="scroll-mt-16 bg-white py-24 lg:py-32">
       <div className={container}>
-        <h2 className="mx-auto max-w-2xl text-center text-[32px] font-light leading-[1.15] tracking-[-0.025em] text-zinc-950 sm:text-[44px]">
-          Всё, чем живёт компания
-        </h2>
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {MODULES.map((m) => (
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className={H2}>Всё, чем живёт компания</h2>
+          <p className="mt-4 text-[17px] text-zinc-500">Модули связаны между собой — без переключений между сервисами.</p>
+        </div>
+        <div className="mt-14 grid gap-5 lg:grid-cols-3">
+          {FEATURES.map((f) => (
             <article
-              key={m.title}
-              className="group rounded-2xl border border-zinc-200 bg-white p-5 transition-[border-color,box-shadow] duration-300 hover:border-zinc-300 hover:shadow-pop"
+              key={f.title}
+              className={clsx(
+                "group flex flex-col overflow-hidden rounded-3xl p-7 transition-transform duration-500",
+                f.dark ? "bg-[#0F1216] text-white" : "bg-[#F4F5F8] text-zinc-950",
+                f.span,
+              )}
             >
-              <div className="overflow-hidden rounded-xl bg-zinc-50 px-3 py-4">
-                <img
-                  src={m.art}
-                  alt=""
-                  width={360}
-                  height={180}
-                  loading="lazy"
-                  className="w-full transition-transform duration-500 group-hover:scale-[1.03]"
-                />
-              </div>
-              <h3 className="mt-5 text-[17px] font-semibold text-zinc-950">{m.title}</h3>
-              <p className="mt-1 text-sm text-zinc-500">{m.text}</p>
+              <h3 className="font-display text-[22px] font-bold tracking-[-0.02em]">{f.title}</h3>
+              <p className={clsx("mt-1.5 text-[15px]", f.dark ? "text-white/60" : "text-zinc-500")}>{f.text}</p>
+              {f.art && (
+                <div className="mt-6 flex flex-1 items-end">
+                  <img
+                    src={f.art}
+                    alt=""
+                    loading="lazy"
+                    className="w-full rounded-xl transition-transform duration-700 group-hover:-translate-y-1"
+                  />
+                </div>
+              )}
             </article>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+const INTEGRATIONS: [string, string][] = [
+  ["Telegram", "#229ED9"],
+  ["WhatsApp", "#25D366"],
+  ["Instagram", "#E1306C"],
+  ["Google Calendar", "#4285F4"],
+  ["Google Drive", "#0F9D58"],
+  ["Dropbox", "#0061FF"],
+  ["Twilio", "#F22F46"],
+  ["Email (IMAP/SMTP)", "#697180"],
+];
+
+function Integrations() {
+  const row = [...INTEGRATIONS, ...INTEGRATIONS];
+  return (
+    <section aria-label="Интеграции" className="overflow-hidden border-y border-zinc-200 bg-white py-10">
+      <p className="text-center text-[13px] font-medium uppercase tracking-[0.12em] text-zinc-400">Работает с сервисами, которые вы уже используете</p>
+      <div className="relative mt-7 [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
+        <ul className="qd-marquee flex w-max gap-3">
+          {row.map(([name, color], i) => (
+            <li
+              key={i}
+              aria-hidden={i >= INTEGRATIONS.length}
+              className="flex shrink-0 items-center gap-2.5 rounded-full border border-zinc-200 bg-white px-5 py-2.5 text-[15px] font-medium text-zinc-700"
+            >
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+              {name}
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
@@ -365,7 +393,7 @@ function Pricing() {
   return (
     <section id="pricing" className="scroll-mt-16 bg-white py-24 lg:py-32">
       <div className={container}>
-        <h2 className="mx-auto max-w-2xl text-center text-[32px] font-light leading-[1.15] tracking-[-0.025em] text-zinc-950 sm:text-[44px]">
+        <h2 className={clsx("mx-auto max-w-2xl text-center", H2)}>
           Начните бесплатно
         </h2>
         <p className="mt-4 text-center text-[15px] text-zinc-500">Тариф меняется в настройках в любой момент.</p>
@@ -402,7 +430,7 @@ function Pricing() {
                     {featured && <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs">Популярный</span>}
                   </div>
                   <div className="mt-6 flex items-baseline gap-1.5">
-                    <span className="text-[40px] font-light leading-none tracking-tight tabular-nums">{price}</span>
+                    <span className="font-display text-[40px] font-bold leading-none tracking-[-0.03em] tabular-nums">{price}</span>
                     {p.price_month != null && (
                       <span className={clsx("text-sm", featured ? "text-white/60" : "text-zinc-500")}>
                         {p.currency === "KZT" ? "₸" : p.currency} / мес
@@ -473,7 +501,7 @@ function FinalCta() {
     <section id="contact" className="relative isolate scroll-mt-16 overflow-hidden bg-[#0B0D11] py-24 text-white lg:py-32">
       <div aria-hidden className="qd-drift-1 absolute -left-40 top-0 h-[520px] w-[520px] rounded-full bg-[radial-gradient(closest-side,rgb(42_82_196/0.45),transparent)] blur-2xl" />
       <div className={clsx(container, "relative flex flex-col items-center text-center")}>
-        <h2 className="max-w-2xl text-[32px] font-light leading-[1.15] tracking-[-0.025em] sm:text-[44px]">
+        <h2 className="max-w-2xl font-display text-[34px] font-bold leading-[1.1] tracking-[-0.035em] sm:text-[48px]">
           Покажем Qadam на ваших процессах
         </h2>
         <p className="mt-4 text-[15px] text-white/60">Оставьте контакт — созвонимся и поможем с настройкой.</p>

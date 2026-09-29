@@ -13,6 +13,7 @@ import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
+import { FavoriteButton } from "@/hooks/useFavorites";
 
 // ============================================================================
 // Types
@@ -548,7 +549,8 @@ function ArticleView({ article, onEdit }: { article: ArticleFull; onEdit: () => 
             <p className="mt-1 text-sm text-neutral-500">{article.summary}</p>
           )}
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          <FavoriteButton entity="wiki" id={article.id} />
           <Button variant="ghost" size="sm" className="!py-1 !px-2" onClick={() => setShowVersions((v) => !v)}>
             <History size={13} /> Версии
           </Button>

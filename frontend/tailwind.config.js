@@ -37,6 +37,8 @@ export default {
           "Roboto",
           "sans-serif",
         ],
+        // Заголовки лендинга (жирный геометрический гротеск с кириллицей, в духе ClickUp).
+        display: ["Onest", '"IBM Plex Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ['"IBM Plex Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {

@@ -17,6 +17,7 @@ import { SettingsRouteLayout } from "@/components/page";
 import SecurityPolicy from "./SecurityPolicy";
 import IntegrationsPage from "./Integrations";
 import Directories from "./Directories";
+import TaskStatuses from "./TaskStatuses";
 type TabDef = {
   to: string;
   label: string;
@@ -38,6 +39,7 @@ const SETTINGS_TABS: TabDef[] = [
   { to: "billing", label: "Тариф", icon: CreditCard, ownerOnly: true },
   { to: "security", label: "Безопасность", icon: Shield, perm: "settings.system" },
   { to: "services", label: "Сервисы и хранилища", icon: Puzzle },
+  { to: "task-statuses", label: "Статусы задач", icon: Hash, perm: "settings.dictionaries" },
   { to: "directories", label: "Справочники", icon: BookText },
 ];
 
@@ -87,6 +89,7 @@ export default function Settings() {
         <Route path="billing" element={isOwner ? <BillingSettings /> : <Forbid />} />
         <Route path="security" element={can("settings.system") || isOwner ? <SecurityPolicy /> : <Forbid />} />
         <Route path="services" element={<IntegrationsPage />} />
+        <Route path="task-statuses" element={can("settings.dictionaries") || isOwner ? <TaskStatuses /> : <Forbid />} />
         <Route path="directories" element={<Directories />} />
       </Routes>
     </SettingsRouteLayout>

@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/Confirm";
 import type { Page } from "@/types";
 
 import { FilterSelect, PageHeader, SearchInput, Segmented, Tabs, Toolbar } from "@/components/page";
+import { useNewParam } from "@/hooks/useNewParam";
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
 
 type DealStage = "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
@@ -96,6 +97,7 @@ export default function DealsPage() {
 
   const canView = can("deals.view");
   const canCreate = can("deals.create");
+  useNewParam(() => setOpenDeal("new"), canCreate);
   const canUpdate = can("deals.update");
   const canDelete = can("deals.delete");
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Any, List, Optional
 from datetime import datetime
 
@@ -146,6 +146,10 @@ class TaskBulkUpdate(BaseModel):
     patch: TaskUpdate
 
 
+class TaskReorder(BaseModel):
+    ids: List[int] = Field(min_length=1, max_length=500)
+
+
 class TaskListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -158,6 +162,8 @@ class TaskListItem(BaseModel):
     deadline: Optional[datetime] = None
     created_at: datetime
     order_index: int
+    parent_task_id: Optional[int] = None
+    custom_status_id: Optional[int] = None
 
 
 class TaskOut(TaskListItem):
@@ -173,8 +179,6 @@ class TaskOut(TaskListItem):
     participants: List[UserBrief] = []
     reminders: List[TaskReminderOut] = []
     updated_at: datetime
-    parent_task_id: Optional[int] = None
-    custom_status_id: Optional[int] = None
     recurrence_rule: Optional[str] = None
     recurrence_parent_id: Optional[int] = None
     recurrence_next_at: Optional[datetime] = None

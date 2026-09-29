@@ -11,4 +11,5 @@ class NotificationOut(BaseModel):
     body: Optional[str] = None
     task_id: Optional[int] = None
     is_read: bool
+    snoozed_until: Optional[datetime] = None
     created_at: datetime
