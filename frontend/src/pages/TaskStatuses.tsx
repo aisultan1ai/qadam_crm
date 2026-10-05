@@ -170,7 +170,7 @@ export default function TaskStatuses() {
                   aria-pressed={d.is_default}
                   className={clsx(
                     "grid h-8 w-8 shrink-0 place-items-center rounded-md transition-colors",
-                    d.is_default ? "text-amber-500" : "text-zinc-300 hover:bg-zinc-100 hover:text-zinc-500 dark:text-zinc-600 dark:hover:bg-[#1B1F26]",
+                    d.is_default ? "text-amber-500" : "text-zinc-300 hover:bg-zinc-100 hover:text-zinc-500 dark:text-zinc-600 dark:hover:bg-[#23262D]",
                   )}
                 >
                   <Star size={15} className={clsx(d.is_default && "fill-current")} />
@@ -181,7 +181,7 @@ export default function TaskStatuses() {
                     disabled={i === 0}
                     onClick={() => move(i, -1)}
                     aria-label="Выше"
-                    className="grid h-8 w-7 place-items-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-[#1B1F26]"
+                    className="grid h-8 w-7 place-items-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-[#23262D]"
                   >
                     <ArrowUp size={14} />
                   </button>
@@ -190,7 +190,7 @@ export default function TaskStatuses() {
                     disabled={i === list.length - 1}
                     onClick={() => move(i, 1)}
                     aria-label="Ниже"
-                    className="grid h-8 w-7 place-items-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-[#1B1F26]"
+                    className="grid h-8 w-7 place-items-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-[#23262D]"
                   >
                     <ArrowDown size={14} />
                   </button>
@@ -228,7 +228,7 @@ export default function TaskStatuses() {
             aria-label="Цвет нового статуса"
             value={color}
             onChange={(e) => setColor(e.target.value)}
-            className="h-8 w-9 shrink-0 cursor-pointer rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-[#0D0F13]"
+            className="h-8 w-9 shrink-0 cursor-pointer rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-[#14161A]"
           />
           <input
             value={label}
@@ -279,7 +279,7 @@ function ColorInput({ label, value, onSave }: { label: string; value: string; on
       aria-label={label}
       value={v}
       onChange={(e) => setV(e.target.value)}
-      className="h-8 w-9 shrink-0 cursor-pointer rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-[#0D0F13]"
+      className="h-8 w-9 shrink-0 cursor-pointer rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-[#14161A]"
     />
   );
 }

@@ -96,7 +96,7 @@ export function MyWork() {
         <div className="flex items-center gap-2">
           <h2 className="card-title">Моя работа</h2>
           {data && (
-            <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-[#1B1F26] dark:text-zinc-400">
+            <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-[#23262D] dark:text-zinc-400">
               {openCount}
             </span>
           )}
@@ -133,7 +133,7 @@ export function MyWork() {
                   type="button"
                   onClick={() => toggle(b.key)}
                   aria-expanded={!isCollapsed}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-[#1B1F26]"
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-[#23262D]"
                 >
                   <ChevronDown size={15} className={clsx("text-zinc-400 transition-transform", isCollapsed && "-rotate-90")} />
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: b.color }} />
@@ -144,7 +144,7 @@ export function MyWork() {
                 {!isCollapsed && (
                   <ul>
                     {items.map((t) => (
-                      <li key={t.id} className="group flex items-center gap-2.5 py-1.5 pl-10 pr-4 hover:bg-zinc-50 dark:hover:bg-[#1B1F26]">
+                      <li key={t.id} className="group flex items-center gap-2.5 py-1.5 pl-10 pr-4 hover:bg-zinc-50 dark:hover:bg-[#23262D]">
                         <button
                           type="button"
                           disabled={!canComplete}
@@ -226,7 +226,7 @@ function QuickAddMine({ deadline, userId }: { deadline: "today" | null; userId: 
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left text-[13px] text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 dark:hover:bg-[#1B1F26] dark:hover:text-zinc-200"
+          className="flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left text-[13px] text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 dark:hover:bg-[#23262D] dark:hover:text-zinc-200"
         >
           <Plus size={14} /> {deadline === "today" ? "Задача на сегодня" : "Добавить задачу"}
         </button>

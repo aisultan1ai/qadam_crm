@@ -37,7 +37,6 @@ const OpenTaskContext = createContext<((id: number) => void) | null>(null);
 const TASKS_VIEW_STORAGE_KEY = "tasks:view";
 // Максимум, который отдаёт API за раз; при упоре показываем подсказку сузить фильтр.
 const TASKS_LIMIT = 200;
-const TASKS_SIDEBAR_STORAGE_KEY = "tasks:sidebar";
 const TASKS_GROUP_BY_STORAGE_KEY = "tasks:group-by";
 
 type View = "kanban" | "table" | "list" | "calendar";
@@ -84,6 +83,7 @@ export default function Tasks() {
   const assigneeId = readParam(sp, "assignee");
   const priority = readParam(sp, "priority");
   const status = readParam(sp, "status");
+  const overdue = sp.get("overdue") === "1";
   const rawScope = readParam(sp, "scope");
   const scope: TaskScope = TASK_SCOPES.includes(rawScope as TaskScope) ? (rawScope as TaskScope) : "all";
 
@@ -94,18 +94,6 @@ export default function Tasks() {
   const [qLocal, setQLocal] = useState(q);
   useEffect(() => setQLocal(q), [q]);
 
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    const s = window.localStorage.getItem(TASKS_SIDEBAR_STORAGE_KEY);
-    return s === null ? true : s === "1";
-  });
-  const toggleSidebar = () => {
-    setSidebarOpen((v) => {
-      const nv = !v;
-      try { window.localStorage.setItem(TASKS_SIDEBAR_STORAGE_KEY, nv ? "1" : "0"); } catch {}
-      return nv;
-    });
-  };
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<null | "status" | "priority" | "assignee" | "deadline">(null);
   const canBulk = can("tasks.bulk_update");
@@ -141,8 +129,9 @@ export default function Tasks() {
       priority: priority || undefined,
       status: status || undefined,
       scope: scope === "all" ? undefined : scope,
+      overdue: overdue || undefined,
     }),
-    [q, projectId, assigneeId, priority, status, scope],
+    [q, projectId, assigneeId, priority, status, scope, overdue],
   );
 
   const { data: tasks, isPending } = useQuery({
@@ -246,48 +235,22 @@ export default function Tasks() {
 
   return (
     <OpenTaskContext.Provider value={openTask}>
-    <div className={clsx("gap-4", sidebarOpen ? "lg:grid lg:grid-cols-[240px_minmax(0,1fr)]" : "block")}>
-      {sidebarOpen && (
-        <TasksSidebar
-          scope={scope}
-          projectId={projectId}
-          projects={projects ?? []}
-          canCreateTask={canCreate}
-          onScopeChange={(s) => updateParam("scope", s === "all" ? "" : s)}
-          onProjectChange={(pid) => updateParam("project", pid ? String(pid) : "")}
-          onClose={toggleSidebar}
-        />
-      )}
-
-    <div className="min-w-0 space-y-5">
+    <div>
+    <div className="min-w-0 space-y-4">
       <div className="page-header">
-        <div className="flex items-center gap-2">
-          {!sidebarOpen && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              aria-label="Показать боковую панель"
-              title="Показать боковую панель"
-            >
-              <PanelLeftOpen size={16} />
-            </Button>
-          )}
-          <div>
-            <h1 className="page-title">
-              {activeScopeTab && activeScopeTab.key !== "all" ? activeScopeTab.label : "Задачи"}
-              {activeProject && (
-                <span className="ml-2 text-lg font-normal text-neutral-500">
-                  / {activeProject.name}
-                </span>
-              )}
-            </h1>
-            <p className="page-subtitle">
-              {(tasks?.length ?? 0) >= TASKS_LIMIT
-                ? `Показаны первые ${TASKS_LIMIT} задач — уточните фильтр`
-                : `${tasks?.length ?? 0} задач`}
-            </p>
+        <div className="min-w-0">
+          <div className="mb-0.5 text-[12px] text-zinc-500">
+            Задачи{activeProject ? ` · ${activeProject.name}` : ""}
           </div>
+          <h1 className="page-title flex items-baseline gap-2">
+            {overdue ? "Просроченные" : activeScopeTab && activeScopeTab.key !== "all" ? activeScopeTab.label : "Все задачи"}
+            <span className="text-[13px] font-medium tabular-nums text-zinc-400">
+              {(tasks?.length ?? 0) >= TASKS_LIMIT ? `${TASKS_LIMIT}+` : tasks?.length ?? 0}
+            </span>
+          </h1>
+          {(tasks?.length ?? 0) >= TASKS_LIMIT && (
+            <p className="page-subtitle">Показаны первые {TASKS_LIMIT} задач — уточните фильтр</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {view === "list" && <GroupByButton value={groupBy} onChange={setGroupBy} />}
@@ -557,147 +520,6 @@ export default function Tasks() {
   );
 }
 
-function TasksSidebar({
-  scope,
-  projectId,
-  projects,
-  canCreateTask,
-  onScopeChange,
-  onProjectChange,
-  onClose,
-}: {
-  scope: TaskScope;
-  projectId: string;
-  projects: Project[];
-  canCreateTask: boolean;
-  onScopeChange: (s: TaskScope) => void;
-  onProjectChange: (pid: number | null) => void;
-  onClose: () => void;
-}) {
-  const [projectsOpen, setProjectsOpen] = useState(true);
-  const currentPid = projectId ? Number(projectId) : null;
-
-  const scopeItems: { key: TaskScope; label: string; icon: React.ReactNode }[] = [
-    { key: "all", label: "Все задачи", icon: <ListChecks size={14} /> },
-    { key: "incoming", label: "Мне назначены", icon: <Inbox size={14} /> },
-    { key: "outgoing", label: "Я поставил", icon: <ArrowUpCircle size={14} /> },
-    { key: "audited", label: "Наблюдаю", icon: <Eye size={14} /> },
-  ];
-
-  return (
-    <aside className="card sticky top-4 h-fit self-start p-3 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Разделы
-        </h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          aria-label="Скрыть боковую панель"
-          title="Скрыть боковую панель"
-        >
-          <PanelLeftClose size={14} />
-        </Button>
-      </div>
-
-      <nav aria-label="Категории задач" className="space-y-0.5">
-        {scopeItems.map((it) => {
-          const active = scope === it.key;
-          return (
-            <button
-              key={it.key}
-              type="button"
-              onClick={() => onScopeChange(it.key)}
-              className={clsx(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                active
-                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                  : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800/60",
-              )}
-              aria-current={active ? "page" : undefined}
-            >
-              <span className="shrink-0 opacity-70">{it.icon}</span>
-              <span className="truncate">{it.label}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={() => setProjectsOpen((v) => !v)}
-          className="flex w-full items-center justify-between rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800/40"
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <FolderKanban size={12} />
-            Проекты
-            <span className="normal-case font-normal text-neutral-400">
-              ({projects.length})
-            </span>
-          </span>
-          {projectsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </button>
-
-        {projectsOpen && (
-          <div className="mt-1 space-y-0.5">
-            <button
-              type="button"
-              onClick={() => onProjectChange(null)}
-              className={clsx(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                !currentPid
-                  ? "bg-neutral-100 font-medium dark:bg-neutral-800/60"
-                  : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/40",
-              )}
-            >
-              <span className="ml-1 inline-flex h-1.5 w-1.5 rounded-full bg-neutral-400" />
-              <span className="truncate">Все проекты</span>
-            </button>
-            {projects.map((p) => {
-              const active = currentPid === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onProjectChange(p.id)}
-                  className={clsx(
-                    "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                    active
-                      ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                      : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800/60",
-                  )}
-                  aria-current={active ? "page" : undefined}
-                  title={p.name}
-                >
-                  <span
-                    className="ml-1 inline-flex h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: (p as any).color || "#2A52C4" }}
-                  />
-                  <span className="truncate">{p.name}</span>
-                </button>
-              );
-            })}
-            {projects.length === 0 && (
-              <div className="px-2 py-1.5 text-xs text-neutral-400">Проектов пока нет</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {canCreateTask && (
-        <Link
-          to="/projects"
-          className="mt-3 flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-neutral-300 px-2 py-1.5 text-xs text-neutral-500 hover:border-brand-400 hover:text-brand-600 dark:border-neutral-700 dark:hover:border-brand-500"
-        >
-          <Plus size={12} /> Новый проект
-        </Link>
-      )}
-    </aside>
-  );
-}
-
 /** Канбан по базовым статусам с перетаскиванием; клик по карточке открывает задачу (onOpen — боковая панель). */
 export function KanbanBoard({
   tasks,
@@ -834,8 +656,8 @@ function KanbanColumn({
         isOver
           ? "border-brand-500 bg-brand-50 shadow-[0_0_0_4px_rgba(42,82,196,0.12)] dark:border-brand-500 dark:bg-brand-900/15"
           : isDraggingSomething
-          ? "border-dashed border-neutral-300 bg-neutral-50/40 dark:border-neutral-700/60 dark:bg-[#14171C]"
-          : "border-transparent bg-neutral-100/70 dark:bg-[#14171C]",
+          ? "border-dashed border-neutral-300 bg-neutral-50/40 dark:border-neutral-700/60 dark:bg-[#1B1E23]"
+          : "border-transparent bg-neutral-100/70 dark:bg-[#1B1E23]",
       )}
     >
       <div className="mb-2 flex items-center gap-2 px-1 pt-0.5">
@@ -901,7 +723,7 @@ const KanbanCard = memo(function KanbanCard({
         else nav(`/tasks/${task.id}`);
       }}
       className={clsx(
-        "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#1B1F26]",
+        "group relative cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 shadow-soft transition-all duration-[220ms] ease-out-soft hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-700/50 dark:bg-[#23262D]",
         landed && "animate-settle",
       )}
     >
@@ -934,7 +756,7 @@ const KanbanCard = memo(function KanbanCard({
 function KanbanCardGhost({ task }: { task: TaskListItem }) {
   return (
     <div
-      className="rounded-xl border border-brand-300 bg-white p-3 shadow-[0_18px_40px_-12px_rgba(23,23,31,0.35)] dark:border-brand-500/60 dark:bg-[#1B1F26]"
+      className="rounded-xl border border-brand-300 bg-white p-3 shadow-[0_18px_40px_-12px_rgba(23,23,31,0.35)] dark:border-brand-500/60 dark:bg-[#23262D]"
       style={{
         width: 240,
         transform: "rotate(2.5deg) scale(1.03)",
@@ -1594,7 +1416,7 @@ function BulkToolbar({
       <div
         role="toolbar"
         aria-label="Действия с выбранными задачами"
-        className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl bg-sidebar px-2 py-1.5 text-white shadow-pop animate-slide-up"
+        className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl bg-rail px-2 py-1.5 text-white shadow-pop animate-slide-up"
       >
         <span className="px-2 text-[13px] font-medium tabular-nums">Выбрано: {count}</span>
         <span className="mx-1 h-4 w-px bg-white/15" />
@@ -1753,7 +1575,7 @@ function FilterDrawer({
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Фильтры задач">
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#14171C]">
+      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 animate-slide-up dark:bg-[#1B1E23]">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold">Фильтры</h3>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Закрыть фильтры">

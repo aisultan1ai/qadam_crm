@@ -3,28 +3,29 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api, extractApiError } from "@/api/client";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Archive, ArchiveRestore, Trash2, Search, FolderKanban } from "lucide-react";
 import clsx from "clsx";
 import type { Project, UserBrief, Page, User } from "@/types";
 import { useAuth } from "@/store/auth";
 import { Modal, Avatar, EmptyState, FieldError, FormError } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
-import { SkeletonCard } from "@/components/Skeleton";
+import { SkeletonTable } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { projectSchema, type ProjectForm } from "@/lib/validation";
 
-import { SearchInput, Tabs } from "@/components/page";
+import { SearchInput } from "@/components/page";
 import { useNewParam } from "@/hooks/useNewParam";
 type ProjectScope = "all" | "participating" | "made_by_me" | "audited_by_me";
 
-const SCOPE_TABS: { key: ProjectScope; label: string }[] = [
-  { key: "all", label: "Все" },
-  { key: "participating", label: "Участвую" },
-  { key: "made_by_me", label: "Мои" },
-  { key: "audited_by_me", label: "Наблюдаю" },
-];
+// Область задаёт панель модуля (?scope=…); заголовок страницы — по ней.
+const SCOPE_TITLE: Record<ProjectScope, string> = {
+  all: "Все проекты",
+  participating: "Я участвую",
+  made_by_me: "Созданы мной",
+  audited_by_me: "Наблюдаю",
+};
 
 export default function Projects() {
   const { can } = useAuth();
@@ -35,7 +36,10 @@ export default function Projects() {
   const [showArchived, setShowArchived] = useState(false);
   const [openNew, setOpenNew] = useState(false);
   useNewParam(() => setOpenNew(true), can("projects.create"));
-  const [scope, setScope] = useState<ProjectScope>("all");
+  const [sp] = useSearchParams();
+  const nav = useNavigate();
+  const rawScope = sp.get("scope") as ProjectScope | null;
+  const scope: ProjectScope = rawScope && rawScope in SCOPE_TITLE ? rawScope : "all";
 
   const { data, isPending } = useQuery({
     queryKey: ["projects", q, showArchived, scope],
@@ -62,33 +66,32 @@ export default function Projects() {
   const canCreate = can("projects.create");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="page-header">
-        <div>
-          <h1 className="page-title">Проекты</h1>
-          <p className="page-subtitle">{data?.length ?? 0} проектов</p>
+        <div className="min-w-0">
+          <div className="mb-0.5 text-[12px] text-zinc-500">Проекты</div>
+          <h1 className="page-title flex items-baseline gap-2">
+            {SCOPE_TITLE[scope]}
+            <span className="text-[13px] font-medium tabular-nums text-zinc-400">{data?.length ?? 0}</span>
+          </h1>
         </div>
         {canCreate && (
           <Button variant="primary" onClick={() => setOpenNew(true)}>
-            <Plus size={16} /> Новый проект
+            <Plus size={15} /> Новый проект
           </Button>
         )}
       </div>
 
-      <Tabs label="Область проектов" value={scope} onChange={setScope} items={SCOPE_TABS} />
-
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput value={q} onChange={setQ} placeholder="Поиск" />
-        <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-          Архивные
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск проекта" />
+        <label className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 text-[13px] text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5">
+          <input type="checkbox" className="accent-brand-600" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Показать архивные
         </label>
       </div>
 
       {isPending ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
+        <SkeletonTable />
       ) : !data || data.length === 0 ? (
         <EmptyState
           icon={<FolderKanban size={32} />}
@@ -105,61 +108,110 @@ export default function Projects() {
           ) : undefined}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {data.map((p) => (
-            <div key={p.id} className="card-interactive group flex flex-col p-5">
-              <div className="mb-2 flex items-start justify-between">
-                <Link to={`/projects/${p.id}`} className="text-base font-semibold hover:text-brand-600">
-                  <span
-                    className="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle"
-                    style={{ background: p.color || "#2A52C4" }}
-                  />
-                  {p.name}
-                </Link>
-                <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                  {can("projects.archive") && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title={p.is_archived ? "Вернуть" : "Архивировать"}
-                      aria-label={p.is_archived ? `Вернуть проект «${p.name}» из архива` : `Архивировать проект «${p.name}»`}
-                      onClick={() => archive.mutate(p.id)}
-                    >
-                      {p.is_archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
-                    </Button>
-                  )}
-                  {can("projects.delete") && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-rose-500"
-                      title="Удалить"
-                      aria-label={`Удалить проект «${p.name}»`}
-                      onClick={() =>
-                        confirm({
-                          title: "Удалить проект?",
-                          message: `«${p.name}» будет удалён вместе с задачами.`,
-                          danger: true,
-                          confirmLabel: "Удалить",
-                          onConfirm: () => del.mutateAsync(p.id),
-                        })
-                      }
-                    >
-                      <Trash2 size={15} />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <p className="mb-4 line-clamp-2 min-h-[2.5rem] text-sm text-neutral-500">{p.description || "—"}</p>
-              <div className="mt-auto flex items-center justify-between">
-                <MembersRow members={p.members} />
-                <span className="text-xs text-neutral-500">{p.tasks_count} задач</span>
-              </div>
-              {p.is_archived && (
-                <span className="mt-3 self-start chip bg-neutral-100 text-neutral-500 dark:bg-neutral-800">архив</span>
-              )}
-            </div>
-          ))}
+        <div className="table-container">
+          <div className="table-scroll">
+            <table className="w-full min-w-[760px]" aria-label="Проекты">
+              <thead className="table-head">
+                <tr>
+                  <th className="table-head-cell">Проект</th>
+                  <th className="table-head-cell w-44">Руководитель</th>
+                  <th className="table-head-cell w-36">Участники</th>
+                  <th className="table-head-cell w-24 text-right">Задачи</th>
+                  <th className="table-head-cell w-28">Срок</th>
+                  <th className="table-head-cell w-28">Статус</th>
+                  <th className="table-head-cell w-20" />
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((p) => (
+                  <tr key={p.id} className="table-row group cursor-pointer" onClick={() => nav(`/projects/${p.id}`)}>
+                    <td className="table-cell">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span
+                          aria-hidden
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-semibold uppercase text-white"
+                          style={{ background: p.color || "rgb(var(--brand-600))" }}
+                        >
+                          {p.name.trim().charAt(0)}
+                        </span>
+                        <div className="min-w-0">
+                          <Link
+                            to={`/projects/${p.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="block truncate font-medium text-zinc-900 hover:text-brand-700 dark:text-zinc-100 dark:hover:text-brand-300"
+                          >
+                            {p.name}
+                          </Link>
+                          {p.description && <div className="truncate text-[12px] text-zinc-500">{p.description}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="table-cell">
+                      {p.owner ? (
+                        <span className="flex items-center gap-2">
+                          <Avatar name={p.owner.name} url={p.owner.avatar_url} size={22} />
+                          <span className="truncate">{p.owner.name}</span>
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400">—</span>
+                      )}
+                    </td>
+                    <td className="table-cell">
+                      {p.members.length ? <MembersRow members={p.members} /> : <span className="text-zinc-400">—</span>}
+                    </td>
+                    <td className="table-cell text-right tabular-nums">{p.tasks_count}</td>
+                    <td className="table-cell tabular-nums text-zinc-500">
+                      {p.deadline ? new Date(p.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                    </td>
+                    <td className="table-cell">
+                      {p.is_archived ? (
+                        <span className="chip bg-zinc-100 text-zinc-500 dark:bg-white/5 dark:text-zinc-400">Архив</span>
+                      ) : (
+                        <span className="chip bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Активен
+                        </span>
+                      )}
+                    </td>
+                    <td className="table-cell" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                        {can("projects.archive") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={p.is_archived ? "Вернуть" : "Архивировать"}
+                            aria-label={p.is_archived ? `Вернуть проект «${p.name}» из архива` : `Архивировать проект «${p.name}»`}
+                            onClick={() => archive.mutate(p.id)}
+                          >
+                            {p.is_archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                          </Button>
+                        )}
+                        {can("projects.delete") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-rose-500"
+                            title="Удалить"
+                            aria-label={`Удалить проект «${p.name}»`}
+                            onClick={() =>
+                              confirm({
+                                title: "Удалить проект?",
+                                message: `«${p.name}» будет удалён вместе с задачами.`,
+                                danger: true,
+                                confirmLabel: "Удалить",
+                                onConfirm: () => del.mutateAsync(p.id),
+                              })
+                            }
+                          >
+                            <Trash2 size={15} />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -172,7 +224,7 @@ function MembersRow({ members }: { members: UserBrief[] }) {
   return (
     <div className="flex -space-x-2">
       {members.slice(0, 4).map((m) => (
-        <div key={m.id} className="rounded-full ring-2 ring-white dark:ring-neutral-900">
+        <div key={m.id} className="rounded-full ring-2 ring-white dark:ring-[#1B1E23]">
           <Avatar name={m.name} size={24} url={m.avatar_url} />
         </div>
       ))}

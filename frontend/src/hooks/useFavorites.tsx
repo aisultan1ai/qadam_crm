@@ -51,7 +51,7 @@ export function FavoriteButton({ entity, id, className }: { entity: FavoriteEnti
       title={on ? "Убрать из избранного" : "Добавить в избранное"}
       className={clsx(
         "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors",
-        on ? "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-[#1B1F26] dark:hover:text-zinc-200",
+        on ? "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-[#23262D] dark:hover:text-zinc-200",
         className,
       )}
     >

@@ -18,30 +18,7 @@ import SecurityPolicy from "./SecurityPolicy";
 import IntegrationsPage from "./Integrations";
 import Directories from "./Directories";
 import TaskStatuses from "./TaskStatuses";
-type TabDef = {
-  to: string;
-  label: string;
-  icon: typeof Save;
-  ownerOnly?: boolean;
-  perm?: string;
-};
-
-const SETTINGS_TABS: TabDef[] = [
-  { to: "roles", label: "Роли и права", icon: Save, perm: "roles.manage" },
-  { to: "team", label: "Команда", icon: UserPlus, perm: "users.create" },
-  { to: "forms", label: "Формы захвата", icon: Zap, perm: "leads.manage_forms" },
-  { to: "manager-availability", label: "Расписание менеджеров", icon: Clock, perm: "leads.view" },
-  { to: "messengers", label: "Открытые линии", icon: MessageCircle, perm: "messengers.manage" },
-  { to: "mailbox", label: "Почта", icon: Mail, perm: "mail.use" },
-  { to: "booking", label: "Букинг", icon: CalendarClock, perm: "booking.use" },
-  { to: "integrations", label: "Интеграции", icon: Link2, perm: "calendar.use" },
-  { to: "branding", label: "Брендинг", icon: Palette, ownerOnly: true },
-  { to: "billing", label: "Тариф", icon: CreditCard, ownerOnly: true },
-  { to: "security", label: "Безопасность", icon: Shield, perm: "settings.system" },
-  { to: "services", label: "Сервисы и хранилища", icon: Puzzle },
-  { to: "task-statuses", label: "Статусы задач", icon: Hash, perm: "settings.dictionaries" },
-  { to: "directories", label: "Справочники", icon: BookText },
-];
+import { SETTINGS_TABS, settingsTabVisible } from "./settings/nav";
 
 export default function Settings() {
   const { can, me } = useAuth();
@@ -54,14 +31,14 @@ export default function Settings() {
         to: t.to,
         label: t.label,
         icon: t.icon,
-        hidden: (t.ownerOnly && !isOwner) || (!!t.perm && !can(t.perm) && !isOwner),
+        hidden: !settingsTabVisible(t, can, isOwner),
       }))}
     >
 
       
 
       <Routes>
-        <Route index element={<Navigate to="roles" replace />} />
+        <Route index element={<Navigate to={SETTINGS_TABS.find((t) => settingsTabVisible(t, can, isOwner))?.to ?? "services"} replace />} />
         <Route path="roles" element={can("roles.manage") ? <RolesSettings /> : <Forbid />} />
         <Route path="team" element={(can("users.create") || isOwner) ? <TeamSettings /> : <Forbid />} />
         <Route path="forms" element={can("leads.manage_forms") ? <LeadFormsSettings /> : <Forbid />} />

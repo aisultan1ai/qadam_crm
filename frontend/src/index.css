@@ -9,31 +9,32 @@
  */
 :root {
   color-scheme: light;
-  --brand-50: 239 243 254;
-  --brand-100: 222 231 253;
-  --brand-200: 191 208 250;
-  --brand-300: 147 174 243;
-  --brand-400: 100 136 234;
-  --brand-500: 63 104 221;
-  --brand-600: 42 82 196;
-  --brand-700: 34 66 160;
-  --brand-800: 31 56 128;
-  --brand-900: 29 49 102;
-  --brand-950: 19 31 64;
+  /* Синий акцент по умолчанию (#2F6BEA); компания может заменить его в брендинге. */
+  --brand-50: 238 244 255;
+  --brand-100: 220 231 254;
+  --brand-200: 188 210 253;
+  --brand-300: 143 179 250;
+  --brand-400: 94 142 243;
+  --brand-500: 59 123 240;
+  --brand-600: 47 107 234;
+  --brand-700: 36 86 199;
+  --brand-800: 31 71 160;
+  --brand-900: 29 59 125;
+  --brand-950: 19 37 80;
 
-  --page-bg: #F6F7F9;
+  --page-bg: #F5F6F8;
   --surface: #FFFFFF;
-  --surface-2: #F6F7F9;
-  --line: #E1E4E9;
-  --sidebar-bg: #12151B;
+  --surface-2: #F5F6F8;
+  --line: #E5E7EB;
+  --rail-bg: #16181D;
 }
 
 html.dark {
   color-scheme: dark;
-  --page-bg: #0D0F13;
-  --surface: #14171C;
-  --surface-2: #1B1F26;
-  --line: #252A32;
+  --page-bg: #14161A;
+  --surface: #1B1E23;
+  --surface-2: #23262D;
+  --line: #2A2E36;
 }
 
 html,
@@ -47,8 +48,8 @@ html, body {
 }
 
 body {
-  @apply bg-[#F6F7F9] text-zinc-900 antialiased dark:bg-[#0D0F13] dark:text-zinc-100;
-  font-feature-settings: "kern", "liga";
+  @apply bg-[#F5F6F8] text-[13.5px] text-zinc-900 antialiased dark:bg-[#14161A] dark:text-zinc-100;
+  font-feature-settings: "kern", "liga", "cv11", "ss01";
   scrollbar-width: thin;
   scrollbar-color: rgba(105, 113, 128, 0.35) transparent;
 }
@@ -74,21 +75,21 @@ html.dark mark {
 @layer components {
   /* ---------- Buttons: прямоугольные 8px, без «глянца» ---------- */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-transparent px-3.5 py-2 text-sm font-medium leading-5
+    @apply inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent px-3 text-[13px] font-medium leading-5
            transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white
-           dark:focus-visible:ring-offset-[#0D0F13]
+           dark:focus-visible:ring-offset-[#14161A]
            disabled:cursor-not-allowed disabled:opacity-50 select-none;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white shadow-soft hover:bg-brand-700 active:bg-brand-800;
+    @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
   }
   .btn-secondary {
-    @apply btn border border-zinc-200 bg-white text-zinc-800 shadow-soft hover:border-zinc-300 hover:bg-zinc-50
-           dark:border-zinc-800 dark:bg-[#14171C] dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-[#1B1F26];
+    @apply btn border border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50
+           dark:border-zinc-800 dark:bg-[#1B1E23] dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-[#23262D];
   }
   .btn-ghost {
     @apply btn text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900
-           dark:text-zinc-400 dark:hover:bg-[#1B1F26] dark:hover:text-white;
+           dark:text-zinc-400 dark:hover:bg-[#23262D] dark:hover:text-white;
   }
   .btn-danger {
     @apply btn bg-rose-600 text-white shadow-soft hover:bg-rose-700;
@@ -96,26 +97,26 @@ html.dark mark {
 
   /* ---------- Forms ---------- */
   .input {
-    @apply block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-soft
+    @apply block h-[34px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[13.5px] text-zinc-900
            placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-[3px] focus:ring-brand-500/15
            disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500
-           dark:border-zinc-700 dark:bg-[#0D0F13] dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-400;
+           dark:border-zinc-700 dark:bg-[#14161A] dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-400;
   }
   .label {
-    @apply mb-1.5 block text-[13px] font-medium text-zinc-700 dark:text-zinc-300;
+    @apply mb-1 block text-[12.5px] font-medium text-zinc-600 dark:text-zinc-400;
   }
 
   /* ---------- Surfaces ---------- */
   .card {
     @apply rounded-xl border border-zinc-200 bg-white
-           dark:border-zinc-800 dark:bg-[#14171C];
+           dark:border-zinc-800 dark:bg-[#1B1E23];
   }
   .card-interactive {
     @apply card transition-[border-color,box-shadow] duration-150 hover:border-zinc-300 hover:shadow-pop
            dark:hover:border-zinc-700;
   }
   .card-header {
-    @apply flex items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3.5 dark:border-zinc-800;
+    @apply flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800;
   }
   .card-title {
     @apply text-sm font-semibold text-zinc-900 dark:text-zinc-100;
@@ -126,13 +127,13 @@ html.dark mark {
 
   /* ---------- Page scaffold ---------- */
   .page-header {
-    @apply flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800;
+    @apply flex flex-wrap items-center justify-between gap-3 pb-1;
   }
   .page-title {
-    @apply text-[22px] font-semibold leading-7 tracking-[-0.01em] text-zinc-900 dark:text-white;
+    @apply text-[21px] font-semibold leading-7 tracking-[-0.02em] text-zinc-900 dark:text-white;
   }
   .page-subtitle {
-    @apply mt-1 text-sm text-zinc-500 dark:text-zinc-400;
+    @apply mt-0.5 text-[13px] text-zinc-500 dark:text-zinc-400;
   }
   .section-label {
     @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400;
@@ -140,30 +141,30 @@ html.dark mark {
 
   /* ---------- Chips / badges: 6px, плоские ---------- */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ring-black/5 dark:ring-white/10;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-medium;
   }
 
   /* ---------- Tables ---------- */
   .table-container {
     @apply overflow-hidden rounded-xl border border-zinc-200 bg-white
-           dark:border-zinc-800 dark:bg-[#14171C];
+           dark:border-zinc-800 dark:bg-[#1B1E23];
   }
   .table-scroll {
     @apply w-full overflow-x-auto;
   }
   .table-head {
-    @apply sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-500
-           dark:border-zinc-800 dark:bg-[#1B1F26] dark:text-zinc-400;
+    @apply sticky top-0 z-10 border-b border-zinc-200 bg-white text-[10.5px] font-semibold uppercase tracking-[0.05em] text-zinc-500
+           dark:border-zinc-800 dark:bg-[#23262D] dark:text-zinc-400;
   }
   .table-row {
     @apply border-b border-zinc-100 transition-colors last:border-b-0 hover:bg-zinc-50
-           dark:border-zinc-800/70 dark:hover:bg-[#1B1F26];
+           dark:border-zinc-800/70 dark:hover:bg-[#23262D];
   }
   .table-cell {
-    @apply px-4 py-2.5 text-sm text-zinc-700 dark:text-zinc-300;
+    @apply px-3 py-2 text-[13px] text-zinc-700 dark:text-zinc-300;
   }
   .table-head-cell {
-    @apply px-4 py-2.5 text-left;
+    @apply px-3 py-2 text-left;
   }
 
   .link {
@@ -172,11 +173,11 @@ html.dark mark {
   .kbd {
     @apply inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded border border-zinc-200
            bg-zinc-50 px-1 font-mono text-[10px] font-medium text-zinc-500
-           dark:border-zinc-700 dark:bg-[#1B1F26] dark:text-zinc-400;
+           dark:border-zinc-700 dark:bg-[#23262D] dark:text-zinc-400;
   }
   .surface-blur {
     @apply bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80
-           dark:bg-[#0D0F13]/90 dark:supports-[backdrop-filter]:bg-[#0D0F13]/80;
+           dark:bg-[#14161A]/90 dark:supports-[backdrop-filter]:bg-[#14161A]/80;
   }
 }
 

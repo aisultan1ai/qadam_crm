@@ -175,7 +175,7 @@ export default function Notifications() {
               type="button"
               onClick={() => setLimit((l) => Math.min(l + PAGE, 200))}
               disabled={limit >= 200}
-              className="w-full border-t border-zinc-100 py-2.5 text-[13px] text-zinc-600 hover:bg-zinc-50 disabled:text-zinc-400 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-[#1B1F26]"
+              className="w-full border-t border-zinc-100 py-2.5 text-[13px] text-zinc-600 hover:bg-zinc-50 disabled:text-zinc-400 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-[#23262D]"
             >
               {limit >= 200 ? `Показаны последние 200 из ${data?.total}` : `Показать ещё (${(data?.total ?? 0) - items.length})`}
             </button>
@@ -204,7 +204,7 @@ function Item({
   const snoozeRef = useRef<HTMLButtonElement>(null);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   return (
-    <li className={clsx("group relative flex items-start gap-3 px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-[#1B1F26]", !n.is_read && "bg-brand-50/40 dark:bg-brand-500/5")}>
+    <li className={clsx("group relative flex items-start gap-3 px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-[#23262D]", !n.is_read && "bg-brand-50/40 dark:bg-brand-500/5")}>
       {!n.is_read && <span aria-label="Непрочитано" className="absolute left-1.5 top-5 h-1.5 w-1.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
       <span
         className={clsx(

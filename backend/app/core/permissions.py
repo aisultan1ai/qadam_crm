@@ -122,8 +122,9 @@ def user_has(user, codes: Iterable[str], tenant_id: Optional[int] = None) -> boo
 
     Раньше функция перебирала ВСЕ user.roles без фильтра, из-за чего
     роль-админ в компании C давала админские права в компании A. Теперь
-    учитываются только роли текущего tenant'а плюс системные роли
-    (Role.tenant_id IS NULL).
+    учитываются только роли текущего tenant'а. Системные роли (tenant_id IS NULL) —
+    лишь шаблоны для новых компаний и прав не дают: иначе такая роль действовала бы
+    во всех компаниях пользователя.
 
     is_platform_admin/is_superuser — сквозной bypass, но это ПЛАТФОРМЕННЫЕ
     роли, не путать с tenant-owner (последний резолвится через
@@ -141,7 +142,7 @@ def user_has(user, codes: Iterable[str], tenant_id: Optional[int] = None) -> boo
     else:
         roles_iter = [
             r for r in (user.roles or [])
-            if r.tenant_id is None or r.tenant_id == tenant_id
+            if r.tenant_id == tenant_id
         ]
     granted = {p.code for role in roles_iter for p in role.permissions}
     return any(c in granted for c in codes)

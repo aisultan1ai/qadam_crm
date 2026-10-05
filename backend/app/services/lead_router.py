@@ -43,8 +43,8 @@ def _manager_pool(db: Session, tenant_id: int) -> list[User]:
             TenantMembership.tenant_id == tenant_id,
             User.is_active.is_(True),
             Permission.code == "leads.view",
-            # Роль либо системная (tenant_id=NULL), либо принадлежит этому tenant
-            (Role.tenant_id == tenant_id) | (Role.tenant_id.is_(None)),
+            # Только роли этой компании: системные шаблоны прав не дают.
+            Role.tenant_id == tenant_id,
         )
         .distinct()
         .order_by(User.id)

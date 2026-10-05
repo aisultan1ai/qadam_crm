@@ -1,25 +1,32 @@
-import { Suspense } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+/**
+ * Каркас платформы: тёмная полоса модулей (с подписями) → панель текущего модуля → верхняя строка → контент.
+ * Одинаков на всех экранах: модуль выбирается слева, навигация раздела — в панели, действия страницы — в её шапке.
+ */
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  LayoutDashboard, FolderKanban, CheckSquare, BarChart3, Users, Settings,
-  Sun, Moon, LogOut, Search, Bell, Menu, X, PanelLeftClose, PanelLeftOpen,
-  Shield, Zap, MessageSquare, Workflow, Inbox as InboxIcon, Mail as MailIcon,
-  BookOpen, Calendar as CalendarIcon, Timer as TimerIcon,
-  Network, Contact2, CalendarClock, BookUser,
-  Activity as ActivityIcon, PalmtreeIcon, Coins, PieChart,
-  PenSquare, Phone, Boxes,
-  FileText, BookText, Palmtree, Puzzle, ChevronDown, Plus, Star, CircleDot,
+  Activity as ActivityIcon, AlarmClock, ArrowUpCircle, BarChart3, Bell, BookOpen, BookUser, Boxes, Calendar as CalendarIcon,
+  CalendarClock, CheckSquare, ChevronDown, Coins, Contact2, Eye, FileText, FolderKanban, Home, Inbox as InboxIcon,
+  LayoutGrid, ListChecks, LogOut, Mail as MailIcon, Menu, MessageSquare, MessagesSquare, Moon, Network,
+  Palmtree, PanelLeftClose, PanelLeftOpen, PenSquare, Phone, PieChart, Plus, Search, Settings, Shield, Star, Sun,
+  Timer as TimerIcon, User as UserIcon, UserCheck, UserPlus, Users, Workflow, X, Zap, CircleDot,
 } from "lucide-react";
 import clsx from "clsx";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 import { useSidebar } from "@/store/sidebar";
-import { Avatar } from "./ui";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError, onApiEvent } from "@/api/client";
 import { useOnline } from "@/hooks/useOnline";
+import { useFavorites } from "@/hooks/useFavorites";
+import { useRealtimeUpdates } from "@/lib/ws";
+import { applyBrandColor } from "@/lib/branding";
+import { modKey } from "@/lib/platform";
+import { fromNow } from "@/lib/date";
 import type { Notification, Page, Project } from "@/types";
+import { Avatar } from "./ui";
+import { Popover, PopoverItem } from "./Popover";
 import GlobalSearch from "./GlobalSearch";
 import { ShortcutsDialog, useGlobalShortcuts } from "./Shortcuts";
 import TenantSwitcher from "./TenantSwitcher";
@@ -27,108 +34,205 @@ import WelcomeModal from "./WelcomeModal";
 import { TimerWidget } from "./TimerWidget";
 import { LogoMark } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { Button } from "@/components/lib/Button";
-import { useRealtimeUpdates } from "@/lib/ws";
-import { applyBrandColor } from "@/lib/branding";
+import { SETTINGS_TABS } from "@/pages/settings/nav";
 import { useToast } from "./Toast";
-import { modKey } from "@/lib/platform";
-import { fromNow } from "@/lib/date";
-import { t } from "@/lib/i18n";
-import { useFavorites } from "@/hooks/useFavorites";
 
-type NavItem = {
+type Can = ReturnType<typeof useAuth.getState>["can"];
+type Icon = typeof Home;
+
+type PanelItem = {
   to: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: Icon;
   exact?: boolean;
   code?: string | string[];
   platformAdminOnly?: boolean;
+  /** Раздел только для владельца компании. */
+  ownerOnly?: boolean;
+  /** Владельцу доступно без права code (как в настройках). */
+  ownerBypass?: boolean;
+  badge?: "notifications" | "messenger" | "overdue";
 };
 
-type NavSection = {
-  title?: string;
-  items: NavItem[];
+type Module = {
+  key: string;
+  label: string;
+  icon: Icon;
+  items: PanelItem[];
+  /** Дополнительные пути, которые относятся к модулю (детальные страницы и т. п.). */
+  paths?: string[];
+  /** Блок под основными пунктами панели. */
+  extra?: "favorites" | "task-projects" | "spaces";
+  /** Показывать внизу полосы модулей, а не в общем списке. */
+  bottom?: boolean;
 };
 
-// Структура навигации в стиле Planfix: сгруппирована по секциям —
-// Основное (Planner, Projects, Tasks), Коммуникации, Знания/Время, Люди, Настройки.
-const NAV_SECTIONS: NavSection[] = [
+const MODULES: Module[] = [
   {
+    key: "home",
+    label: "Главная",
+    icon: Home,
+    paths: ["/profile"],
+    extra: "favorites",
     items: [
-      { to: "/", label: t.nav.dashboard, icon: LayoutDashboard, exact: true },
-      { to: "/notifications", label: "Входящие", icon: Bell },
+      { to: "/", label: "Обзор", icon: LayoutGrid, exact: true },
+      { to: "/notifications", label: "Входящие", icon: InboxIcon, badge: "notifications" },
       { to: "/planner", label: "Планировщик", icon: CalendarClock },
-      { to: "/projects", label: t.nav.projects, icon: FolderKanban, code: "projects.view" },
-      { to: "/tasks", label: t.nav.tasks, icon: CheckSquare, code: ["tasks.view_all", "tasks.view_own"] },
+      { to: "/activity", label: "Хроника", icon: ActivityIcon },
     ],
   },
   {
-    title: "Коммуникации",
+    key: "tasks",
+    label: "Задачи",
+    icon: CheckSquare,
+    extra: "task-projects",
     items: [
-      { to: "/messenger", label: "Мессенджер", icon: MessageSquare, code: "messenger.use" },
+      { to: "/tasks", label: "Все задачи", icon: ListChecks, code: ["tasks.view_all", "tasks.view_own"] },
+      { to: "/tasks?scope=incoming", label: "Мне назначены", icon: UserCheck, code: ["tasks.view_all", "tasks.view_own"] },
+      { to: "/tasks?scope=outgoing", label: "Я поставил", icon: ArrowUpCircle, code: ["tasks.view_all", "tasks.view_own"] },
+      { to: "/tasks?scope=audited", label: "Наблюдаю", icon: Eye, code: ["tasks.view_all", "tasks.view_own"] },
+      { to: "/tasks?overdue=1", label: "Просроченные", icon: AlarmClock, code: ["tasks.view_all", "tasks.view_own"], badge: "overdue" },
+    ],
+  },
+  {
+    key: "projects",
+    label: "Проекты",
+    icon: FolderKanban,
+    extra: "spaces",
+    items: [
+      { to: "/projects", label: "Все проекты", icon: FolderKanban, code: "projects.view" },
+      { to: "/projects?scope=participating", label: "Я участвую", icon: Users, code: "projects.view" },
+      { to: "/projects?scope=made_by_me", label: "Созданы мной", icon: UserIcon, code: "projects.view" },
+      { to: "/projects?scope=audited_by_me", label: "Наблюдаю", icon: Eye, code: "projects.view" },
+    ],
+  },
+  {
+    key: "crm",
+    label: "CRM",
+    icon: Coins,
+    items: [
+      { to: "/deals", label: "Сделки", icon: Coins, code: "deals.view" },
+      { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
+      { to: "/contacts", label: "Контакты", icon: BookUser },
+      { to: "/calls", label: "Звонки", icon: Phone },
+      { to: "/objects", label: "Объекты", icon: Boxes },
+    ],
+  },
+  {
+    key: "comms",
+    label: "Чаты",
+    icon: MessagesSquare,
+    items: [
+      { to: "/messenger", label: "Мессенджер", icon: MessageSquare, code: "messenger.use", badge: "messenger" },
       { to: "/inbox", label: "Открытые линии", icon: InboxIcon, code: "messengers.reply" },
       { to: "/mail", label: "Почта", icon: MailIcon, code: "mail.use" },
     ],
   },
   {
-    title: "Работа",
+    key: "calendar",
+    label: "Календарь",
+    icon: CalendarIcon,
     items: [
       { to: "/calendar", label: "Календарь", icon: CalendarIcon, code: "calendar.use" },
-      { to: "/time", label: "Время", icon: TimerIcon, code: "time.use" },
+      { to: "/time", label: "Учёт времени", icon: TimerIcon, code: "time.use" },
+      { to: "/timeoff", label: "Отпуска", icon: Palmtree },
+      { to: "/holidays", label: "Праздники", icon: CalendarClock },
+    ],
+  },
+  {
+    key: "knowledge",
+    label: "Знания",
+    icon: BookOpen,
+    items: [
       { to: "/wiki", label: "База знаний", icon: BookOpen, code: "wiki.use" },
       { to: "/documents", label: "Документы", icon: FileText },
       { to: "/whiteboard", label: "Доски", icon: PenSquare },
-      { to: "/objects", label: "Объекты", icon: Boxes },
-      { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
-      { to: "/activity", label: "Хроника", icon: ActivityIcon },
-      { to: "/reports", label: "Отчёты", icon: PieChart, code: "analytics.reports" },
-      { to: "/analytics", label: t.nav.analytics, icon: BarChart3, code: "analytics.reports" },
     ],
   },
   {
-    title: "CRM",
-    items: [
-      { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
-      { to: "/deals", label: "Сделки", icon: Coins, code: "deals.view" },
-      { to: "/contacts", label: "Контакты", icon: BookUser },
-      { to: "/calls", label: "Звонки", icon: Phone },
-    ],
-  },
-  {
-    title: "Команда",
+    key: "team",
+    label: "Команда",
+    icon: Users,
     items: [
       { to: "/people", label: "Сотрудники", icon: Contact2, code: "hr.view_profiles" },
       { to: "/org-chart", label: "Оргструктура", icon: Network, code: "hr.view_profiles" },
-      { to: "/timeoff", label: "Отпуска", icon: PalmtreeIcon },
-      { to: "/holidays", label: "Календарь праздников", icon: Palmtree },
-      { to: "/users", label: t.nav.users, icon: Users, code: "users.view" },
+      { to: "/users", label: "Пользователи", icon: Users, code: "users.view" },
     ],
   },
   {
-    title: "Система",
+    key: "more",
+    label: "Ещё",
+    icon: LayoutGrid,
     items: [
-      { to: "/settings", label: t.nav.settings, icon: Settings, code: ["roles.manage", "settings.dictionaries", "settings.system"] },
-      { to: "/admin", label: t.nav.platform, icon: Shield, platformAdminOnly: true },
+      { to: "/reports", label: "Отчёты", icon: PieChart, code: "analytics.reports" },
+      { to: "/analytics", label: "Аналитика", icon: BarChart3, code: "analytics.reports" },
+      { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
+      { to: "/admin", label: "Платформа", icon: Shield, platformAdminOnly: true },
     ],
   },
+  {
+    key: "settings",
+    label: "Настройки",
+    icon: Settings,
+    bottom: true,
+    items: SETTINGS_TABS.map((t) => ({
+      to: `/settings/${t.to}`,
+      label: t.label,
+      icon: t.icon,
+      code: t.perm,
+      ownerOnly: t.ownerOnly,
+      ownerBypass: true,
+    })),
+  },
 ];
+
+const splitTo = (to: string) => {
+  const [path, query = ""] = to.split("?");
+  return { path, params: new URLSearchParams(query) };
+};
+
+function pathMatches(pathname: string, path: string, exact?: boolean) {
+  if (exact || path === "/") return pathname === path;
+  return pathname === path || pathname.startsWith(path + "/");
+}
+
+function moduleOf(pathname: string): Module | undefined {
+  // Самое длинное совпадение пути: /settings → «Ещё», /tasks/12 → «Задачи».
+  let best: { m: Module; len: number } | undefined;
+  for (const m of MODULES) {
+    const paths = [...m.items.map((i) => splitTo(i.to).path), ...(m.paths ?? [])];
+    for (const p of paths) {
+      if (pathMatches(pathname, p, p === "/") && (!best || p.length > best.len)) best = { m, len: p.length };
+    }
+  }
+  return best?.m;
+}
+
+function useVisible(me: ReturnType<typeof useAuth.getState>["me"], can: Can) {
+  const isOwner = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin;
+  return useCallback(
+    (i: PanelItem) => {
+      if (i.platformAdminOnly && !me?.is_platform_admin) return false;
+      if (i.ownerOnly) return isOwner;
+      if (i.code && !can(i.code)) return !!i.ownerBypass && isOwner;
+      return true;
+    },
+    [me?.is_platform_admin, isOwner, can],
+  );
+}
 
 export default function Layout() {
   const { me, can, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const { collapsed, toggle: toggleCollapsed } = useSidebar();
-  const navigate = useNavigate();
+  const { collapsed, toggle: togglePanel } = useSidebar();
   const { pathname } = useLocation();
-  const qc = useQueryClient();
   const toast = useToast();
-  const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const openPalette = useCallback(() => setSearchOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
   useGlobalShortcuts({ openPalette, openHelp: openShortcuts, canCreateTask: can("tasks.create") });
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const notifRef = useRef<HTMLDivElement | null>(null);
 
   useRealtimeUpdates();
   const online = useOnline();
@@ -139,14 +243,10 @@ export default function Layout() {
 
   useEffect(() => {
     // Глобальные обработчики HTTP-событий: 403 → toast, сетевые ошибки → toast.
-    // Refresh 401 уже перекинет на /login — сюда не долетает.
     const off403 = onApiEvent("forbidden", (err) => {
-      const msg = extractApiError(err).message || "У вас нет прав на это действие";
-      toast.error("Недостаточно прав", msg);
+      toast.error("Недостаточно прав", extractApiError(err).message || "У вас нет прав на это действие");
     });
-    const offNet = onApiEvent("network_error", () => {
-      toast.error("Нет соединения", "Проверьте интернет и попробуйте ещё раз");
-    });
+    const offNet = onApiEvent("network_error", () => toast.error("Нет соединения", "Проверьте интернет и попробуйте ещё раз"));
     return () => {
       off403();
       offNet();
@@ -156,264 +256,68 @@ export default function Layout() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
     setMobileNavOpen(false);
-    setNotifOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    if (mobileNavOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
-    }
+    if (!mobileNavOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [mobileNavOpen]);
 
-  const { data: notifs = [] } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: async () => (await api.get<Page<Notification>>("/api/notifications")).data.items,
-    // 60s было слишком редко на случай падения WS. 30s — компромисс.
-    // Когда сеть офлайн — не долбим сервер (networkMode="online" — дефолт).
-    refetchInterval: online ? 30000 : false,
-    staleTime: 15000,
-  });
-
-  useEffect(() => {
-    if (!notifOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setNotifOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setNotifOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [notifOpen]);
-
-  const { data: notifCounts } = useQuery({
-    queryKey: ["notifications", "counts"],
-    queryFn: async () => (await api.get<{ unread: number; mentions: number }>("/api/notifications/unread-count")).data,
-    refetchInterval: online ? 30000 : false,
-    staleTime: 15000,
-  });
-  const unread = notifCounts?.unread ?? notifs.filter((n) => !n.is_read).length;
-  const [pulseKey, setPulseKey] = useState(0);
-  const prevUnread = useRef(unread);
-  useEffect(() => {
-    if (unread > prevUnread.current) setPulseKey((k) => k + 1);
-    prevUnread.current = unread;
-  }, [unread]);
-
-  const invalidateNotifs = () => qc.invalidateQueries({ queryKey: ["notifications"] });
-
-  const readAll = useMutation({
-    mutationFn: () => api.post("/api/notifications/read-all"),
-    onSuccess: invalidateNotifs,
-    onError: (e) => toast.error("Не удалось отметить уведомления", extractApiError(e).message),
-  });
+  const visible = useVisible(me, can);
+  const modules = useMemo(() => MODULES.filter((m) => m.items.some(visible)), [visible]);
+  const active = moduleOf(pathname) ?? modules[0];
 
   return (
     <div className="flex min-h-screen">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-brand-600 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-brand-600 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none"
       >
         Перейти к содержимому
       </a>
       {!online && (
         <div
           role="status"
-          className="fixed left-1/2 top-3 z-50 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 shadow-soft dark:border-amber-800/60 dark:bg-amber-900/50 dark:text-amber-200"
+          className="fixed left-1/2 top-3 z-50 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/50 dark:text-amber-200"
         >
           Нет соединения — работаем в офлайн-режиме
         </div>
       )}
-      <Sidebar
-        onLinkClick={() => setMobileNavOpen(false)}
-        me={me}
-        can={can}
-        logout={logout}
-        variant="desktop"
-        collapsed={collapsed}
-      />
 
+      {/* Десктоп: полоса модулей + панель модуля */}
+      <div className="sticky top-0 hidden h-screen shrink-0 md:flex">
+        <Rail modules={modules} active={active} me={me} logout={logout} />
+        {!collapsed && active && <ModulePanel module={active} visible={visible} onCollapse={togglePanel} can={can} />}
+      </div>
+
+      {/* Телефон: то же самое в выезжающем меню */}
       {mobileNavOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div
-            className="absolute inset-0 bg-zinc-950/50 animate-fade-in"
-            onClick={() => setMobileNavOpen(false)}
-          />
-          <div className="absolute inset-y-0 left-0 w-64 max-w-[80vw] animate-slide-up">
-            <Sidebar
-              onLinkClick={() => setMobileNavOpen(false)}
-              me={me}
-              can={can}
-              logout={logout}
-              variant="mobile"
-              collapsed={false}
-              onClose={() => setMobileNavOpen(false)}
-            />
+          <div className="absolute inset-0 bg-zinc-950/50 animate-fade-in" onClick={() => setMobileNavOpen(false)} />
+          <div className="absolute inset-y-0 left-0 flex max-w-[92vw] animate-slide-up">
+            <Rail modules={modules} active={active} me={me} logout={logout} />
+            {active && <ModulePanel module={active} visible={visible} onCollapse={() => setMobileNavOpen(false)} can={can} mobile />}
           </div>
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-zinc-200 bg-white px-3 text-zinc-900 sm:gap-2.5 sm:px-5 dark:border-zinc-800 dark:bg-[#0D0F13] dark:text-zinc-100">
-          <Button
-            variant="ghost"
-            className="!p-2 md:hidden"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label="Открыть меню"
-          >
-            <Menu size={18} />
-          </Button>
-
-          <Button
-            variant="ghost"
-            className="hidden !p-2 md:inline-flex"
-            onClick={toggleCollapsed}
-            title={collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}
-            aria-label={collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}
-            aria-pressed={collapsed}
-          >
-            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          </Button>
-
-          <button
-            className="group flex flex-1 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-zinc-800 dark:bg-[#14171C] dark:hover:border-zinc-700 max-w-md"
-            onClick={() => setSearchOpen(true)}
-          >
-            <Search size={15} />
-            <span className="hidden truncate text-zinc-500 sm:inline">Поиск или команда…</span>
-            <span className="truncate text-neutral-500 sm:hidden">Поиск…</span>
-            <span className="ml-auto flex items-center gap-1">
-              <span className="kbd">{modKey}</span>
-              <span className="kbd">K</span>
-            </span>
-          </button>
-
-          <CreateMenu can={can} />
-
-          <TimerWidget />
-
-          <TenantSwitcher />
-
-          <Button variant="ghost" className="!p-2" onClick={toggle} title="Тема" aria-label="Переключить тему">
-            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-          </Button>
-
-          <div className="relative" ref={notifRef}>
-            <Button
-              variant="ghost"
-              className="relative !p-2"
-              onClick={() => setNotifOpen((v) => !v)}
-              aria-label="Уведомления"
-              aria-expanded={notifOpen}
-            >
-              <span
-                key={`bell-${pulseKey}`}
-                className={pulseKey ? "inline-flex animate-shake" : "inline-flex"}
-                style={{ transformOrigin: "50% 15%" }}
-              >
-                <Bell size={18} />
-              </span>
-              {unread > 0 && (
-                <>
-                  <span
-                    key={`badge-${pulseKey}`}
-                    className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white tabular-nums animate-pop"
-                  >
-                    {unread}
-                  </span>
-                  {pulseKey > 0 && (
-                    <span
-                      key={`ring-${pulseKey}`}
-                      aria-hidden
-                      className="pointer-events-none absolute right-1 top-1 h-4 w-4 rounded-full bg-brand-600 animate-ping2"
-                    />
-                  )}
-                </>
-              )}
-            </Button>
-            {notifOpen && (
-              <div
-                className="card absolute right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] animate-slide-up p-0 shadow-pop"
-                role="menu"
-              >
-                <div className="flex items-center justify-between border-b border-neutral-100 p-3 dark:border-neutral-800">
-                  <span className="text-sm font-semibold">Уведомления</span>
-                  <button
-                    className="text-xs link disabled:opacity-50"
-                    disabled={readAll.isPending || unread === 0}
-                    onClick={() => readAll.mutate()}
-                  >
-                    Отметить все
-                  </button>
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {notifs.length === 0 && (
-                    <div className="py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Пусто</div>
-                  )}
-                  {notifs.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={async () => {
-                        try {
-                          await api.post(`/api/notifications/${n.id}/read`);
-                          if (n.task_id) navigate(`/tasks/${n.task_id}`);
-                          setNotifOpen(false);
-                          invalidateNotifs();
-                        } catch (e) {
-                          toast.error("Не удалось открыть уведомление", extractApiError(e).message);
-                        }
-                      }}
-                      className={clsx(
-                        "relative cursor-pointer border-b border-neutral-100 px-4 py-3 pl-5 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/60",
-                        !n.is_read
-                          ? "bg-brand-50/60 before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-r before:bg-brand-600 dark:bg-brand-900/20 dark:before:bg-brand-400"
-                          : undefined,
-                      )}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className={clsx("text-sm", !n.is_read ? "font-semibold" : "font-medium")}>{n.title}</div>
-                          {n.body && <div className="mt-0.5 text-xs text-neutral-500 line-clamp-2 dark:text-neutral-400">{n.body}</div>}
-                          <div className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500" title={new Date(n.created_at).toLocaleString("ru-RU")}>
-                            {fromNow(n.created_at)}
-                          </div>
-                        </div>
-                        {!n.is_read && (
-                          <span
-                            aria-label="Непрочитано"
-                            className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-brand-600 dark:bg-brand-400"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <NavLink
-                  to="/notifications"
-                  onClick={() => setNotifOpen(false)}
-                  className="block border-t border-neutral-100 px-4 py-2.5 text-center text-[13px] font-medium text-brand-700 hover:bg-zinc-50 dark:border-neutral-800 dark:text-brand-300 dark:hover:bg-[#1B1F26]"
-                >
-                  Открыть «Входящие»
-                </NavLink>
-              </div>
-            )}
-          </div>
-
-        </header>
-
+        <TopBar
+          can={can}
+          theme={theme}
+          toggleTheme={toggle}
+          onOpenMenu={() => setMobileNavOpen(true)}
+          onSearch={openPalette}
+          panelCollapsed={collapsed}
+          onExpandPanel={togglePanel}
+          online={online}
+        />
         <EmailVerificationBanner />
-
-        <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 max-w-[1440px] flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7 focus:outline-none">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 max-w-[1560px] flex-1 px-4 py-4 sm:px-6 lg:py-5 focus:outline-none">
           <ErrorBoundary>
             <Suspense fallback={<div className="min-h-[200px]" />}>
               <Outlet />
@@ -429,326 +333,295 @@ export default function Layout() {
   );
 }
 
-function Sidebar({
+/* ============================== Полоса модулей ============================== */
+
+function Rail({
+  modules,
+  active,
   me,
-  can,
   logout,
-  onLinkClick,
-  variant,
-  onClose,
-  collapsed,
 }: {
+  modules: Module[];
+  active?: Module;
   me: ReturnType<typeof useAuth.getState>["me"];
-  can: ReturnType<typeof useAuth.getState>["can"];
-  logout: ReturnType<typeof useAuth.getState>["logout"];
-  onLinkClick: () => void;
-  variant: "desktop" | "mobile";
-  onClose?: () => void;
-  collapsed: boolean;
+  logout: () => void;
 }) {
-  const desktop = variant === "desktop";
-  const showLabels = !(desktop && collapsed);
+  const visible = useVisible(me, useAuth((s) => s.can));
+  const nav = useNavigate();
+  const meRef = useRef<HTMLButtonElement>(null);
+  const [meOpen, setMeOpen] = useState(false);
+  const notifCount = useNotifCounts().unread;
+
+  return (
+    <nav aria-label="Модули" className="flex h-full w-16 shrink-0 flex-col items-center bg-rail py-2.5 text-zinc-400">
+      <NavLink to="/" aria-label="Qadam — главная" className="mb-2.5 grid h-9 w-9 place-items-center rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+        {me?.current_tenant?.logo_url ? (
+          <img src={me.current_tenant.logo_url} alt="" className="h-8 w-8 rounded-lg bg-white object-contain" />
+        ) : (
+          <LogoMark size={30} inverted />
+        )}
+      </NavLink>
+      <div className="flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1 [scrollbar-width:none]">
+        {modules.filter((m) => !m.bottom).map((m) => {
+          const Icon = m.icon;
+          const on = active?.key === m.key;
+          const first = m.items.find(visible);
+          return (
+            <NavLink
+              key={m.key}
+              to={first?.to ?? "/"}
+              title={m.label}
+              aria-current={on ? "page" : undefined}
+              className={clsx(
+                "relative flex w-full flex-col items-center gap-[3px] rounded-[10px] py-[7px] text-[9.5px] font-medium leading-none tracking-[-0.01em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
+                on ? "bg-rail-active text-white" : "hover:bg-rail-hover hover:text-zinc-100",
+              )}
+            >
+              <Icon size={18} strokeWidth={on ? 2.1 : 1.8} className={on ? "text-brand-400" : undefined} />
+              <span className="max-w-full truncate">{m.label}</span>
+              {m.key === "home" && notifCount > 0 && (
+                <span className="absolute right-1.5 top-1 min-w-[15px] rounded-full bg-rose-500 px-1 text-center text-[9px] font-semibold leading-[15px] text-white">
+                  {notifCount > 99 ? "99+" : notifCount}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
+      </div>
+      {modules.filter((m) => m.bottom).map((m) => {
+        const Icon = m.icon;
+        const on = active?.key === m.key;
+        return (
+          <NavLink
+            key={m.key}
+            to={m.items.find(visible)?.to ?? "/"}
+            title={m.label}
+            aria-label={m.label}
+            aria-current={on ? "page" : undefined}
+            className={clsx(
+              "mt-1 grid h-9 w-9 place-items-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
+              on ? "bg-rail-active text-brand-400" : "hover:bg-rail-hover hover:text-zinc-100",
+            )}
+          >
+            <Icon size={18} strokeWidth={on ? 2.1 : 1.8} />
+          </NavLink>
+        );
+      })}
+      <button
+        ref={meRef}
+        type="button"
+        onClick={() => setMeOpen((v) => !v)}
+        aria-label="Профиль и выход"
+        className="mt-2 rounded-full ring-2 ring-rail transition-shadow hover:ring-brand-400/60 focus-visible:outline-none focus-visible:ring-brand-400"
+      >
+        <Avatar name={me?.name} url={me?.avatar_url} size={30} />
+      </button>
+      <Popover anchorRef={meRef} open={meOpen} onClose={() => setMeOpen(false)} width={230}>
+        <div className="border-b border-zinc-100 px-2 pb-2 pt-1 dark:border-zinc-800">
+          <div className="truncate text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">{me?.name}</div>
+          <div className="truncate text-xs text-zinc-500">{me?.email}</div>
+        </div>
+        <div className="pt-1">
+          <PopoverItem onClick={() => { setMeOpen(false); nav("/profile"); }}>
+            <UserIcon size={14} className="text-zinc-400" /> Мой профиль
+          </PopoverItem>
+          <PopoverItem onClick={() => { setMeOpen(false); nav("/settings/team"); }}>
+            <UserPlus size={14} className="text-zinc-400" /> Пригласить сотрудников
+          </PopoverItem>
+          <PopoverItem onClick={() => { setMeOpen(false); logout(); }}>
+            <LogOut size={14} className="text-zinc-400" /> Выйти
+          </PopoverItem>
+        </div>
+      </Popover>
+    </nav>
+  );
+}
+
+/* ============================== Панель модуля ============================== */
+
+function ModulePanel({
+  module: m,
+  visible,
+  onCollapse,
+  can,
+  mobile = false,
+}: {
+  module: Module;
+  visible: (i: PanelItem) => boolean;
+  onCollapse: () => void;
+  can: Can;
+  mobile?: boolean;
+}) {
   const { pathname } = useLocation();
-  const [closedSections, toggleSection] = useClosedSections();
-  const { data: notifCounts } = useQuery({
-    queryKey: ["notifications", "counts"],
-    queryFn: async () => (await api.get<{ unread: number; mentions: number }>("/api/notifications/unread-count")).data,
-    staleTime: 15000,
-  });
-  const notifCount = notifCounts?.unread ?? 0;
-  const isActivePath = (n: NavItem) => pathname === n.to || (!n.exact && pathname.startsWith(n.to + "/"));
+  const [sp] = useSearchParams();
+  const items = m.items.filter(visible);
+  // Ключи query, которыми отличаются пункты модуля (scope, overdue…) + project для задач.
+  const keys = useMemo(() => {
+    const s = new Set<string>();
+    m.items.forEach((i) => splitTo(i.to).params.forEach((_v, k) => s.add(k)));
+    if (m.extra === "task-projects") s.add("project");
+    return [...s];
+  }, [m]);
+
+  const isActive = (i: PanelItem) => {
+    const { path, params } = splitTo(i.to);
+    if (!pathMatches(pathname, path, i.exact)) return false;
+    // На детальных страницах (/tasks/12) подсвечиваем только «корневой» пункт.
+    if (pathname !== path) return [...params.keys()].length === 0;
+    for (const k of keys) {
+      if ((params.get(k) ?? "") !== (sp.get(k) ?? "")) return false;
+    }
+    return true;
+  };
+
   return (
     <aside
       className={clsx(
-        // Графитовый сайдбар — одинаковый в обеих темах, держит структуру продукта.
-        "flex shrink-0 flex-col border-r border-zinc-200 bg-white text-zinc-700 transition-[width] duration-200 ease-out-soft dark:border-zinc-800 dark:bg-[#111419] dark:text-zinc-300",
-        desktop
-          ? clsx(
-              "sticky top-0 hidden h-screen self-start overflow-hidden md:flex",
-              collapsed ? "md:w-16" : "md:w-60",
-            )
-          : "h-full w-64",
+        "flex h-full w-[228px] shrink-0 flex-col border-r border-zinc-200 bg-[#F5F6F8] dark:border-zinc-800 dark:bg-[#1C1F25]",
+        mobile && "w-[240px]",
       )}
+      aria-label={`Раздел «${m.label}»`}
     >
-      <div
-        className={clsx(
-          "flex h-14 items-center gap-2.5 border-b border-zinc-200 dark:border-zinc-800",
-          showLabels ? "px-4" : "justify-center px-2",
+      <div className="flex h-12 shrink-0 items-center justify-between px-4">
+        <span className="text-[14px] font-semibold text-zinc-900 dark:text-white">{m.label}</span>
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-label={mobile ? "Закрыть меню" : "Свернуть панель"}
+          title={mobile ? "Закрыть" : "Свернуть панель"}
+          className="grid h-7 w-7 place-items-center rounded-md text-zinc-400 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+        >
+          {mobile ? <X size={16} /> : <PanelLeftClose size={16} />}
+        </button>
+      </div>
+      <nav className="flex-1 space-y-px overflow-y-auto px-2 pb-3">
+        {items.map((i) => (
+          <PanelLink key={i.to} item={i} active={isActive(i)} />
+        ))}
+        {m.extra === "favorites" && <FavoritesBlock />}
+        {m.extra === "task-projects" && can("projects.view") && (
+          <ProjectsBlock title="Проекты" hrefOf={(p) => `/tasks?project=${p.id}`} activeId={pathname === "/tasks" ? Number(sp.get("project")) || null : null} canCreate={can("projects.create")} />
         )}
-      >
-        {me?.current_tenant?.logo_url ? (
-          <img
-            src={me.current_tenant.logo_url}
-            alt=""
-            className="h-7 w-7 rounded-md bg-white object-contain"
+        {m.extra === "spaces" && (
+          <ProjectsBlock
+            title="Пространства"
+            hrefOf={(p) => `/projects/${p.id}`}
+            activeId={pathname.startsWith("/projects/") ? Number(pathname.split("/")[2]) || null : null}
+            canCreate={can("projects.create")}
           />
-        ) : (
-          <LogoMark size={28} className="shrink-0" />
         )}
-        {showLabels && (
-          <span className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
-            {me?.current_tenant?.company_display_name || me?.current_tenant?.name || "Qadam CRM"}
-          </span>
-        )}
-        {!desktop && onClose && (
-          <button className="ml-auto rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#1B1F26] dark:hover:text-white" onClick={onClose} aria-label="Закрыть меню">
-            <X size={16} />
-          </button>
-        )}
-      </div>
-
-      <nav className={clsx("flex-1 overflow-y-auto py-3", showLabels ? "px-2.5" : "px-2")} aria-label="Основная навигация">
-        {NAV_SECTIONS.map((section, sIdx) => {
-          const visible = section.items.filter((n) => {
-            if (n.platformAdminOnly && !me?.is_platform_admin) return false;
-            if (n.code && !can(n.code)) return false;
-            return true;
-          });
-          if (visible.length === 0) return null;
-          // Свёрнутая секция (как в ClickUp) оставляет видимым только активный пункт.
-          const title = section.title;
-          const isClosed = showLabels && !!title && closedSections.has(title);
-          const shown = isClosed ? visible.filter(isActivePath) : visible;
-          return (
-            <div key={sIdx} className={clsx(sIdx > 0 && "mt-3")}>
-              {title && showLabels && (
-                <SectionToggle title={title} closed={isClosed} onToggle={() => toggleSection(title)} />
-              )}
-              <div className="space-y-0.5">
-                {shown.map((n) => {
-                  const Icon = n.icon;
-                  return (
-                    <NavLink
-                      key={n.to}
-                      to={n.to}
-                      end={n.exact}
-                      onClick={onLinkClick}
-                      title={showLabels ? undefined : n.label}
-                      className={({ isActive }) =>
-                        clsx(
-                          "relative flex items-center rounded-md text-[13.5px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
-                          showLabels ? "gap-2.5 px-2.5 py-[7px]" : "justify-center px-2 py-2",
-                          isActive
-                            ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-white"
-                            : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-[#1B1F26] dark:hover:text-white",
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <span
-                            aria-hidden
-                            className={clsx(
-                              "absolute inset-y-1.5 w-[3px] rounded-r bg-brand-600 transition-opacity duration-150 dark:bg-brand-400",
-                              showLabels ? "-left-2.5" : "-left-2",
-                              isActive ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                          <Icon size={16} strokeWidth={1.9} className="shrink-0" />
-                          {showLabels && <span className="truncate">{n.label}</span>}
-                          {n.to === "/messenger" && <MessengerUnreadBadge collapsed={!showLabels} />}
-                          {n.to === "/notifications" && <CountBadge count={notifCount} collapsed={!showLabels} />}
-                        </>
-                      )}
-                    </NavLink>
-                  );
-                })}
-              </div>
-              {sIdx === 0 && showLabels && (
-                <FavoritesBlock
-                  closed={closedSections.has(FAVORITES_KEY)}
-                  onToggle={() => toggleSection(FAVORITES_KEY)}
-                  onLinkClick={onLinkClick}
-                />
-              )}
-              {sIdx === 0 && showLabels && can("projects.view") && (
-                <SpacesBlock
-                  closed={closedSections.has(SPACES_KEY)}
-                  onToggle={() => toggleSection(SPACES_KEY)}
-                  canCreate={can("projects.create")}
-                  onLinkClick={onLinkClick}
-                />
-              )}
-            </div>
-          );
-        })}
       </nav>
-
-      <div
-        className={clsx(
-          "border-t border-zinc-200 dark:border-zinc-800",
-          showLabels ? "p-3" : "p-2",
-        )}
-      >
-        {showLabels ? (
-          <div className="flex items-center gap-2">
-            <NavLink
-              to="/profile"
-              onClick={onLinkClick}
-              className={({ isActive }) =>
-                clsx(
-                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors text-zinc-900 dark:text-white",
-                  isActive
-                    ? "bg-zinc-100 dark:bg-[#1B1F26]"
-                    : "hover:bg-zinc-100 dark:hover:bg-[#1B1F26]",
-                )
-              }
-              title="Открыть профиль"
-            >
-              <Avatar name={me?.name} url={me?.avatar_url} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{me?.name}</div>
-                <div className="truncate text-xs text-zinc-500 dark:text-zinc-400">{me?.email}</div>
-              </div>
-            </NavLink>
-            <button
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#1B1F26] dark:hover:text-white"
-              onClick={logout}
-              title="Выйти"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-1">
-            <NavLink
-              to="/profile"
-              onClick={onLinkClick}
-              className={({ isActive }) =>
-                clsx(
-                  "flex items-center justify-center rounded-lg p-1 transition-colors text-zinc-900 dark:text-white",
-                  isActive
-                    ? "bg-zinc-100 dark:bg-[#1B1F26]"
-                    : "hover:bg-zinc-100 dark:hover:bg-[#1B1F26]",
-                )
-              }
-              title={me?.name ? `${me.name} — открыть профиль` : "Открыть профиль"}
-            >
-              <Avatar name={me?.name} url={me?.avatar_url} />
-            </NavLink>
-            <button
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#1B1F26] dark:hover:text-white"
-              onClick={logout}
-              title="Выйти"
-              aria-label="Выйти"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        )}
-      </div>
     </aside>
   );
 }
 
-const SPACES_KEY = "Пространства";
-const FAVORITES_KEY = "Избранное";
-
-// «Избранное» — закреплённые проекты, задачи и статьи (звёздочка в шапке их страниц).
-function FavoritesBlock({ closed, onToggle, onLinkClick }: { closed: boolean; onToggle: () => void; onLinkClick: () => void }) {
-  const { favorites, toggle } = useFavorites();
-  if (favorites.length === 0) return null;
+function PanelLink({ item: i, active }: { item: PanelItem; active: boolean }) {
+  const Icon = i.icon;
   return (
-    <div className="mt-3">
-      <SectionToggle title={FAVORITES_KEY} closed={closed} onToggle={onToggle} />
-      {!closed && (
-        <div className="space-y-0.5">
-          {favorites.map((f) => (
-            <div key={`${f.entity}:${f.entity_id}`} className="group/fav relative">
-              <NavLink
-                to={f.url}
-                onClick={onLinkClick}
-                className={({ isActive }) =>
-                  clsx(
-                    "flex items-center gap-2.5 rounded-md py-[6px] pl-2.5 pr-7 text-[13.5px] transition-colors",
-                    isActive
-                      ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-white"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-[#1B1F26] dark:hover:text-white",
-                  )
-                }
-              >
-                {f.entity === "project" ? (
-                  <span aria-hidden className="h-[10px] w-[10px] shrink-0 rounded-[3px] bg-brand-600" style={f.color ? { backgroundColor: f.color } : undefined} />
-                ) : f.entity === "task" ? (
-                  <CircleDot size={14} className="shrink-0 text-zinc-400" />
-                ) : (
-                  <BookOpen size={14} className="shrink-0 text-zinc-400" />
-                )}
-                <span className="truncate">{f.title}</span>
-              </NavLink>
-              <button
-                type="button"
-                onClick={() => toggle(f.entity, f.entity_id)}
-                aria-label={`Убрать «${f.title}» из избранного`}
-                title="Убрать из избранного"
-                className="absolute right-1 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-amber-500 opacity-0 hover:bg-zinc-200/70 group-hover/fav:opacity-100 focus:opacity-100 dark:hover:bg-zinc-700/60"
-              >
-                <Star size={12} className="fill-current" />
-              </button>
-            </div>
-          ))}
-        </div>
+    <NavLink
+      to={i.to}
+      end={i.exact}
+      aria-current={active ? "page" : undefined}
+      className={clsx(
+        "group flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
+        active
+          ? "bg-brand-500/[0.12] font-semibold text-brand-700 dark:bg-brand-400/[0.14] dark:text-brand-300"
+          : "text-zinc-700 hover:bg-zinc-200/60 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
       )}
-    </div>
+    >
+      <Icon size={15} className={active ? "text-brand-600 dark:text-brand-300" : "text-zinc-400 group-hover:text-zinc-600 dark:text-zinc-500 dark:group-hover:text-zinc-300"} />
+      <span className="min-w-0 flex-1 truncate">{i.label}</span>
+      {i.badge && <PanelBadge kind={i.badge} active={active} />}
+    </NavLink>
   );
 }
-const CLOSED_SECTIONS_KEY = "sidebar:closed-sections";
 
-function useClosedSections(): [Set<string>, (key: string) => void] {
-  const [closed, setClosed] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(window.localStorage.getItem(CLOSED_SECTIONS_KEY) || "[]"));
-    } catch {
-      return new Set();
-    }
-  });
-  const toggle = (key: string) =>
-    setClosed((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      try {
-        window.localStorage.setItem(CLOSED_SECTIONS_KEY, JSON.stringify([...next]));
-      } catch {
-        // localStorage недоступен (private mode) — просто не запоминаем.
-      }
-      return next;
-    });
-  return [closed, toggle];
+function PanelBadge({ kind, active }: { kind: NonNullable<PanelItem["badge"]>; active: boolean }) {
+  const notif = useNotifCounts().unread;
+  const messenger = useMessengerUnread();
+  const overdue = useOverdueCount(kind === "overdue");
+  const n = kind === "notifications" ? notif : kind === "messenger" ? messenger : overdue;
+  if (!n) return null;
+  return (
+    <span
+      className={clsx(
+        "text-[11px] font-semibold tabular-nums",
+        kind === "overdue" ? "text-rose-600 dark:text-rose-400" : active ? "text-brand-700 dark:text-brand-300" : "text-zinc-500 dark:text-zinc-400",
+      )}
+    >
+      {n > 99 ? "99+" : n}
+    </span>
+  );
 }
 
-function SectionToggle({ title, closed, onToggle, action }: { title: string; closed: boolean; onToggle: () => void; action?: React.ReactNode }) {
+function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="group/sec mb-1 flex items-center pr-1">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={!closed}
-        className="flex flex-1 items-center gap-1 rounded px-2.5 py-1 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-zinc-500 transition-colors hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-      >
-        {title}
-        <ChevronDown
-          size={12}
-          className={clsx("opacity-0 transition-[transform,opacity] group-hover/sec:opacity-100", closed && "-rotate-90 opacity-100")}
-        />
-      </button>
+    <div className="flex items-center justify-between px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.05em] text-zinc-400 dark:text-zinc-500">
+      <span>{children}</span>
       {action}
     </div>
   );
 }
 
-// «Пространства» — проекты прямо в сайдбаре, как Spaces в ClickUp.
-function SpacesBlock({
-  closed,
-  onToggle,
+function FavoritesBlock() {
+  const { favorites, toggle } = useFavorites();
+  return (
+    <>
+      <SectionTitle>Избранное</SectionTitle>
+      {favorites.length === 0 ? (
+        <p className="px-2.5 py-1 text-[12px] leading-snug text-zinc-400">Отмечайте задачи, проекты и статьи звёздочкой — они появятся здесь.</p>
+      ) : (
+        favorites.map((f) => (
+          <div key={`${f.entity}:${f.entity_id}`} className="group/fav relative">
+            <NavLink
+              to={f.url}
+              className={({ isActive }) =>
+                clsx(
+                  "flex h-8 items-center gap-2.5 rounded-lg pl-2.5 pr-8 text-[13px] transition-colors",
+                  isActive
+                    ? "bg-brand-500/[0.12] font-semibold text-brand-700 dark:text-brand-300"
+                    : "text-zinc-700 hover:bg-zinc-200/60 dark:text-zinc-300 dark:hover:bg-white/5",
+                )
+              }
+            >
+              {f.entity === "project" ? (
+                <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-[3px] bg-brand-600" style={f.color ? { backgroundColor: f.color } : undefined} />
+              ) : f.entity === "task" ? (
+                <CircleDot size={14} className="shrink-0 text-zinc-400" />
+              ) : (
+                <BookOpen size={14} className="shrink-0 text-zinc-400" />
+              )}
+              <span className="truncate">{f.title}</span>
+            </NavLink>
+            <button
+              type="button"
+              onClick={() => toggle(f.entity, f.entity_id)}
+              aria-label={`Убрать «${f.title}» из избранного`}
+              title="Убрать из избранного"
+              className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-amber-500 opacity-0 hover:bg-zinc-200/70 group-hover/fav:opacity-100 focus:opacity-100 dark:hover:bg-white/10"
+            >
+              <Star size={12} className="fill-current" />
+            </button>
+          </div>
+        ))
+      )}
+    </>
+  );
+}
+
+function ProjectsBlock({
+  title,
+  hrefOf,
+  activeId,
   canCreate,
-  onLinkClick,
 }: {
-  closed: boolean;
-  onToggle: () => void;
+  title: string;
+  hrefOf: (p: Project) => string;
+  activeId: number | null;
   canCreate: boolean;
-  onLinkClick: () => void;
 }) {
-  const LIMIT = 8;
+  const LIMIT = 12;
+  const [all, setAll] = useState(false);
   const { data: projects = [] } = useQuery({
     queryKey: ["projects", "sidebar"],
     queryFn: async () => (await api.get<Page<Project>>("/api/projects")).data.items,
@@ -756,82 +629,230 @@ function SpacesBlock({
   });
   const list = projects.filter((p) => !p.is_archived);
   return (
-    <div className="mt-3">
-      <SectionToggle
-        title={SPACES_KEY}
-        closed={closed}
-        onToggle={onToggle}
+    <>
+      <SectionTitle
         action={
           canCreate && (
             <NavLink
               to="/projects?new=1"
-              onClick={onLinkClick}
               title="Новый проект"
               aria-label="Новый проект"
-              className="grid h-5 w-5 place-items-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-[#1B1F26] dark:hover:text-white"
+              className="grid h-5 w-5 place-items-center rounded text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-white/10 dark:hover:text-zinc-200"
             >
               <Plus size={13} />
             </NavLink>
           )
         }
-      />
-      {!closed && (
-        <div className="space-y-0.5">
-          {list.length === 0 && <div className="px-2.5 py-1 text-[12.5px] text-zinc-400">Проектов пока нет</div>}
-          {list.slice(0, LIMIT).map((p) => (
-            <NavLink
-              key={p.id}
-              to={`/projects/${p.id}`}
-              onClick={onLinkClick}
-              className={({ isActive }) =>
-                clsx(
-                  "flex items-center gap-2.5 rounded-md px-2.5 py-[6px] text-[13.5px] transition-colors",
-                  isActive
-                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-white"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-[#1B1F26] dark:hover:text-white",
-                )
-              }
+      >
+        {title}
+      </SectionTitle>
+      {list.length === 0 && <p className="px-2.5 py-1 text-[12px] text-zinc-400">Проектов пока нет</p>}
+      {(all ? list : list.slice(0, LIMIT)).map((p) => {
+        const on = activeId === p.id;
+        return (
+          <NavLink
+            key={p.id}
+            to={hrefOf(p)}
+            className={clsx(
+              "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors",
+              on
+                ? "bg-brand-500/[0.12] font-semibold text-brand-700 dark:bg-brand-400/[0.14] dark:text-brand-300"
+                : "text-zinc-700 hover:bg-zinc-200/60 dark:text-zinc-300 dark:hover:bg-white/5",
+            )}
+          >
+            <span
+              aria-hidden
+              className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] bg-brand-600 text-[10px] font-semibold uppercase text-white"
+              style={p.color ? { backgroundColor: p.color } : undefined}
             >
-              <span
-                aria-hidden
-                className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] bg-brand-600 text-[10px] font-semibold uppercase text-white"
-                style={p.color ? { backgroundColor: p.color } : undefined}
-              >
-                {p.name.trim().charAt(0)}
-              </span>
-              <span className="truncate">{p.name}</span>
-              {p.tasks_count > 0 && <span className="ml-auto text-[11px] tabular-nums text-zinc-400">{p.tasks_count}</span>}
-            </NavLink>
-          ))}
-          {list.length > LIMIT && (
-            <NavLink to="/projects" onClick={onLinkClick} className="block px-2.5 py-1 text-[12.5px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
-              Все проекты ({list.length})
-            </NavLink>
-          )}
-        </div>
+              {p.name.trim().charAt(0)}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+            {p.tasks_count > 0 && <span className="text-[11px] tabular-nums text-zinc-400">{p.tasks_count}</span>}
+          </NavLink>
+        );
+      })}
+      {list.length > LIMIT && (
+        <button type="button" onClick={() => setAll((v) => !v)} className="flex h-7 items-center gap-1 px-2.5 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+          <ChevronDown size={13} className={clsx("transition-transform", all && "rotate-180")} />
+          {all ? "Свернуть" : `Ещё ${list.length - LIMIT}`}
+        </button>
       )}
-    </div>
+    </>
   );
 }
 
-// «+ Создать» в шапке: быстрый вход в создание задачи / проекта / сделки из любого экрана.
-function CreateMenu({ can }: { can: ReturnType<typeof useAuth.getState>["can"] }) {
+/* ============================== Верхняя строка ============================== */
+
+function TopBar({
+  can,
+  theme,
+  toggleTheme,
+  onOpenMenu,
+  onSearch,
+  panelCollapsed,
+  onExpandPanel,
+  online,
+}: {
+  can: Can;
+  theme: string;
+  toggleTheme: () => void;
+  onOpenMenu: () => void;
+  onSearch: () => void;
+  panelCollapsed: boolean;
+  onExpandPanel: () => void;
+  online: boolean;
+}) {
+  return (
+    <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-zinc-200 bg-white px-3 text-zinc-900 sm:px-4 dark:border-zinc-800 dark:bg-[#1C1F25] dark:text-zinc-100">
+      <button type="button" onClick={onOpenMenu} aria-label="Открыть меню" className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 md:hidden dark:hover:bg-white/5">
+        <Menu size={18} />
+      </button>
+      {panelCollapsed && (
+        <button
+          type="button"
+          onClick={onExpandPanel}
+          aria-label="Показать панель раздела"
+          title="Показать панель раздела"
+          className="hidden h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 md:grid dark:hover:bg-white/5"
+        >
+          <PanelLeftOpen size={17} />
+        </button>
+      )}
+      <CreateMenu can={can} />
+
+      <button
+        type="button"
+        onClick={onSearch}
+        className="mx-auto flex h-8 w-full max-w-[420px] items-center gap-2 rounded-lg bg-zinc-100 px-3 text-[13px] text-zinc-500 transition-colors hover:bg-zinc-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:bg-[#23262D] dark:text-zinc-400 dark:hover:bg-[#2A2E36]"
+      >
+        <Search size={14} />
+        <span className="truncate">
+          <span className="hidden sm:inline">Поиск задач, людей, проектов…</span>
+          <span className="sm:hidden">Поиск…</span>
+        </span>
+        <span className="ml-auto hidden items-center gap-1 sm:flex">
+          <span className="kbd">{modKey}</span>
+          <span className="kbd">K</span>
+        </span>
+      </button>
+
+      <div className="flex items-center gap-1">
+        <TimerWidget />
+        <TenantSwitcher />
+        <NotificationsButton online={online} />
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label="Переключить тему"
+          title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+          className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
+        >
+          {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function NotificationsButton({ online }: { online: boolean }) {
+  const qc = useQueryClient();
+  const toast = useToast();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLButtonElement>(null);
+  const { data: notifs = [] } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: async () => (await api.get<Page<Notification>>("/api/notifications", { params: { per_page: 15 } })).data.items,
+    refetchInterval: online ? 30000 : false,
+    staleTime: 15000,
+  });
+  const unread = useNotifCounts(online).unread;
+  const [pulseKey, setPulseKey] = useState(0);
+  const prev = useRef(unread);
   useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+    if (unread > prev.current) setPulseKey((k) => k + 1);
+    prev.current = unread;
+  }, [unread]);
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["notifications"] });
+  const readAll = useMutation({
+    mutationFn: () => api.post("/api/notifications/read-all"),
+    onSuccess: invalidate,
+    onError: (e) => toast.error("Не удалось отметить уведомления", extractApiError(e).message),
+  });
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Уведомления"
+        aria-expanded={open}
+        className="relative grid h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
+      >
+        <span key={`bell-${pulseKey}`} className={pulseKey ? "inline-flex animate-shake" : "inline-flex"} style={{ transformOrigin: "50% 15%" }}>
+          <Bell size={17} />
+        </span>
+        {unread > 0 && (
+          <span className="absolute right-0.5 top-0.5 min-w-[15px] rounded-full bg-rose-500 px-1 text-center text-[9px] font-semibold leading-[15px] text-white tabular-nums">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </button>
+      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={340} align="end">
+        <div className="flex items-center justify-between px-2 pb-1.5 pt-1">
+          <span className="text-[13px] font-semibold">Уведомления</span>
+          <button className="link text-xs disabled:opacity-50" disabled={readAll.isPending || unread === 0} onClick={() => readAll.mutate()}>
+            Прочитать все
+          </button>
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {notifs.length === 0 && <div className="py-8 text-center text-[13px] text-zinc-500">Пусто</div>}
+          {notifs.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={async () => {
+                try {
+                  await api.post(`/api/notifications/${n.id}/read`);
+                  setOpen(false);
+                  invalidate();
+                  if (n.task_id) navigate(`/tasks/${n.task_id}`);
+                } catch (e) {
+                  toast.error("Не удалось открыть уведомление", extractApiError(e).message);
+                }
+              }}
+              className={clsx(
+                "relative flex w-full items-start gap-2 rounded-md px-2 py-2 pl-4 text-left hover:bg-zinc-100 dark:hover:bg-white/5",
+              )}
+            >
+              {!n.is_read && <span aria-label="Непрочитано" className="absolute left-1.5 top-3.5 h-1.5 w-1.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
+              <span className="min-w-0 flex-1">
+                <span className={clsx("block truncate text-[13px]", !n.is_read ? "font-semibold" : "font-medium")}>{n.title}</span>
+                {n.body && <span className="mt-0.5 line-clamp-2 block text-xs text-zinc-500">{n.body}</span>}
+                <span className="mt-0.5 block text-[11px] text-zinc-400">{fromNow(n.created_at)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <NavLink
+          to="/notifications"
+          onClick={() => setOpen(false)}
+          className="mt-1 block rounded-md border-t border-zinc-100 px-2 py-2 text-center text-[13px] font-medium text-brand-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-brand-300 dark:hover:bg-white/5"
+        >
+          Открыть «Входящие»
+        </NavLink>
+      </Popover>
+    </>
+  );
+}
+
+// «+ Создать»: быстрый вход в создание задачи / проекта / сделки из любого экрана.
+function CreateMenu({ can }: { can: Can }) {
+  const navigate = useNavigate();
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   const items = [
     { label: "Задача", hint: "в список задач", icon: CheckSquare, to: "/tasks?new=1", show: can("tasks.create") },
     { label: "Проект", hint: "новое пространство", icon: FolderKanban, to: "/projects?new=1", show: can("projects.create") },
@@ -839,69 +860,53 @@ function CreateMenu({ can }: { can: ReturnType<typeof useAuth.getState>["can"] }
   ].filter((i) => i.show);
   if (items.length === 0) return null;
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        className="btn-primary !px-2.5 !py-1.5 sm:!px-3"
-      >
-        <Plus size={16} />
+    <>
+      <button ref={ref} type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu" className="btn-primary shrink-0 !px-2.5 sm:!px-3">
+        <Plus size={15} strokeWidth={2.4} />
         <span className="hidden sm:inline">Создать</span>
       </button>
-      {open && (
-        <div role="menu" className="card absolute left-0 z-50 mt-2 w-60 animate-slide-up p-1.5 shadow-pop sm:left-auto sm:right-0">
-          {items.map((i) => {
-            const Icon = i.icon;
-            return (
-              <button
-                key={i.to}
-                role="menuitem"
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  navigate(i.to);
-                }}
-                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-[#1B1F26]"
-              >
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-                  <Icon size={16} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">{i.label}</span>
-                  <span className="block text-xs text-zinc-500">{i.hint}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={236}>
+        {items.map((i) => {
+          const Icon = i.icon;
+          return (
+            <button
+              key={i.to}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate(i.to);
+              }}
+              className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-white/5"
+            >
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500/10 text-brand-700 dark:text-brand-300">
+                <Icon size={16} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{i.label}</span>
+                <span className="block text-xs text-zinc-500">{i.hint}</span>
+              </span>
+            </button>
+          );
+        })}
+      </Popover>
+    </>
   );
 }
 
-function CountBadge({ count, collapsed }: { count: number; collapsed: boolean }) {
-  if (count <= 0) return null;
-  const label = count > 99 ? "99+" : String(count);
-  if (collapsed) {
-    return (
-      <span
-        aria-label={`Непрочитано: ${label}`}
-        className="absolute right-1 top-1 min-w-[16px] rounded-full bg-brand-600 px-1 py-0.5 text-center text-[9px] font-medium leading-none text-white"
-      >
-        {label}
-      </span>
-    );
-  }
-  return (
-    <span className="ml-auto min-w-[18px] rounded-md bg-brand-600 px-1.5 py-0.5 text-center text-[10px] font-medium leading-none text-white">
-      {label}
-    </span>
-  );
+/* ============================== Счётчики ============================== */
+
+function useNotifCounts(online = true) {
+  const { data } = useQuery({
+    queryKey: ["notifications", "counts"],
+    queryFn: async () => (await api.get<{ unread: number; mentions: number }>("/api/notifications/unread-count")).data,
+    refetchInterval: online ? 30000 : false,
+    staleTime: 15000,
+  });
+  return { unread: data?.unread ?? 0, mentions: data?.mentions ?? 0 };
 }
 
-function MessengerUnreadBadge({ collapsed }: { collapsed: boolean }) {
+function useMessengerUnread() {
   const { can } = useAuth();
   const enabled = can("messenger.use");
   const { data } = useQuery({
@@ -910,25 +915,20 @@ function MessengerUnreadBadge({ collapsed }: { collapsed: boolean }) {
     queryFn: async () => (await api.get<{ unread_count: number }[]>("/api/messenger/channels")).data,
     staleTime: 15_000,
   });
-  const total = (data || []).reduce((sum, c) => sum + (c.unread_count || 0), 0);
-  if (!enabled || total <= 0) return null;
-  const label = total > 99 ? "99+" : String(total);
-  if (collapsed) {
-    return (
-      <span
-        aria-label={`Непрочитано: ${label}`}
-        className="absolute right-1 top-1 min-w-[16px] rounded-full bg-brand-600 px-1 py-0.5 text-center text-[9px] font-medium leading-none text-white"
-      >
-        {label}
-      </span>
-    );
-  }
-  return (
-    <span className="ml-auto min-w-[18px] rounded-md bg-brand-600 px-1.5 py-0.5 text-center text-[10px] font-medium leading-none text-white">
-      {label}
-    </span>
-  );
+  return enabled ? (data || []).reduce((sum, c) => sum + (c.unread_count || 0), 0) : 0;
 }
+
+function useOverdueCount(enabled: boolean) {
+  const { data } = useQuery({
+    enabled,
+    queryKey: ["tasks", "overdue-count"],
+    queryFn: async () => (await api.get<Page<unknown>>("/api/tasks", { params: { overdue: true, per_page: 1 } })).data.total,
+    staleTime: 60_000,
+  });
+  return data ?? 0;
+}
+
+/* ============================== Баннер email ============================== */
 
 function EmailVerificationBanner() {
   const { me } = useAuth();
@@ -952,19 +952,11 @@ function EmailVerificationBanner() {
   };
 
   return (
-    <div
-      role="alert"
-      className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
-    >
-      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3">
+    <div role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-[13px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <span>
           Подтвердите email <b>{me.email}</b> — мы отправили ссылку. Не пришло?{" "}
-          <button
-            type="button"
-            onClick={resend}
-            disabled={sending}
-            className="underline underline-offset-2 disabled:opacity-60"
-          >
+          <button type="button" onClick={resend} disabled={sending} className="underline underline-offset-2 disabled:opacity-60">
             {sending ? "Отправляем…" : "Отправить ещё раз"}
           </button>
         </span>

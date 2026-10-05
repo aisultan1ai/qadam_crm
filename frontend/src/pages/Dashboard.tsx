@@ -180,7 +180,7 @@ function StatRow({ stats }: { stats: DashboardStats }) {
     },
   ];
   return (
-    <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-zinc-200 bg-white lg:grid-cols-4 dark:border-zinc-800 dark:bg-[#14171C]">
+    <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-zinc-200 bg-white lg:grid-cols-4 dark:border-zinc-800 dark:bg-[#1B1E23]">
       {items.map((it, i) => {
         const Icon = it.icon;
         return (
@@ -188,7 +188,7 @@ function StatRow({ stats }: { stats: DashboardStats }) {
             key={it.label}
             to={it.to}
             className={clsx(
-              "group flex flex-col gap-3 p-5 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:hover:bg-[#1B1F26]",
+              "group flex flex-col gap-3 p-5 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:hover:bg-[#23262D]",
               i % 2 === 1 && "border-l border-zinc-200 dark:border-zinc-800",
               i >= 2 && "border-t border-zinc-200 lg:border-t-0 dark:border-zinc-800",
               i === 2 && "lg:border-l",
@@ -223,7 +223,7 @@ function StatusBreakdown({ stats }: { stats: DashboardStats }) {
         <span className="text-xs tabular-nums text-zinc-500">{total.toLocaleString("ru-RU")}</span>
       </div>
       <div className="p-5">
-        <div className="flex h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-[#1B1F26]">
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-[#23262D]">
           {total > 0 &&
             statuses.map((s) => {
               const v = stats.by_status[s] || 0;
@@ -422,7 +422,7 @@ function DashboardSkeleton() {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-200 lg:grid-cols-4 dark:border-zinc-800">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white p-5 dark:bg-[#14171C]">
+          <div key={i} className="bg-white p-5 dark:bg-[#1B1E23]">
             <Skeleton className="mb-4 h-3 w-24" />
             <Skeleton className="h-7 w-16" />
           </div>

@@ -170,7 +170,7 @@ export default function GlobalSearch({
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="Палитра команд">
       <div className="absolute inset-0 bg-zinc-950/40 animate-fade-in" onClick={onClose} />
-      <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-pop animate-slide-up dark:border-zinc-700 dark:bg-[#14171C]">
+      <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-pop animate-slide-up dark:border-zinc-700 dark:bg-[#1B1E23]">
         <div className="flex items-center gap-2.5 border-b border-zinc-200 px-4 dark:border-zinc-800">
           <Search size={17} className="shrink-0 text-zinc-400" />
           <input

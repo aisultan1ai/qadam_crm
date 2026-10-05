@@ -44,6 +44,33 @@ def envelope(code: str, message: str, details: Any | None = None, status_code: i
     return JSONResponse(status_code=status_code, content=body)
 
 
+def _ru_validation_message(err: dict) -> str:
+    """Понятная русская формулировка для типовых ошибок pydantic (UI показывает её пользователю)."""
+    typ = err.get("type") or ""
+    msg = str(err.get("msg") or "")
+    ctx = err.get("ctx") or {}
+    if typ == "missing":
+        return "Обязательное поле"
+    if "valid email" in msg:
+        return "Некорректный email"
+    if typ == "string_too_short":
+        return f"Слишком коротко: минимум {ctx.get('min_length', '')} символов".strip()
+    if typ == "string_too_long":
+        return f"Слишком длинно: максимум {ctx.get('max_length', '')} символов".strip()
+    if typ in ("int_parsing", "int_type", "float_parsing", "float_type"):
+        return "Нужно число"
+    if typ.startswith(("datetime_", "date_")):
+        return "Некорректная дата"
+    if typ in ("literal_error", "enum"):
+        return "Недопустимое значение"
+    if typ in ("greater_than_equal", "greater_than"):
+        return f"Значение должно быть не меньше {ctx.get('ge', ctx.get('gt', ''))}".strip()
+    if typ in ("less_than_equal", "less_than"):
+        return f"Значение должно быть не больше {ctx.get('le', ctx.get('lt', ''))}".strip()
+    # Наши собственные валидаторы: убираем служебный префикс pydantic.
+    return msg.removeprefix("Value error, ") or "Некорректное значение"
+
+
 def _detail_to_message(detail: Any) -> str:
     if isinstance(detail, str):
         return detail
@@ -72,7 +99,7 @@ def install_error_handlers(app: FastAPI) -> None:
             field = ".".join(str(p) for p in loc[1:]) if loc and loc[0] in ("body", "query", "path") else ".".join(str(p) for p in loc)
             details.append({
                 "field": field,
-                "message": err.get("msg", "invalid value"),
+                "message": _ru_validation_message(err),
                 "type": err.get("type"),
             })
         message = details[0]["message"] if details else "Ошибка валидации"

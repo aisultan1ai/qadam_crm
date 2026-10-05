@@ -218,7 +218,7 @@ export default function ProjectDetail() {
       ) : view === "calendar" ? (
         <CalendarView tasks={list} />
       ) : (
-        <Suspense fallback={<div className="h-96 animate-pulse rounded-xl bg-zinc-100 dark:bg-[#14171C]" />}>
+        <Suspense fallback={<div className="h-96 animate-pulse rounded-xl bg-zinc-100 dark:bg-[#1B1E23]" />}>
           <GanttView tasks={list} onOpen={openTask} />
         </Suspense>
       )}
@@ -252,7 +252,7 @@ function Overview({ project, stats }: { project: Project; stats: { total: number
               <span>Выполнено</span>
               <span className="tabular-nums">{pct}%</span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-[#1B1F26]">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-[#23262D]">
               <div className="h-full rounded-full bg-brand-600" style={{ width: `${pct}%` }} />
             </div>
           </div>

@@ -176,7 +176,7 @@ export default function Mail() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[340px_1fr] dark:border-zinc-800 dark:bg-[#14171C]">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[340px_1fr] dark:border-zinc-800 dark:bg-[#1B1E23]">
         {/* Threads list */}
         <div className="flex min-h-0 flex-col overflow-hidden border-b border-zinc-200 md:border-b-0 md:border-r dark:border-zinc-800">
           <div className="space-y-2.5 border-b border-zinc-200 p-3 dark:border-zinc-800">
@@ -219,7 +219,7 @@ export default function Mail() {
                     "w-full border-b border-zinc-100 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:border-zinc-800/70",
                     isSelected
                       ? "bg-brand-50 shadow-[inset_3px_0_0_rgb(var(--brand-600))] dark:bg-brand-500/10"
-                      : "hover:bg-zinc-50 dark:hover:bg-[#1B1F26]",
+                      : "hover:bg-zinc-50 dark:hover:bg-[#23262D]",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -235,7 +235,7 @@ export default function Mail() {
                     </span>
                     <div className="flex shrink-0 items-center gap-1">
                       {t.total_count > 1 && (
-                        <span className="rounded bg-zinc-100 px-1 text-[11px] tabular-nums text-zinc-500 dark:bg-[#1B1F26]" title="Писем в цепочке">{t.total_count}</span>
+                        <span className="rounded bg-zinc-100 px-1 text-[11px] tabular-nums text-zinc-500 dark:bg-[#23262D]" title="Писем в цепочке">{t.total_count}</span>
                       )}
                       {t.unread_count > 0 && (
                         <span className="min-w-[18px] rounded-full bg-brand-600 px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">
@@ -265,11 +265,11 @@ export default function Mail() {
         </div>
 
         {/* Thread view */}
-        <div className="flex min-h-0 flex-col overflow-hidden bg-white dark:bg-[#14171C]">
+        <div className="flex min-h-0 flex-col overflow-hidden bg-white dark:bg-[#1B1E23]">
           {!selected && (
             <div className="flex flex-1 items-center justify-center p-6">
               <div className="text-center">
-                <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-[#1B1F26]">
+                <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-[#23262D]">
                   <MailIcon size={20} />
                 </span>
                 <div className="text-[15px] font-semibold">Выберите письмо</div>

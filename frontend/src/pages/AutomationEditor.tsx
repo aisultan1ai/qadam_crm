@@ -405,7 +405,7 @@ export default function AutomationEditor() {
           >
             <Background gap={16} size={1} />
             <Controls showInteractive={false} />
-            <MiniMap zoomable pannable style={{ background: "#F6F7F9" }} />
+            <MiniMap zoomable pannable style={{ background: "#F5F6F8" }} />
           </ReactFlow>
         </div>
 

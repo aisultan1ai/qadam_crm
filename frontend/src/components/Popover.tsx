@@ -96,7 +96,7 @@ export function PopoverItem({
         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors " +
         (active
           ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-200"
-          : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-[#1B1F26]")
+          : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-[#23262D]")
       }
     >
       {children}

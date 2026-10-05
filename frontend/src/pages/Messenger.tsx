@@ -93,7 +93,7 @@ export default function Messenger() {
   }, [channels, searchQ]);
 
   return (
-    <div className="grid h-[calc(100vh-8rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[300px_1fr] dark:border-zinc-800 dark:bg-[#14171C]">
+    <div className="grid h-[calc(100vh-8rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[300px_1fr] dark:border-zinc-800 dark:bg-[#1B1E23]">
       <aside
         className={clsx(
           "flex flex-col overflow-hidden border-zinc-200 md:border-r dark:border-zinc-800",
@@ -127,7 +127,7 @@ export default function Messenger() {
 
       <section
         className={clsx(
-          "flex flex-col overflow-hidden bg-[#F6F7F9] dark:bg-[#0D0F13]",
+          "flex flex-col overflow-hidden bg-[#F5F6F8] dark:bg-[#14161A]",
           activeId ? "flex" : "hidden md:flex",
         )}
       >
@@ -205,13 +205,13 @@ function ChannelListRow({
         "flex w-full items-start gap-3 px-4 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500",
         active
           ? "bg-brand-50 shadow-[inset_3px_0_0_rgb(var(--brand-600))] dark:bg-brand-500/10"
-          : "hover:bg-zinc-50 dark:hover:bg-[#1B1F26]",
+          : "hover:bg-zinc-50 dark:hover:bg-[#23262D]",
       )}
     >
       {channel.peer ? (
         <Avatar name={channel.peer.name} url={channel.peer.avatar_url} size={34} />
       ) : (
-        <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg bg-zinc-100 text-sm font-semibold text-zinc-600 dark:bg-[#1B1F26] dark:text-zinc-300">
+        <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg bg-zinc-100 text-sm font-semibold text-zinc-600 dark:bg-[#23262D] dark:text-zinc-300">
           {channel.kind === "project" ? "#" : displayName.charAt(0).toUpperCase()}
         </div>
       )}
@@ -738,14 +738,14 @@ function MessageComposer({
           ))}
         </div>
       )}
-      <div className="flex items-end gap-1 rounded-xl border border-zinc-300 bg-white p-1.5 shadow-soft focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/15 dark:border-zinc-700 dark:bg-[#14171C]">
-        <label className="cursor-pointer rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#1B1F26]" title="Прикрепить файл" aria-label="Прикрепить файл">
+      <div className="flex items-end gap-1 rounded-xl border border-zinc-300 bg-white p-1.5 shadow-soft focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/15 dark:border-zinc-700 dark:bg-[#1B1E23]">
+        <label className="cursor-pointer rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#23262D]" title="Прикрепить файл" aria-label="Прикрепить файл">
           <Paperclip size={16} />
           <input type="file" multiple className="hidden" onChange={onPickFile} disabled={uploading} />
         </label>
         <button
           type="button"
-          className="rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#1B1F26]"
+          className="rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#23262D]"
           title="Создать опрос"
           aria-label="Создать опрос"
           onClick={onOpenPoll}

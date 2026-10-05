@@ -251,7 +251,7 @@ def seed_admin(db, tenant: Tenant) -> None:
         db.query(Role)
         .filter(Role.tenant_id == tenant.id, Role.name == "Администратор")
         .first()
-    ) or db.query(Role).filter(Role.tenant_id.is_(None), Role.name == "Администратор").first()
+    )
 
     admin = User(
         email=email,

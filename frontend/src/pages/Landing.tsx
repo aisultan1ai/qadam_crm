@@ -91,14 +91,19 @@ function NavBar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
   const light = scrolled || open;
+  // Наверху — прозрачная панель поверх видео; при прокрутке — «плавающая капсула» с тенью и обводкой,
+  // чтобы она не сливалась с белыми секциями.
   return (
-    <header
-      className={clsx(
-        "fixed inset-x-0 top-0 z-50 transition-colors duration-300",
-        light ? "border-b border-zinc-200 bg-white/90 backdrop-blur" : "border-b border-transparent bg-transparent",
-      )}
-    >
-      <div className={clsx(container, "flex h-16 items-center gap-8")}>
+    <header className="fixed inset-x-0 top-0 z-50 px-3 sm:px-5">
+      <div
+        className={clsx(
+          "mx-auto w-full transition-[max-width,margin,background-color,box-shadow,border-radius] duration-300 ease-out",
+          light
+            ? "mt-3 max-w-[1160px] rounded-2xl bg-white/85 shadow-[0_10px_34px_-14px_rgb(13_15_19/0.35),0_2px_6px_-2px_rgb(13_15_19/0.08)] ring-1 ring-zinc-900/[0.08] backdrop-blur-xl backdrop-saturate-150"
+            : "mt-0 max-w-[1200px] rounded-none bg-transparent ring-0 ring-transparent",
+        )}
+      >
+      <div className={clsx("flex items-center gap-8 transition-[height,padding] duration-300", light ? "h-14 px-4 sm:px-5" : "h-16 px-2 sm:px-3")}>
         <Link to="/" aria-label="Qadam CRM — главная" className={clsx("flex items-center gap-2.5", light ? "text-zinc-950" : "text-white")}>
           <LogoMark size={26} inverted={!light} className={light ? "!text-zinc-950" : undefined} />
           <span className="text-[17px] font-semibold tracking-tight">Qadam</span>
@@ -140,8 +145,8 @@ function NavBar() {
         </button>
       </div>
       {open && (
-        <div className="border-t border-zinc-200 bg-white md:hidden">
-          <div className={clsx(container, "flex flex-col gap-1 py-3")}>
+        <div className="border-t border-zinc-200/80 md:hidden">
+          <div className="flex flex-col gap-1 px-4 py-3">
             {NAV_LINKS.map((l) => (
               <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-md px-2 py-2.5 text-[15px] text-zinc-800">
                 {l.label}
@@ -154,6 +159,7 @@ function NavBar() {
           </div>
         </div>
       )}
+      </div>
     </header>
   );
 }

@@ -42,22 +42,17 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div
-      className={clsx(
-        "flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800",
-        className,
-      )}
-    >
+    <div className={clsx("flex flex-wrap items-center justify-between gap-3 pb-1", className)}>
       <div className="min-w-0">
         {back && (
           <Link
             to={back.to}
-            className="mb-2 inline-flex items-center gap-1 text-[13px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+            className="mb-0.5 inline-flex items-center gap-0.5 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
           >
-            <ChevronLeft size={15} /> {back.label}
+            <ChevronLeft size={13} /> {back.label}
           </Link>
         )}
-        {eyebrow && <div className="section-label mb-1">{eyebrow}</div>}
+        {eyebrow && <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">{eyebrow}</div>}
         <h1 className="page-title flex flex-wrap items-center gap-2">{title}</h1>
         {subtitle && <div className="page-subtitle">{subtitle}</div>}
         {meta && <div className="mt-3 flex flex-wrap items-center gap-2">{meta}</div>}
@@ -100,8 +95,8 @@ export function Tabs<K extends string>({
       role="tablist"
       aria-label={label}
       className={clsx(
-        "flex items-center gap-6 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800",
-        size === "sm" && "gap-5",
+        "flex items-center gap-5 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800",
+        size === "sm" && "gap-4",
         className,
       )}
     >
@@ -118,10 +113,10 @@ export function Tabs<K extends string>({
               aria-selected={active}
               onClick={() => onChange(t.key)}
               className={clsx(
-                "-mb-px inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500",
-                size === "sm" ? "py-2.5" : "py-3",
+                "-mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500",
+                size === "sm" ? "py-2" : "py-2.5",
                 active
-                  ? "border-brand-600 font-medium text-zinc-900 dark:border-brand-400 dark:text-white"
+                  ? "border-brand-600 font-semibold text-zinc-900 dark:border-brand-400 dark:text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white",
               )}
             >
@@ -133,7 +128,7 @@ export function Tabs<K extends string>({
                     "rounded-md px-1.5 text-xs font-medium tabular-nums",
                     active
                       ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
-                      : "bg-zinc-100 text-zinc-500 dark:bg-[#1B1F26] dark:text-zinc-400",
+                      : "bg-zinc-100 text-zinc-500 dark:bg-[#23262D] dark:text-zinc-400",
                   )}
                 >
                   {t.count}
@@ -165,7 +160,7 @@ export function Segmented<K extends string>({
       role="group"
       aria-label={label}
       className={clsx(
-        "inline-flex shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 dark:border-zinc-800 dark:bg-[#1B1F26]",
+        "inline-flex shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 dark:border-zinc-800 dark:bg-[#23262D]",
         className,
       )}
     >
@@ -185,7 +180,7 @@ export function Segmented<K extends string>({
               className={clsx(
                 "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
                 active
-                  ? "bg-white font-medium text-zinc-900 shadow-[0_1px_2px_rgb(13_15_19/0.08)] dark:bg-[#14171C] dark:text-white"
+                  ? "bg-white font-medium text-zinc-900 shadow-[0_1px_2px_rgb(13_15_19/0.08)] dark:bg-[#1B1E23] dark:text-white"
                   : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white",
               )}
             >
@@ -244,7 +239,7 @@ export function SearchInput({
           type="button"
           aria-label="Очистить поиск"
           onClick={() => onChange("")}
-          className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-[#1B1F26]"
+          className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-[#23262D]"
         >
           <X size={13} />
         </button>
@@ -274,7 +269,7 @@ export function FilterSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={clsx(
-        "h-8 max-w-[220px] cursor-pointer rounded-lg border bg-white px-2.5 pr-7 text-[13px] focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:bg-[#14171C]",
+        "h-8 max-w-[220px] cursor-pointer rounded-lg border bg-white px-2.5 pr-7 text-[13px] focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:bg-[#1B1E23]",
         active
           ? "border-brand-500 bg-brand-50 font-medium text-brand-700 dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-300"
           : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300",
@@ -314,7 +309,7 @@ export function Panel({
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
       )}
-      <div className={clsx(!flush && "p-5", bodyClassName)}>{children}</div>
+      <div className={clsx(!flush && "p-4", bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -325,17 +320,17 @@ export function Panel({
 
 export function DetailLayout({ main, aside, className }: { main: ReactNode; aside: ReactNode; className?: string }) {
   return (
-    <div className={clsx("grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]", className)}>
-      <div className="flex min-w-0 flex-col gap-6">{main}</div>
-      <aside className="flex flex-col gap-4 lg:sticky lg:top-[4.5rem]">{aside}</aside>
+    <div className={clsx("grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_320px]", className)}>
+      <div className="flex min-w-0 flex-col gap-4">{main}</div>
+      <aside className="flex flex-col gap-4 lg:sticky lg:top-16">{aside}</aside>
     </div>
   );
 }
 
 export function PropertyList({ title = "Свойства", children }: { title?: ReactNode; children: ReactNode }) {
   return (
-    <section className="card p-5">
-      <div className="section-label mb-3">{title}</div>
+    <section className="card p-4">
+      <div className="section-label mb-2">{title}</div>
       <dl className="flex flex-col gap-1">{children}</dl>
     </section>
   );
@@ -343,12 +338,12 @@ export function PropertyList({ title = "Свойства", children }: { title?:
 
 export function PropertyRow({ icon: Icon, label, children }: { icon?: LucideIcon; label: ReactNode; children: ReactNode }) {
   return (
-    <div className="grid min-h-9 grid-cols-[120px_minmax(0,1fr)] items-center gap-3 py-0.5">
+    <div className="grid min-h-8 grid-cols-[112px_minmax(0,1fr)] items-center gap-3 py-0.5">
       <dt className="flex items-center gap-2 text-[13px] text-zinc-500 dark:text-zinc-400">
         {Icon && <Icon size={15} className="shrink-0" />}
         {label}
       </dt>
-      <dd className="flex min-w-0 flex-wrap items-center gap-2 text-sm">{children}</dd>
+      <dd className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">{children}</dd>
     </div>
   );
 }
@@ -404,7 +399,7 @@ export function SettingsLayout<K extends string>({
                     "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
                     active
                       ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-[#1B1F26] dark:hover:text-white",
+                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-[#23262D] dark:hover:text-white",
                   )}
                 >
                   {Icon && <Icon size={16} className="shrink-0" />}
@@ -433,50 +428,18 @@ export function SettingsRouteLayout({
   children: ReactNode;
 }) {
   const visible = items.filter((i) => !i.hidden);
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-  const current = visible.find((i) => pathname.endsWith("/" + i.to))?.to ?? "";
+  // Разделы показываются в панели модуля каркаса; здесь — шапка текущего раздела и его содержимое.
+  const current = visible.find((i) => pathname.endsWith("/" + i.to));
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[232px_minmax(0,1fr)]">
-      <nav aria-label="Разделы настроек" className="lg:sticky lg:top-[4.5rem]">
-        <div className="mb-1 px-2.5 text-lg font-semibold tracking-tight">{title}</div>
-        {subtitle && <p className="mb-4 px-2.5 text-[13px] text-zinc-500 dark:text-zinc-400">{subtitle}</p>}
-        <select
-          aria-label="Раздел настроек"
-          className="input lg:hidden"
-          value={current}
-          onChange={(e) => navigate(e.target.value)}
-        >
-          {visible.map((i) => (
-            <option key={i.to} value={i.to}>
-              {i.label}
-            </option>
-          ))}
-        </select>
-        <ul className="hidden flex-col gap-0.5 lg:flex">
-          {visible.map((i) => {
-            const Icon = i.icon;
-            return (
-              <li key={i.to}>
-                <NavLink
-                  to={i.to}
-                  className={({ isActive }) =>
-                    clsx(
-                      "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
-                      isActive
-                        ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                        : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-[#1B1F26] dark:hover:text-white",
-                    )
-                  }
-                >
-                  {Icon && <Icon size={16} className="shrink-0" />}
-                  <span className="truncate">{i.label}</span>
-                </NavLink>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+    <div className="space-y-4">
+      <div className="page-header">
+        <div className="min-w-0">
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">{title}</div>
+          <h1 className="page-title">{current?.label ?? title}</h1>
+          {!current && subtitle && <p className="page-subtitle">{subtitle}</p>}
+        </div>
+      </div>
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -538,12 +501,12 @@ export function WorkspaceLayout({
   return (
     <div
       className={clsx(
-        "-mx-4 -my-5 flex h-[calc(100vh-3.5rem)] min-h-0 overflow-hidden border-zinc-200 bg-white sm:-mx-6 lg:-mx-8 lg:-my-7 dark:border-zinc-800 dark:bg-[#14171C]",
+        "-mx-4 -my-5 flex h-[calc(100vh-3.5rem)] min-h-0 overflow-hidden border-zinc-200 bg-white sm:-mx-6 lg:-mx-8 lg:-my-7 dark:border-zinc-800 dark:bg-[#1B1E23]",
         className,
       )}
     >
       <div className="flex w-full min-w-0 flex-col border-r border-zinc-200 md:w-80 md:shrink-0 dark:border-zinc-800">{list}</div>
-      <div className="hidden min-w-0 flex-1 flex-col bg-[#F6F7F9] md:flex dark:bg-[#0D0F13]">{main}</div>
+      <div className="hidden min-w-0 flex-1 flex-col bg-[#F5F6F8] md:flex dark:bg-[#14161A]">{main}</div>
       {aside && (
         <div className="hidden w-80 shrink-0 flex-col border-l border-zinc-200 xl:flex dark:border-zinc-800">{aside}</div>
       )}
@@ -558,7 +521,7 @@ export function WorkspaceLayout({
 export function BulkBar({ count, children, onClear }: { count: number; children: ReactNode; onClear: () => void }) {
   if (count <= 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg bg-sidebar px-3 py-2 text-[13px] text-white">
+    <div className="flex flex-wrap items-center gap-3 rounded-lg bg-rail px-3 py-2 text-[13px] text-white">
       <span className="font-medium tabular-nums">Выбрано: {count}</span>
       <span className="h-4 w-px bg-white/15" />
       <div className="flex flex-wrap items-center gap-1 [&_button]:text-zinc-200 [&_button:hover]:bg-white/10 [&_button:hover]:text-white">

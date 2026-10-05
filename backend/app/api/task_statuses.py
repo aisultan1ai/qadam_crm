@@ -22,19 +22,19 @@ MANAGE = require("settings.dictionaries")
 
 def _check_color(v):
     if v is not None and not COLOR_RE.match(v):
-        raise ValueError("color must be #RRGGBB")
+        raise ValueError("Цвет должен быть в формате #RRGGBB")
     return v
 
 
 def _check_category(v):
     if v is not None and v not in STATUS_CATEGORIES:
-        raise ValueError(f"category must be one of {STATUS_CATEGORIES}")
+        raise ValueError("Недопустимая категория статуса")
     return v
 
 
 def _check_label(v):
     if v is not None and not v.strip():
-        raise ValueError("label is required")
+        raise ValueError("Укажите название статуса")
     return v.strip() if v else v
 
 

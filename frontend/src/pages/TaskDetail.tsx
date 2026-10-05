@@ -349,7 +349,7 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
                 </span>
               )}
               <input
-                className="min-w-0 flex-1 rounded-md border-0 bg-transparent px-1 py-0.5 -mx-1 text-[22px] font-semibold tracking-[-0.01em] outline-none hover:bg-zinc-100 focus:bg-white focus:ring-2 focus:ring-brand-500/30 disabled:cursor-default disabled:opacity-100 disabled:hover:bg-transparent dark:hover:bg-[#1B1F26] dark:focus:bg-[#14171C]"
+                className="min-w-0 flex-1 rounded-md border-0 bg-transparent px-1 py-0.5 -mx-1 text-[22px] font-semibold tracking-[-0.01em] outline-none hover:bg-zinc-100 focus:bg-white focus:ring-2 focus:ring-brand-500/30 disabled:cursor-default disabled:opacity-100 disabled:hover:bg-transparent dark:hover:bg-[#23262D] dark:focus:bg-[#1B1E23]"
                 value={titleDraft}
                 disabled={!canEditTitle}
                 onChange={(e) => setTitleDraft(e.target.value)}
@@ -690,7 +690,7 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
               {task.reminders.map((r) => (
                 <li
                   key={r.id}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-[13px] hover:bg-zinc-50 dark:hover:bg-[#1B1F26]"
+                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-[13px] hover:bg-zinc-50 dark:hover:bg-[#23262D]"
                 >
                   <BellRing size={12} className="shrink-0 text-neutral-400" />
                   <span className="flex-1 truncate">{reminderLabel(r)}</span>
@@ -757,7 +757,7 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
           <div className="space-y-1.5">
             {task.attachments.length === 0 && <div className="text-[13px] text-zinc-500">Нет вложений</div>}
             {task.attachments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-zinc-50 dark:hover:bg-[#1B1F26]">
+              <div key={a.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-zinc-50 dark:hover:bg-[#23262D]">
                 <a
                   href={`${API_URL}/api/tasks/${taskId}/attachments/${a.id}`}
                   target="_blank"

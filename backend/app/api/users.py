@@ -62,16 +62,10 @@ def _load_tenant_user(db: Session, tenant_id: int, user_id: int) -> User:
 
 
 def _tenant_roles_query(db: Session, tenant_id: int, role_ids: list[int]):
-    """Роли, доступные для назначения в tenant'е: собственные роли tenant'а
-    плюс системные шаблоны (tenant_id IS NULL).
+    """Роли, доступные для назначения в tenant'е — только собственные роли компании
+    (системные шаблоны прав не дают, см. core.permissions.user_has).
     """
-    return (
-        db.query(Role)
-        .filter(
-            Role.id.in_(role_ids),
-            or_(Role.tenant_id == tenant_id, Role.tenant_id.is_(None)),
-        )
-    )
+    return db.query(Role).filter(Role.id.in_(role_ids), Role.tenant_id == tenant_id)
 
 
 @router.get("/users", response_model=Page[UserOut])

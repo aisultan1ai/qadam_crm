@@ -23,7 +23,7 @@ export function useTaskPatch() {
       if (!optimistic) return { snapshots: [] as [readonly unknown[], unknown][] };
       await qc.cancelQueries({ queryKey: ["tasks"] });
       const snapshots = qc.getQueriesData<unknown>({ queryKey: ["tasks"] });
-      qc.setQueriesData<unknown>({ queryKey: ["tasks"] }, (old) =>
+      qc.setQueriesData<unknown>({ queryKey: ["tasks"] }, (old: unknown) =>
         Array.isArray(old) ? (old as TaskListItem[]).map((t) => (t.id === id ? { ...t, ...optimistic } : t)) : old,
       );
       return { snapshots };

@@ -29,7 +29,7 @@ export default {
     extend: {
       fontFamily: {
         sans: [
-          '"IBM Plex Sans"',
+          "Inter",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
@@ -38,7 +38,7 @@ export default {
           "sans-serif",
         ],
         // Заголовки лендинга (жирный геометрический гротеск с кириллицей, в духе ClickUp).
-        display: ["Onest", '"IBM Plex Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Onest", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ['"IBM Plex Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {
@@ -56,10 +56,11 @@ export default {
           dark: "#0D0F13",
           darkMuted: "#14171C",
         },
-        sidebar: {
-          DEFAULT: "#12151B",
-          hover: "#1B1F27",
-          line: "#232830",
+        // Каркас: тёмная полоса модулей (одинаковая в обеих темах).
+        rail: {
+          DEFAULT: "#16181D",
+          hover: "rgb(255 255 255 / 0.06)",
+          active: "rgb(255 255 255 / 0.09)",
         },
       },
       boxShadow: {

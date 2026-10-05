@@ -38,12 +38,12 @@ export function TaskDrawer({ taskId, onClose }: { taskId: number; onClose: () =>
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="absolute inset-y-0 right-0 flex w-full max-w-[820px] flex-col border-l border-zinc-200 bg-[#F6F7F9] shadow-pop outline-none animate-[qd-drawer-in_.22s_cubic-bezier(.2,.8,.2,1)] dark:border-zinc-800 dark:bg-[#0D0F13]"
+        className="absolute inset-y-0 right-0 flex w-full max-w-[820px] flex-col border-l border-zinc-200 bg-[#F5F6F8] shadow-pop outline-none animate-[qd-drawer-in_.22s_cubic-bezier(.2,.8,.2,1)] dark:border-zinc-800 dark:bg-[#14161A]"
       >
-        <div className="flex h-12 shrink-0 items-center justify-end gap-1 border-b border-zinc-200 bg-white px-3 dark:border-zinc-800 dark:bg-[#14171C]">
+        <div className="flex h-12 shrink-0 items-center justify-end gap-1 border-b border-zinc-200 bg-white px-3 dark:border-zinc-800 dark:bg-[#1B1E23]">
           <Link
             to={`/tasks/${taskId}`}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-[#1B1F26] dark:hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-[#23262D] dark:hover:text-white"
           >
             <Maximize2 size={14} /> Открыть полностью
           </Link>
@@ -52,7 +52,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: number; onClose: () =>
             onClick={onClose}
             aria-label="Закрыть панель"
             title="Закрыть (Esc)"
-            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#1B1F26] dark:hover:text-white"
+            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-[#23262D] dark:hover:text-white"
           >
             <X size={18} />
           </button>

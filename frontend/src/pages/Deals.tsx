@@ -272,7 +272,7 @@ export default function DealsPage() {
       </Toolbar>
 
       {isPending ? (
-        <div className="h-64 animate-pulse rounded-xl bg-zinc-100 dark:bg-[#1B1F26]" />
+        <div className="h-64 animate-pulse rounded-xl bg-zinc-100 dark:bg-[#23262D]" />
       ) : filtered.length === 0 ? (
         <div className="card">
           <EmptyState
@@ -294,17 +294,17 @@ export default function DealsPage() {
               const items = grouped[stage] || [];
               const stageTotal = items.reduce((s, d) => s + d.amount_cents, 0);
               return (
-                <div key={stage} className={clsx("flex min-h-[220px] flex-col rounded-lg border border-t-2 border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-[#14171C]", STAGE_HEADER[stage])}>
+                <div key={stage} className={clsx("flex min-h-[220px] flex-col rounded-lg border border-t-2 border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-[#1B1E23]", STAGE_HEADER[stage])}>
                   <div className="flex items-center justify-between px-3 py-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     <span>{STAGE_LABEL[stage]}</span>
-                    <span className="rounded bg-zinc-200/70 px-1.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-[#1B1F26] dark:text-zinc-400">{items.length}</span>
+                    <span className="rounded bg-zinc-200/70 px-1.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-[#23262D] dark:text-zinc-400">{items.length}</span>
                   </div>
                   <div className="px-3 py-1 text-xs text-neutral-500 border-b border-neutral-200 dark:border-neutral-800 tabular-nums">
                     {fmtMoney(stageTotal, currency)}
                   </div>
                   <div className="flex flex-1 flex-col gap-2 p-2">
                     {items.map((d) => (
-                      <div key={d.id} className="group rounded-md border border-zinc-200 bg-white p-2.5 text-sm transition-[border-color,box-shadow] hover:border-zinc-300 hover:shadow-pop dark:border-zinc-800 dark:bg-[#1B1F26]">
+                      <div key={d.id} className="group rounded-md border border-zinc-200 bg-white p-2.5 text-sm transition-[border-color,box-shadow] hover:border-zinc-300 hover:shadow-pop dark:border-zinc-800 dark:bg-[#23262D]">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 font-medium">{d.title}</div>
                           <div className="opacity-0 transition-opacity group-hover:opacity-100 flex gap-0.5">
@@ -450,7 +450,7 @@ export default function DealsPage() {
 
 function ForecastCard({ label, value, sub, icon, accent }: { label: string; value: string; sub?: string; icon: React.ReactNode; accent?: boolean }) {
   return (
-    <div className="bg-white p-5 dark:bg-[#14171C]">
+    <div className="bg-white p-5 dark:bg-[#1B1E23]">
       <div className="flex items-center justify-between text-[13px] font-medium text-zinc-500 dark:text-zinc-400">
         <span>{label}</span>
         <span className={accent ? "text-brand-600 dark:text-brand-400" : undefined}>{icon}</span>

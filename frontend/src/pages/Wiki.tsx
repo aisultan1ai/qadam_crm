@@ -137,7 +137,7 @@ export default function Wiki() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[280px_1fr] dark:border-zinc-800 dark:bg-[#14171C]">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[280px_1fr] dark:border-zinc-800 dark:bg-[#1B1E23]">
         <TreeSidebar activeSlug={slug} />
         <div className="min-h-0 overflow-hidden border-b border-zinc-200 md:border-b-0 md:border-r dark:border-zinc-800">
           {!slug && <EmptyState />}
@@ -389,7 +389,7 @@ function TreeSidebar({ activeSlug }: { activeSlug?: string }) {
   };
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden bg-white dark:bg-[#14171C]">
+    <div className="flex min-h-0 flex-col overflow-hidden bg-white dark:bg-[#1B1E23]">
       <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2 dark:border-neutral-800">
         <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Дерево</span>
         <Button

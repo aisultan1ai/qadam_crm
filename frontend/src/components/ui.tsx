@@ -285,7 +285,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
       {icon && (
-        <div className="mb-4 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-[#1B1F26] dark:text-zinc-400">
+        <div className="mb-4 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-[#23262D] dark:text-zinc-400">
           {icon}
         </div>
       )}

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from typing import List
 
 from ..database import get_db
@@ -62,13 +62,9 @@ def list_permissions(_: User = Depends(get_current_user), db: Session = Depends(
 
 @router.get("/roles", response_model=List[RoleOut])
 def list_roles(ctx: TenantContext = Depends(require("roles.manage")), db: Session = Depends(get_db)):
-    # Свои роли tenant'а + системные шаблоны (tenant_id IS NULL) как read-only.
-    roles = (
-        db.query(Role)
-        .filter(or_(Role.tenant_id == ctx.tenant.id, Role.tenant_id.is_(None)))
-        .order_by(Role.tenant_id.is_(None).desc(), Role.id)
-        .all()
-    )
+    # Только роли компании. Системные шаблоны уже скопированы в неё при создании
+    # и прав не дают — показывать их рядом значит дублировать список.
+    roles = db.query(Role).filter(Role.tenant_id == ctx.tenant.id).order_by(Role.id).all()
     return [_role_out(db, r) for r in roles]
 
 

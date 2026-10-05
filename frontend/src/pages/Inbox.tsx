@@ -39,7 +39,7 @@ function ContactAvatar({ name, url, kind, size = 36 }: { name: string; url?: str
       {kind && (
         <span
           aria-hidden
-          className={clsx("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white dark:ring-[#14171C]", KIND_DOT[kind])}
+          className={clsx("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white dark:ring-[#1B1E23]", KIND_DOT[kind])}
         />
       )}
     </span>
@@ -164,7 +164,7 @@ export default function Inbox() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_300px] dark:border-zinc-800 dark:bg-[#14171C]">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_300px] dark:border-zinc-800 dark:bg-[#1B1E23]">
         {/* Left: conversation list */}
         <div className="flex min-h-0 flex-col overflow-hidden border-b border-zinc-200 md:border-b-0 md:border-r dark:border-zinc-800">
           <div className="space-y-2.5 border-b border-zinc-200 p-3 dark:border-zinc-800">
@@ -236,7 +236,7 @@ export default function Inbox() {
                     "relative w-full border-b border-zinc-100 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:border-zinc-800/70",
                     isSelected
                       ? "bg-brand-50 shadow-[inset_3px_0_0_rgb(var(--brand-600))] dark:bg-brand-500/10"
-                      : "hover:bg-zinc-50 dark:hover:bg-[#1B1F26]",
+                      : "hover:bg-zinc-50 dark:hover:bg-[#23262D]",
                   )}
                 >
                   <div className="flex items-start gap-3">
@@ -279,11 +279,11 @@ export default function Inbox() {
         </div>
 
         {/* Right: chat */}
-        <div className="flex min-h-0 flex-col overflow-hidden bg-[#F6F7F9] dark:bg-[#0D0F13]">
+        <div className="flex min-h-0 flex-col overflow-hidden bg-[#F5F6F8] dark:bg-[#14161A]">
           {!selected && (
             <div className="flex flex-1 items-center justify-center p-6">
               <div className="text-center">
-                <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500 dark:border-zinc-800 dark:bg-[#14171C]">
+                <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500 dark:border-zinc-800 dark:bg-[#1B1E23]">
                   <MessageCircle size={20} />
                 </span>
                 <div className="text-[15px] font-semibold">Выберите диалог</div>
@@ -411,7 +411,7 @@ function Chat({
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-5 py-3 dark:border-zinc-800 dark:bg-[#14171C]">
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-5 py-3 dark:border-zinc-800 dark:bg-[#1B1E23]">
         <div className="flex min-w-0 items-center gap-3">
           <ContactAvatar name={contactName} url={contact?.avatar_url} kind={conversation.channel_kind} />
           <div className="min-w-0">
@@ -469,7 +469,7 @@ function Chat({
             Диалог закрыт. Откройте, чтобы отвечать.
           </div>
         )}
-        <div className="rounded-xl border border-zinc-300 bg-white shadow-soft focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/15 dark:border-zinc-700 dark:bg-[#14171C]">
+        <div className="rounded-xl border border-zinc-300 bg-white shadow-soft focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/15 dark:border-zinc-700 dark:bg-[#1B1E23]">
           <div>
             <textarea
               aria-label="Ответ клиенту"
@@ -508,7 +508,7 @@ function Chat({
           </div>
         </div>
         {showTemplates && (templates?.length ?? 0) > 0 && (
-          <div className="mt-2 grid gap-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 text-[13px] shadow-pop dark:border-zinc-800 dark:bg-[#14171C]">
+          <div className="mt-2 grid gap-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 text-[13px] shadow-pop dark:border-zinc-800 dark:bg-[#1B1E23]">
             <div className="section-label px-2 py-1">Шаблоны ответов</div>
             {templates!.map((t) => (
               <button
@@ -541,7 +541,7 @@ function MessageBubble({ msg }: { msg: ExtMessage }) {
           "max-w-[72%] px-3.5 py-2.5 text-sm",
           isOut
             ? "rounded-[12px_12px_4px_12px] bg-brand-600 text-white"
-            : "rounded-[12px_12px_12px_4px] border border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-[#14171C] dark:text-zinc-100",
+            : "rounded-[12px_12px_12px_4px] border border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-[#1B1E23] dark:text-zinc-100",
           msg.status === "failed" && "ring-2 ring-rose-500",
         )}
       >
@@ -553,7 +553,7 @@ function MessageBubble({ msg }: { msg: ExtMessage }) {
         )}
       </div>
       <div className="mt-1 flex items-center gap-1.5 px-1 text-xs text-zinc-500">
-        {msg.is_auto && <span className="rounded bg-zinc-100 px-1 text-[11px] dark:bg-[#1B1F26]">авто</span>}
+        {msg.is_auto && <span className="rounded bg-zinc-100 px-1 text-[11px] dark:bg-[#23262D]">авто</span>}
         <span className="tabular-nums">{time}</span>
         {isOut && msg.status === "pending" && <Clock3 size={12} aria-label="Отправляется" />}
         {isOut && msg.status === "sent" && <Check size={13} aria-label="Отправлено" />}
