@@ -104,9 +104,6 @@ export default function Profile() {
     <div className="mx-auto max-w-4xl space-y-5">
       <div className="page-header">
         <h1 className="page-title">{isSelf ? "Профиль" : user.name}</h1>
-        <p className="page-subtitle">
-          {isSelf ? "Данные вашего аккаунта и профиля" : "Профиль сотрудника"}
-        </p>
       </div>
 
       {isSelf && me?.pending_email && (

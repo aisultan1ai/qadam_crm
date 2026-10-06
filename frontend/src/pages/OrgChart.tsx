@@ -185,12 +185,8 @@ export default function OrgChart() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
-          <h1 className="page-title flex items-center gap-2">
-            <Network size={22} /> Оргструктура
-          </h1>
-          <p className="page-subtitle">
-            Иерархия сотрудников по полю «руководитель». Кликните на карточку — откроется профиль.
-          </p>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Команда</div>
+          <h1 className="page-title">Оргструктура</h1>
         </div>
         <div className="text-xs text-neutral-500">
           {data && (

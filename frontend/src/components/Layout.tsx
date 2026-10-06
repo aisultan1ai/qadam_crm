@@ -270,9 +270,11 @@ export default function Layout() {
   const visible = useVisible(me, can);
   const modules = useMemo(() => MODULES.filter((m) => m.items.some(visible)), [visible]);
   const active = moduleOf(pathname) ?? modules[0];
+  // Мессенджер / Открытые линии / Почта — рабочие области на всю высоту, без отступов контента.
+  const fullBleed = /^\/(messenger|inbox|mail)(\/|$)/.test(pathname);
 
   return (
-    <div className="flex min-h-screen">
+    <div className={clsx("flex", fullBleed ? "h-screen overflow-hidden" : "min-h-screen")}>
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-brand-600 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none"
@@ -305,7 +307,7 @@ export default function Layout() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <TopBar
           can={can}
           theme={theme}
@@ -317,7 +319,14 @@ export default function Layout() {
           online={online}
         />
         <EmailVerificationBanner />
-        <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 max-w-[1560px] flex-1 px-4 py-4 sm:px-6 lg:py-5 focus:outline-none">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={clsx(
+            "w-full min-w-0 flex-1 focus:outline-none",
+            fullBleed ? "flex min-h-0 flex-col" : "mx-auto max-w-[1560px] px-4 py-4 sm:px-6 lg:py-5",
+          )}
+        >
           <ErrorBoundary>
             <Suspense fallback={<div className="min-h-[200px]" />}>
               <Outlet />

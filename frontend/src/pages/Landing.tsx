@@ -85,10 +85,12 @@ function NavBar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    // Берём максимум из всех источников: если прокручивается body (overflow на html/body), window.scrollY = 0.
+    const onScroll = () =>
+      setScrolled(Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) > 24);
     onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    document.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
   }, []);
   const light = scrolled || open;
   // Наверху — прозрачная панель поверх видео; при прокрутке — «плавающая капсула» с тенью и обводкой,

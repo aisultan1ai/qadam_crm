@@ -122,8 +122,8 @@ export default function Notifications() {
     <div className="space-y-4">
       <PageHeader
         className="border-b-0 pb-0"
+        eyebrow="Главная"
         title="Входящие"
-        subtitle="Назначения, упоминания, комментарии и напоминания"
         actions={
           <Button variant="secondary" onClick={() => readAll.mutate()} disabled={readAll.isPending || !counts?.unread}>
             <CheckCheck size={15} /> Прочитать все

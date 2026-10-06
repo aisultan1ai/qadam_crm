@@ -43,8 +43,10 @@ body,
   height: 100%;
 }
 
+/* clip, а не hidden: hidden на html+body делает body отдельной прокручиваемой областью —
+   window.scrollY остаётся 0, и не работают ни «капсула» навбара лендинга, ни scrollTo при переходах. */
 html, body {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {

@@ -113,12 +113,8 @@ export default function Wiki() {
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-3">
       <div className="page-header">
         <div>
-          <h1 className="page-title flex items-center gap-2">
-            <BookOpen size={22} /> База знаний
-          </h1>
-          <p className="page-subtitle">
-            Внутренняя wiki: инструкции, регламенты, база FAQ
-          </p>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Знания</div>
+          <h1 className="page-title">База знаний</h1>
         </div>
         <div className="flex gap-2">
           <Button

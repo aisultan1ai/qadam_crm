@@ -40,11 +40,8 @@ export default function DirectoriesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Справочники</h1>
-          <p className="page-subtitle">Пользовательские lookup-таблицы (страны, продукты, статусы...)</p>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-zinc-500">Свои списки значений — страны, продукты, типы клиентов — для полей задач и CRM.</p>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
           Справочник
         </Button>

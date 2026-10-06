@@ -101,8 +101,8 @@ export default function Leads() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">CRM</div>
           <h1 className="page-title">Лиды</h1>
-          <p className="page-subtitle">Заявки через формы захвата и вручную</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700">

@@ -26,8 +26,8 @@ export default function Users() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Команда</div>
           <h1 className="page-title">Пользователи</h1>
-          <p className="page-subtitle">Сотрудники компании и отделы</p>
         </div>
         <nav className="flex gap-1 card p-1">
           {TABS.map((t) => (

@@ -49,8 +49,8 @@ function BoardList({ onOpen }: { onOpen: (id: number) => void }) {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Знания</div>
           <h1 className="page-title">Доски</h1>
-          <p className="page-subtitle">Совместные whiteboard-доски на Excalidraw</p>
         </div>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
           Новая доска
@@ -64,7 +64,7 @@ function BoardList({ onOpen }: { onOpen: (id: number) => void }) {
           ))}
         </div>
       ) : !data || data.length === 0 ? (
-        <EmptyState icon={<PenSquare size={32} />} title="Досок пока нет" description="Создайте первую — рисуйте схемы, mind-map, wireframes" />
+        <EmptyState icon={<PenSquare size={32} />} title="Досок пока нет" description="Создайте первую — рисуйте схемы, карты идей и макеты вместе с командой" />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {data.map((b) => (

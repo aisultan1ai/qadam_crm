@@ -13,6 +13,7 @@ import { useAuth } from "@/store/auth";
 import { fromNow } from "@/lib/date";
 import { BirthdaysWidget, MyGoalsWidget, KudosFeedWidget } from "@/components/HRWidgets";
 import { MyWork } from "./dashboard/MyWork";
+import { activityText } from "@/lib/activityLabels";
 
 type DashboardStats = {
   total: number;
@@ -49,27 +50,6 @@ const STATUS_BAR: Record<TaskStatus, string> = {
   review: "bg-amber-500",
   done: "bg-emerald-500",
   cancelled: "bg-zinc-400",
-};
-
-const ACTION_VERB: Record<string, string> = {
-  create: "создал(а)",
-  update: "обновил(а)",
-  delete: "удалил(а)",
-  archive: "архивировал(а)",
-  unarchive: "вернул(а) из архива",
-  bulk_update: "массово обновил(а)",
-  comment: "прокомментировал(а)",
-};
-
-const ENTITY_LABEL: Record<string, string> = {
-  task: "задачу",
-  project: "проект",
-  comment: "комментарий",
-  contact: "контакт",
-  company: "компанию",
-  lead: "лид",
-  deal: "сделку",
-  wiki_article: "статью",
 };
 
 const money = (cents: number, currency: string) =>
@@ -334,7 +314,7 @@ function RecentActivity() {
               <div className="min-w-0 flex-1">
                 <span className="font-medium text-zinc-900 dark:text-zinc-100">{a.user?.name || "Система"}</span>{" "}
                 <span className="text-zinc-600 dark:text-zinc-400">
-                  {ACTION_VERB[a.action] || a.action} {a.entity ? ENTITY_LABEL[a.entity] || a.entity : ""}
+                  {activityText(a.action, a.entity)}
                 </span>
                 {a.detail && <span className="text-zinc-600 dark:text-zinc-400"> — {a.detail}</span>}
               </div>

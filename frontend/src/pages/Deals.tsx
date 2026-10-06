@@ -210,8 +210,8 @@ export default function DealsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
+        eyebrow="CRM"
         title="Сделки"
-        subtitle="Воронка продаж и все сделки компании"
         actions={
           canCreate && (
             <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>

@@ -115,9 +115,6 @@ export default function Automations() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Автоматизации</h1>
-          <p className="page-subtitle">
-            Триггеры и роботы: реагируйте на события системы без ручной работы
-          </p>
         </div>
         <Link to="/automations/new" className="btn-primary">
           <Plus size={16} /> Новая автоматизация

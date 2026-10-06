@@ -92,12 +92,10 @@ export default function People() {
   return (
     <div className="space-y-5">
       <div className="page-header">
-        <h1 className="page-title flex items-center gap-2">
-          <Users2 size={22} /> Команда
-        </h1>
-        <p className="page-subtitle">
-          Сотрудники, отделы, скиллы. Кликните по карточке — откроется профиль.
-        </p>
+        <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Команда</div>
+          <h1 className="page-title">Сотрудники</h1>
+        </div>
       </div>
 
       <Toolbar right={<span className="text-[13px] tabular-nums text-zinc-500">Найдено: {filtered.length} из {usersQ.data?.length ?? 0}</span>}>

@@ -181,8 +181,8 @@ export default function CallsPage() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">CRM</div>
           <h1 className="page-title">Звонки</h1>
-          <p className="page-subtitle">История звонков. Twilio/Voximplant подключаются через webhook</p>
         </div>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenLog(true)}>
           Записать звонок
@@ -204,7 +204,7 @@ export default function CallsPage() {
         <EmptyState
           icon={<Phone size={32} />}
           title="Звонков пока нет"
-          description="Настрой webhook Twilio: /api/webhooks/telephony/twilio?tenant_id=<ID>"
+          description="Подключите телефонию (Twilio или Voximplant) — звонки будут записываться сюда автоматически. Можно добавить звонок и вручную."
         />
       ) : (
         <DataTable

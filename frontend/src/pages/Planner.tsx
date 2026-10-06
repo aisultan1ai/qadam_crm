@@ -49,8 +49,10 @@ export default function Planner() {
   return (
     <div className="space-y-5">
       <div className="page-header">
-        <h1 className="page-title">Планировщик</h1>
-        <p className="page-subtitle">Личная лента задач и недельное расписание</p>
+        <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Главная</div>
+          <h1 className="page-title">Планировщик</h1>
+        </div>
       </div>
 
       <Tabs label="Разделы планировщика" value={activeTab} onChange={setTab} items={TABS} />
@@ -191,9 +193,9 @@ function TasksKanban({ scope }: { scope: "incoming" | "outgoing" | "all" }) {
         return (
           <div
             key={status}
-            className="flex min-h-[140px] flex-col rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50"
+            className="flex min-h-[140px] flex-col rounded-xl bg-zinc-100/70 dark:bg-[#1B1E23]/60"
           >
-            <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
+            <div className="flex items-center justify-between px-3 pb-1 pt-2.5">
               <span className="text-xs font-semibold uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
                 {STATUS_LABEL[status]}
               </span>
@@ -204,19 +206,17 @@ function TasksKanban({ scope }: { scope: "incoming" | "outgoing" | "all" }) {
                 <Link
                   key={t.id}
                   to={`/tasks/${t.id}`}
-                  className="group block rounded-md border border-neutral-200 bg-white p-2.5 text-sm shadow-sm transition-shadow hover:shadow-md dark:border-neutral-800 dark:bg-neutral-800/70"
+                  className="group block rounded-lg border border-zinc-200 bg-white p-2.5 text-[13px] transition-[border-color,box-shadow] hover:border-zinc-300 hover:shadow-pop dark:border-zinc-800 dark:bg-[#1B1E23] dark:hover:border-zinc-700"
                 >
-                  <div className="mb-1 flex items-start justify-between gap-2">
-                    <div className="line-clamp-2 font-medium group-hover:text-brand-700 dark:group-hover:text-brand-300">
-                      {t.title}
-                    </div>
-                    <PriorityChip priority={t.priority} />
+                  {/* Название — на всю ширину; статус не дублируем (это колонка). */}
+                  <div className="line-clamp-3 font-medium leading-snug text-zinc-900 group-hover:text-brand-700 dark:text-zinc-100 dark:group-hover:text-brand-300">
+                    {t.title}
                   </div>
-                  <div className="flex items-center justify-between text-xs text-neutral-500">
-                    <StatusChip status={t.status} />
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[11.5px] text-zinc-500">
+                    <PriorityChip priority={t.priority} />
                     {t.deadline && (
                       <span className="tabular-nums">
-                        {new Date(t.deadline).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
+                        {new Date(t.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
                       </span>
                     )}
                   </div>

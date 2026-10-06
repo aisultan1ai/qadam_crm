@@ -1,0 +1,85 @@
+/** Подписи для журнала событий (Хроника, «Последние события»): сервер пишет коды, пользователь видит русский текст. */
+
+export const ACTION_VERB: Record<string, string> = {
+  create: "создал(а)",
+  update: "обновил(а)",
+  delete: "удалил(а)",
+  archive: "архивировал(а)",
+  unarchive: "вернул(а) из архива",
+  bulk_update: "массово обновил(а)",
+  bulk_delete: "массово удалил(а)",
+  comment: "прокомментировал(а)",
+  reply: "ответил(а) в",
+  send: "отправил(а)",
+  import: "импортировал(а)",
+  convert: "конвертировал(а)",
+  connect: "подключил(а)",
+  disconnect: "отключил(а)",
+  upload: "загрузил(а)",
+  link: "связал(а)",
+  merge: "объединил(а)",
+  copy: "скопировал(а)",
+  revert: "откатил(а)",
+  clear: "очистил(а)",
+  invite: "пригласил(а)",
+  accept_invite: "принял(а) приглашение в",
+  subscribe: "подключил(а) тариф",
+  register: "создал(а)",
+  move_comment: "перенёс(ла) комментарий в",
+  email_in: "получил(а) письмо в",
+  login: "вошёл(ла) в систему",
+  logout: "вышел(ла) из системы",
+  password_reset: "сбросил(а) пароль",
+  email_changed: "сменил(а) email",
+  email_verified: "подтвердил(а) email",
+};
+
+export const ENTITY_LABEL: Record<string, string> = {
+  task: "задачу",
+  project: "проект",
+  comment: "комментарий",
+  contact: "контакт",
+  company: "компанию",
+  lead: "лид",
+  lead_form: "форму захвата",
+  deal: "сделку",
+  wiki: "статью",
+  wiki_article: "статью",
+  attachment: "файл",
+  automation: "автоматизацию",
+  booking_page: "страницу записи",
+  calendar_event: "событие",
+  call: "звонок",
+  custom_field: "поле",
+  document: "документ",
+  external_channel: "канал",
+  external_message: "сообщение",
+  goal: "цель",
+  google_calendar_account: "Google Календарь",
+  mail_message: "письмо",
+  mail_rule: "правило почты",
+  mailbox: "почтовый ящик",
+  manager_availability: "расписание",
+  object_schema: "сущность",
+  one_on_one: "встречу 1:1",
+  plan: "тариф",
+  role: "роль",
+  storage_account: "хранилище",
+  task_status: "статус задач",
+  template: "шаблон",
+  tenant: "компанию",
+  tenant_dropbox_config: "Dropbox",
+  tenant_google_config: "Google",
+  timeoff: "отсутствие",
+  user: "пользователя",
+  whiteboard: "доску",
+};
+
+/** Действия, у которых сущность уже есть в глаголе или не нужна. */
+const NO_ENTITY = new Set(["login", "logout", "password_reset", "email_changed", "email_verified", "subscribe"]);
+
+export function activityText(action: string, entity?: string | null): string {
+  const verb = ACTION_VERB[action] ?? action.replace(/_/g, " ");
+  if (!entity || NO_ENTITY.has(action)) return verb;
+  return `${verb} ${ENTITY_LABEL[entity] ?? "запись"}`;
+}

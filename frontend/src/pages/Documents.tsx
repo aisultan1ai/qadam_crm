@@ -216,8 +216,8 @@ export default function DocumentsPage() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Знания</div>
           <h1 className="page-title">Документы</h1>
-          <p className="page-subtitle">Файловое хранилище с версиями и публичными ссылками</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" leftIcon={<FolderPlus size={15} />} onClick={() => setOpenNewFolder(true)}>

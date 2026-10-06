@@ -83,7 +83,10 @@ export default function TimeTracking() {
   return (
     <div className="space-y-5">
       <div className="page-header">
-        <h1 className="page-title">Тайм-трекинг</h1>
+        <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Календарь</div>
+          <h1 className="page-title">Учёт времени</h1>
+        </div>
         <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-1 text-sm dark:border-neutral-700 dark:bg-neutral-900">
           {(["week", "reports", "timesheets"] as const).map((k) => (
             <button
@@ -389,7 +392,7 @@ function ManualEntryForm({ defaultDate, onCreated }: { defaultDate: Date; onCrea
         />
       </div>
       <div className="flex flex-col">
-        <label className="text-xs text-neutral-500">Задача ID (опц.)</label>
+        <label className="text-xs text-neutral-500">№ задачи (необязательно)</label>
         <input
           type="number"
           value={taskId}

@@ -60,7 +60,6 @@ export default function Analytics() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Аналитика</h1>
-          <p className="page-subtitle">Отчёты за последние 30 дней</p>
         </div>
         
       </div>

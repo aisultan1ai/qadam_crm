@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar as BigCalendar, dateFnsLocalizer, View, Views } from "react-big-calendar";
+import { Calendar as BigCalendar, dateFnsLocalizer, View, Views, type Formats } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { ru } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -23,6 +23,25 @@ const localizer = dateFnsLocalizer({
   getDay,
   locales,
 });
+
+// Русские подписи и 24-часовое время (без culture react-big-calendar берёт en-US: «Mon», «12:00 AM»).
+const RU_FORMATS: Formats = {
+  timeGutterFormat: "HH:mm",
+  dayFormat: "EEEEEE, d",
+  weekdayFormat: "EEEEEE",
+  dayHeaderFormat: "EEEE, d MMMM",
+  monthHeaderFormat: "LLLL yyyy",
+  agendaDateFormat: "EEEEEE, d MMM",
+  agendaTimeFormat: "HH:mm",
+  dayRangeHeaderFormat: ({ start, end }, culture, loc) =>
+    `${loc!.format(start, "d MMM", culture)} – ${loc!.format(end, "d MMM yyyy", culture)}`,
+  agendaHeaderFormat: ({ start, end }, culture, loc) =>
+    `${loc!.format(start, "d MMM", culture)} – ${loc!.format(end, "d MMM yyyy", culture)}`,
+  eventTimeRangeFormat: ({ start, end }, culture, loc) =>
+    `${loc!.format(start, "HH:mm", culture)}–${loc!.format(end, "HH:mm", culture)}`,
+  selectRangeFormat: ({ start, end }, culture, loc) =>
+    `${loc!.format(start, "HH:mm", culture)}–${loc!.format(end, "HH:mm", culture)}`,
+};
 
 // ============================================================================
 // Types
@@ -211,7 +230,6 @@ export default function CalendarPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Календарь</h1>
-          <p className="page-subtitle">Встречи, события, дедлайны задач</p>
         </div>
         <Button variant="primary" onClick={() => setEditorOpen({ mode: "create" })}>
           <Plus size={14} /> Новое событие
@@ -239,6 +257,8 @@ export default function CalendarPage() {
           )}
           <BigCalendar
             localizer={localizer}
+            culture="ru"
+            formats={RU_FORMATS}
             events={bcEvents}
             view={view}
             onView={setView}
@@ -250,7 +270,7 @@ export default function CalendarPage() {
             onSelectEvent={handleSelectEvent}
             popup
             eventPropGetter={(evt) => {
-              const color = (evt.resource as EventOcc).color || "#2A52C4";
+              const color = (evt.resource as EventOcc).color || "#2F6BEA";
               return {
                 style: {
                   backgroundColor: color,

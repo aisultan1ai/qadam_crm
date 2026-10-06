@@ -64,8 +64,8 @@ export default function ObjectsPage() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">CRM</div>
           <h1 className="page-title">Объекты</h1>
-          <p className="page-subtitle">Конструктор пользовательских сущностей (договоры, тикеты, счета…)</p>
         </div>
         <Button variant="primary" onClick={() => setOpenNewSchema(true)}>
           <Plus size={16} /> Новая сущность

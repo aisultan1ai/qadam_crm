@@ -58,11 +58,7 @@ function BrandPanel() {
         </Link>
 
         <div className="mt-auto max-w-[520px]">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
-            CRM и управление работой
-          </span>
-          <p className="mt-6 font-display text-[40px] font-bold leading-[1.06] tracking-[-0.04em] xl:text-[48px]">
+          <p className="font-display text-[40px] font-bold leading-[1.06] tracking-[-0.04em] xl:text-[48px]">
             Клиенты, задачи и команда — <span className="text-brand-300">в одной системе</span>
           </p>
           <p className="mt-5 max-w-md text-[16px] leading-relaxed text-white/70">

@@ -101,12 +101,6 @@ export default function IntegrationsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <h1 className="page-title flex items-center gap-2">
-          <Puzzle size={20} /> Интеграции
-        </h1>
-        <p className="page-subtitle">Подключение внешних сервисов: облачные хранилища, мессенджеры, маркетинг</p>
-      </div>
 
       {Array.from(grouped.entries()).map(([cat, items]) => (
         <div key={cat}>

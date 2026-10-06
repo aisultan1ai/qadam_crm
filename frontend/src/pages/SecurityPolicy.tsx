@@ -55,12 +55,6 @@ export default function SecurityPolicyPage() {
 
   return (
     <div className="space-y-5 max-w-3xl">
-      <div className="page-header">
-        <h1 className="page-title flex items-center gap-2">
-          <Shield size={20} /> Безопасность компании
-        </h1>
-        <p className="page-subtitle">Политики паролей, IP-ограничения, сессии, 2FA</p>
-      </div>
 
       <div className="card p-4 space-y-4">
         <h2 className="text-lg font-semibold">Пароли</h2>

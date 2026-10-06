@@ -163,9 +163,6 @@ export default function Admin() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Платформа</h1>
-          <p className="page-subtitle">
-            {tab === "tenants" ? "Все компании Qadam CRM" : tab === "users" ? "Все пользователи платформы" : "Тарифы и лимиты"}
-          </p>
         </div>
       </div>
 

@@ -54,7 +54,6 @@ export default function ReportsPage() {
     <div className="space-y-5">
       <div className="page-header">
         <h1 className="page-title">Отчёты</h1>
-        <p className="page-subtitle">Готовые шаблоны и конструктор произвольных срезов</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">

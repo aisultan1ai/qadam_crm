@@ -89,8 +89,8 @@ export default function Contacts() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">CRM</div>
           <h1 className="page-title">Контакты</h1>
-          <p className="page-subtitle">Адресная книга: люди и компании</p>
         </div>
         {canCreate && (
           <div className="flex items-center gap-2">

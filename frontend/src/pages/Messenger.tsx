@@ -3,8 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowLeft, MessageSquarePlus, Paperclip, Search, Send, Smile, Users as UsersIcon,
-  X, MoreHorizontal, Trash2, Edit3, CornerUpLeft, BarChart3, Check, ChevronsRight,
+  ArrowLeft, MessageSquarePlus, MessagesSquare, Paperclip, Plus, Search, Smile, User as UserIcon, Users as UsersIcon,
+  X, Trash2, Edit3, CornerUpLeft, BarChart3, Hash, Check, ChevronsRight,
 } from "lucide-react";
 
 import { api, API_URL, extractApiError } from "@/api/client";
@@ -14,10 +14,11 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { Avatar, EmptyState, Loader, Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
-import { VirtualList } from "@/components/VirtualList";
-import { fromNow } from "@/lib/date";
-
 import { SearchInput } from "@/components/page";
+import { Popover, PopoverItem } from "@/components/Popover";
+import {
+  Composer, DayDivider, IconAction, ListEmpty, ListHeader, ListRow, PaneEmpty, PaneHeader, Workspace, dayLabel, shortWhen,
+} from "@/components/workspace";
 // =========================================================================
 // Types
 // =========================================================================
@@ -63,6 +64,19 @@ type MessageOut = {
 
 const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉", "🔥", "✅"];
 
+/** Имя чата для показа: у чатов проектов «#» уже обозначен иконкой. */
+function channelTitle(c: { kind: string; name: string | null; peer: UserBrief | null; id?: number }): string {
+  const raw = c.name || c.peer?.name || (c.id ? `Чат #${c.id}` : "Чат");
+  return c.kind === "project" ? raw.replace(/^#\s*/, "") : raw;
+}
+
+function membersLabel(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  const word = m10 === 1 && m100 !== 11 ? "участник" : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? "участника" : "участников";
+  return `${n} ${word}`;
+}
+
 // =========================================================================
 // Root page
 // =========================================================================
@@ -81,71 +95,80 @@ export default function Messenger() {
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
+  const newRef = useRef<HTMLButtonElement>(null);
+  const [newMenu, setNewMenu] = useState(false);
 
   const filteredChannels = useMemo(() => {
     if (!channels) return [];
     const q = searchQ.trim().toLowerCase();
     if (!q) return channels;
-    return channels.filter((c) => {
-      const name = c.name || c.peer?.name || "";
-      return name.toLowerCase().includes(q);
-    });
+    return channels.filter((c) => (c.name || c.peer?.name || "").toLowerCase().includes(q));
   }, [channels, searchQ]);
 
   return (
-    <div className="grid h-[calc(100vh-8rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[300px_1fr] dark:border-zinc-800 dark:bg-[#1B1E23]">
-      <aside
-        className={clsx(
-          "flex flex-col overflow-hidden border-zinc-200 md:border-r dark:border-zinc-800",
-          activeId ? "hidden md:flex" : "flex",
-        )}
-      >
-        <div className="space-y-2.5 border-b border-zinc-200 p-3 dark:border-zinc-800">
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="text-lg font-semibold tracking-tight">Мессенджер</h1>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="icon" title="Новый личный чат" aria-label="Новый личный чат" onClick={() => setNewDmOpen(true)}>
-                <MessageSquarePlus size={16} />
-              </Button>
-              <Button variant="ghost" size="icon" title="Новая группа" aria-label="Новая группа" onClick={() => setNewGroupOpen(true)}>
-                <UsersIcon size={16} />
-              </Button>
+    <>
+      <Workspace
+        showDetailOnMobile={!!activeId}
+        list={
+          <>
+            <ListHeader
+              search={<SearchInput value={searchQ} onChange={setSearchQ} placeholder="Поиск чата" className="sm:w-full" />}
+              action={
+                <>
+                  <button
+                    ref={newRef}
+                    type="button"
+                    onClick={() => setNewMenu((v) => !v)}
+                    aria-label="Новый чат"
+                    title="Новый чат"
+                    aria-haspopup="menu"
+                    aria-expanded={newMenu}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+                  >
+                    <Plus size={16} strokeWidth={2.4} />
+                  </button>
+                  <Popover anchorRef={newRef} open={newMenu} onClose={() => setNewMenu(false)} width={200} align="end">
+                    <PopoverItem onClick={() => { setNewMenu(false); setNewDmOpen(true); }}>
+                      <UserIcon size={14} className="text-zinc-400" /> Личный чат
+                    </PopoverItem>
+                    <PopoverItem onClick={() => { setNewMenu(false); setNewGroupOpen(true); }}>
+                      <UsersIcon size={14} className="text-zinc-400" /> Группа
+                    </PopoverItem>
+                  </Popover>
+                </>
+              }
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+              {isPending ? (
+                <div className="p-4"><Loader /></div>
+              ) : filteredChannels.length === 0 ? (
+                <ListEmpty>{searchQ ? "Ничего не найдено" : "Чатов пока нет — нажмите «+», чтобы начать"}</ListEmpty>
+              ) : (
+                <ChannelList channels={filteredChannels} activeId={activeId} onOpen={(id) => nav(`/messenger/${id}`)} />
+              )}
             </div>
-          </div>
-          <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Поиск чата" className="sm:w-full" />
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {isPending ? (
-            <div className="p-4"><Loader /></div>
-          ) : filteredChannels.length === 0 ? (
-            <EmptyState title="Пока нет чатов" description="Создайте DM или группу" icon={<MessageSquarePlus size={28} />} />
-          ) : (
-            <ChannelList channels={filteredChannels} activeId={activeId} onOpen={(id) => nav(`/messenger/${id}`)} />
-          )}
-        </div>
-      </aside>
-
-      <section
-        className={clsx(
-          "flex flex-col overflow-hidden bg-[#F5F6F8] dark:bg-[#14161A]",
-          activeId ? "flex" : "hidden md:flex",
-        )}
+          </>
+        }
       >
         {activeId ? (
-          <ChatWindow channelId={activeId} onBack={() => nav("/messenger")} />
+          <ChatWindow key={activeId} channelId={activeId} onBack={() => nav("/messenger")} />
         ) : (
-          <div className="flex flex-1 items-center justify-center p-8 text-center">
-            <div className="max-w-sm text-neutral-500">
-              <MessageSquarePlus size={40} className="mx-auto mb-3 text-neutral-300" />
-              <div className="text-sm">Выберите чат слева или создайте новый.</div>
-            </div>
-          </div>
+          <PaneEmpty
+            icon={MessagesSquare}
+            title="Выберите чат"
+            hint="Личные переписки, группы и чаты проектов — в одном месте."
+            action={
+              <Button variant="primary" onClick={() => setNewDmOpen(true)}>
+                <Plus size={15} /> Новый чат
+              </Button>
+            }
+          />
         )}
-      </section>
+      </Workspace>
 
       {newDmOpen && <NewDmModal onClose={() => setNewDmOpen(false)} />}
       {newGroupOpen && <NewGroupModal onClose={() => setNewGroupOpen(false)} />}
-    </div>
+    </>
   );
 }
 
@@ -170,7 +193,7 @@ function ChannelList({
     if (!list?.length) return null;
     return (
       <div key={kind}>
-        <div className="section-label px-4 pb-1 pt-4">{label}</div>
+        <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-zinc-400">{label}</div>
         {list.map((c) => (
           <ChannelListRow key={c.id} channel={c} active={c.id === activeId} onOpen={onOpen} />
         ))}
@@ -180,10 +203,26 @@ function ChannelList({
 
   return (
     <>
-      {renderSection("Проекты", "project")}
       {renderSection("Личные", "dm")}
       {renderSection("Группы", "group")}
+      {renderSection("Проекты", "project")}
     </>
+  );
+}
+
+function ChannelAvatar({ channel, size = 36 }: { channel: Pick<ChannelListItem, "kind" | "name" | "peer">; size?: number }) {
+  if (channel.peer) return <Avatar name={channel.peer.name} url={channel.peer.avatar_url} size={size} />;
+  const name = channel.name || "";
+  return (
+    <span
+      className={clsx(
+        "grid shrink-0 place-items-center rounded-[10px] text-[13px] font-semibold",
+        channel.kind === "project" ? "bg-brand-500/10 text-brand-700 dark:text-brand-300" : "bg-zinc-100 text-zinc-600 dark:bg-white/5 dark:text-zinc-300",
+      )}
+      style={{ width: size, height: size }}
+    >
+      {channel.kind === "project" ? <Hash size={15} /> : name.charAt(0).toUpperCase() || "#"}
+    </span>
   );
 }
 
@@ -196,46 +235,18 @@ function ChannelListRow({
   active: boolean;
   onOpen: (id: number) => void;
 }) {
-  const displayName = channel.name || channel.peer?.name || `Канал #${channel.id}`;
+  const displayName = channelTitle(channel);
   return (
-    <button
-      type="button"
+    <ListRow
+      active={active}
+      unread={channel.unread_count > 0}
       onClick={() => onOpen(channel.id)}
-      className={clsx(
-        "flex w-full items-start gap-3 px-4 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500",
-        active
-          ? "bg-brand-50 shadow-[inset_3px_0_0_rgb(var(--brand-600))] dark:bg-brand-500/10"
-          : "hover:bg-zinc-50 dark:hover:bg-[#23262D]",
-      )}
-    >
-      {channel.peer ? (
-        <Avatar name={channel.peer.name} url={channel.peer.avatar_url} size={34} />
-      ) : (
-        <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg bg-zinc-100 text-sm font-semibold text-zinc-600 dark:bg-[#23262D] dark:text-zinc-300">
-          {channel.kind === "project" ? "#" : displayName.charAt(0).toUpperCase()}
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-1">
-          <span className={clsx("truncate", channel.unread_count > 0 ? "font-semibold text-zinc-900 dark:text-white" : "font-medium")}>{displayName}</span>
-          {channel.last_message_at && (
-            <span className="shrink-0 text-xs text-zinc-500">
-              {fromNow(channel.last_message_at)}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-500">
-            {channel.last_message_preview || <em className="text-neutral-400">Нет сообщений</em>}
-          </span>
-          {channel.unread_count > 0 && (
-            <span className="min-w-[18px] rounded-full bg-brand-600 px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">
-              {channel.unread_count > 99 ? "99+" : channel.unread_count}
-            </span>
-          )}
-        </div>
-      </div>
-    </button>
+      avatar={<ChannelAvatar channel={channel} />}
+      title={displayName}
+      time={shortWhen(channel.last_message_at)}
+      preview={channel.last_message_preview || "Нет сообщений"}
+      count={channel.unread_count}
+    />
   );
 }
 
@@ -247,11 +258,12 @@ function ChatWindow({ channelId, onBack }: { channelId: number; onBack: () => vo
   const qc = useQueryClient();
   const { me } = useAuth();
 
-  const { data: channel } = useQuery({
+  const { data: channel, isError: channelMissing } = useQuery({
     queryKey: ["messenger", "channel", channelId],
     queryFn: async () =>
       (await api.get<ChannelDetail>(`/api/messenger/channels/${channelId}`)).data,
     staleTime: 30_000,
+    retry: false,
   });
 
   const { data: messages = [], isPending: messagesPending } = useQuery({
@@ -309,54 +321,61 @@ function ChatWindow({ channelId, onBack }: { channelId: number; onBack: () => vo
     }
   }, [messages, channelId]);
 
-  const channelName = channel?.name || channel?.peer?.name || `Канал #${channelId}`;
+  const channelName = channel ? channelTitle(channel) : "Чат";
+
+  if (channelMissing) {
+    return (
+      <PaneEmpty
+        icon={MessageSquarePlus}
+        title="Чат не найден"
+        hint="Возможно, он удалён или у вас нет к нему доступа."
+        action={<Button variant="secondary" onClick={onBack}>К списку чатов</Button>}
+      />
+    );
+  }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between gap-2 border-b border-neutral-100 p-3 dark:border-neutral-800">
-        <div className="flex min-w-0 items-center gap-2">
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack} title="Назад">
-            <ArrowLeft size={16} />
-          </Button>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">{channelName}</div>
-            <div className="truncate text-xs text-neutral-500">
-              {channel?.kind === "dm" ? channel.peer?.email : `${channel?.members.length ?? 0} участников`}
-            </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <PaneHeader
+        back={<span className="md:hidden"><IconAction icon={ArrowLeft} label="Назад" onClick={onBack} /></span>}
+        actions={<IconAction icon={Search} label="Поиск по чату" active={search !== null} onClick={() => setSearch(search === null ? "" : null)} />}
+      >
+        {channel && <ChannelAvatar channel={channel} size={32} />}
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-semibold text-zinc-900 dark:text-white">{channelName}</div>
+          <div className="truncate text-[12px] text-zinc-500">
+            {channel?.kind === "dm" ? channel.peer?.email : channel ? membersLabel(channel.members.length) : ""}
           </div>
         </div>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="icon" title="Поиск" onClick={() => setSearch(search === null ? "" : null)}>
-            <Search size={16} />
-          </Button>
-        </div>
-      </header>
+      </PaneHeader>
 
       {search !== null && (
         <SearchPanel channelId={channelId} q={search} setQ={setSearch} onClose={() => setSearch(null)} />
       )}
 
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto px-3 py-3">
+      {/* Обычная лента: сообщения разной высоты (виртуальный список с фиксированной высотой их обрезал). */}
+      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {messagesPending ? (
           <Loader />
         ) : messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-            Пусто. Напишите первое сообщение.
+          <div className="flex h-full items-center justify-center text-[13px] text-zinc-400">
+            Сообщений пока нет — напишите первым.
           </div>
         ) : (
-          <VirtualList
-            items={messages}
-            itemHeight={80}
-            height="100%"
-            className="space-y-1"
-            threshold={100}
-            getKey={(m) => (m as MessageOut).id}
-            renderItem={(m, idx) => {
-              const prev = messages[idx - 1];
-              const message = m as MessageOut;
-              const grouped =
-                !!prev && prev.author?.id === message.author?.id && !prev.deleted_at && !message.deleted_at;
-              return (
+          messages.map((message, idx) => {
+            const prev = messages[idx - 1];
+            const newDay = !prev || new Date(prev.created_at).toDateString() !== new Date(message.created_at).toDateString();
+            // Подряд от одного автора в течение 5 минут — без повторной шапки.
+            const grouped =
+              !newDay &&
+              !!prev &&
+              prev.author?.id === message.author?.id &&
+              !prev.deleted_at &&
+              !message.deleted_at &&
+              new Date(message.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000;
+            return (
+              <div key={message.id}>
+                {newDay && <DayDivider label={dayLabel(message.created_at)} />}
                 <MessageRow
                   message={message}
                   grouped={grouped}
@@ -366,9 +385,9 @@ function ChatWindow({ channelId, onBack }: { channelId: number; onBack: () => vo
                   onReply={() => setReplyTo(message)}
                   onEdit={() => setEditing(message)}
                 />
-              );
-            }}
-          />
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -447,19 +466,25 @@ function MessageRow({
   const bodyHtml = useMemo(() => renderInlineMarkdown(m.body || ""), [m.body]);
 
   return (
-    <div id={`msg-${m.id}`} className={clsx("group relative", highlighted && "rounded-lg bg-brand-50 dark:bg-brand-900/20")}>
-      <div className={clsx("flex gap-2 px-1", grouped ? "pt-0.5" : "pt-3")}>
+    <div
+      id={`msg-${m.id}`}
+      className={clsx(
+        "group relative -mx-2 rounded-lg px-2 transition-colors hover:bg-white dark:hover:bg-white/[0.03]",
+        highlighted && "bg-brand-500/10",
+      )}
+    >
+      <div className={clsx("flex gap-3", grouped ? "py-0.5" : "pb-0.5 pt-2.5")}>
         <div className="w-8 shrink-0">
-          {!grouped && m.author && <Avatar name={m.author.name} url={m.author.avatar_url} size={28} />}
+          {!grouped && m.author && <Avatar name={m.author.name} url={m.author.avatar_url} size={32} />}
         </div>
         <div className="min-w-0 flex-1">
           {!grouped && (
             <div className="mb-0.5 flex items-baseline gap-2">
-              <span className="text-sm font-semibold">{m.author?.name || "—"}</span>
-              <span className="text-xs text-zinc-500" title={new Date(m.created_at).toLocaleString("ru-RU")}>
-                {fromNow(m.created_at)}
+              <span className="text-[13.5px] font-semibold text-zinc-900 dark:text-white">{m.author?.name || "—"}</span>
+              <span className="text-[11px] tabular-nums text-zinc-400" title={new Date(m.created_at).toLocaleString("ru-RU")}>
+                {new Date(m.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
               </span>
-              {m.edited_at && <span className="text-xs text-zinc-500">(изменено)</span>}
+              {m.edited_at && <span className="text-[11px] text-zinc-400">изменено</span>}
             </div>
           )}
           {m.reply_preview && m.reply_to_id && (
@@ -470,7 +495,7 @@ function MessageRow({
           {m.deleted_at ? (
             <div className="text-sm italic text-neutral-400">сообщение удалено</div>
           ) : (
-            <div className="whitespace-pre-wrap break-words text-sm" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            <div className="whitespace-pre-wrap break-words text-[13.5px] leading-[1.5] text-zinc-800 dark:text-zinc-200" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
           )}
           {m.poll && (
             <PollView poll={m.poll} channelId={channelId} />
@@ -514,21 +539,22 @@ function MessageRow({
           )}
         </div>
 
-        <div className="absolute right-2 top-1 hidden gap-1 rounded-md border border-neutral-200 bg-white p-1 shadow-sm group-hover:flex dark:border-neutral-700 dark:bg-neutral-900">
-          <button className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800" title="Реакция" onClick={() => setEmojiOpen((v) => !v)}>
-            <Smile size={13} />
+        <div className="absolute -top-3 right-2 hidden gap-0.5 rounded-lg border border-zinc-200 bg-white p-0.5 shadow-pop group-hover:flex dark:border-zinc-700 dark:bg-[#23262D]">
+          <button className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white" title="Реакция" aria-label="Реакция" onClick={() => setEmojiOpen((v) => !v)}>
+            <Smile size={14} />
           </button>
-          <button className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800" title="Ответить" onClick={onReply}>
-            <CornerUpLeft size={13} />
+          <button className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white" title="Ответить" aria-label="Ответить" onClick={onReply}>
+            <CornerUpLeft size={14} />
           </button>
           {isMe && !m.deleted_at && (
             <>
-              <button className="rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800" title="Редактировать" onClick={onEdit}>
+              <button className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white" title="Редактировать" aria-label="Редактировать" onClick={onEdit}>
                 <Edit3 size={13} />
               </button>
               <button
-                className="rounded p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                className="rounded-md p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
                 title="Удалить"
+                aria-label="Удалить"
                 onClick={async () => {
                   if (await confirm({ title: "Удалить сообщение?", message: "Восстановить нельзя.", confirmLabel: "Удалить" })) {
                     del.mutate();
@@ -542,11 +568,11 @@ function MessageRow({
         </div>
 
         {emojiOpen && (
-          <div className="absolute right-2 top-9 z-10 flex gap-1 rounded-lg border border-neutral-200 bg-white p-1.5 shadow-md dark:border-neutral-700 dark:bg-neutral-900">
+          <div className="absolute right-2 top-6 z-10 flex gap-0.5 rounded-lg border border-zinc-200 bg-white p-1 shadow-pop dark:border-zinc-700 dark:bg-[#23262D]">
             {REACTIONS.map((e) => (
               <button
                 key={e}
-                className="rounded p-1 text-base hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                className="rounded-md p-1 text-base hover:bg-zinc-100 dark:hover:bg-white/10"
                 onClick={() => {
                   reactMut.mutate({ emoji: e, add: true });
                   setEmojiOpen(false);
@@ -693,85 +719,72 @@ function MessageComposer({
   };
 
   return (
-    <div
-      className="border-t border-neutral-100 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-    >
-      {(replyTo || editing) && (
-        <div className="mb-1 flex items-start justify-between rounded-md bg-neutral-100 px-2 py-1 text-xs dark:bg-neutral-800">
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500">
-              {editing ? "Редактирование" : `Ответ ${replyTo?.author?.name || "…"}`}
-            </div>
-            {(editing || replyTo) && (
-              <button
-                type="button"
-                className="line-clamp-1 truncate text-left hover:underline"
-                onClick={() => {
-                  const id = editing?.id ?? replyTo?.id;
-                  if (id) onJumpToMessage(id);
-                }}
-              >
-                {editing?.body || replyTo?.body}
-              </button>
+    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <Composer
+        value={text}
+        onChange={setText}
+        onSubmit={submit}
+        textareaRef={taRef}
+        onPaste={onPaste}
+        sending={send.isPending || uploading}
+        canSend={!!text.trim() || attachmentIds.length > 0}
+        placeholder={editing ? "Измените сообщение…" : "Написать сообщение…"}
+        tools={
+          <>
+            <label className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/5 dark:hover:text-zinc-200" title="Прикрепить файл" aria-label="Прикрепить файл">
+              <Paperclip size={16} />
+              <input type="file" multiple className="hidden" onChange={onPickFile} disabled={uploading} />
+            </label>
+            <button
+              type="button"
+              className="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+              title="Создать опрос"
+              aria-label="Создать опрос"
+              onClick={onOpenPoll}
+            >
+              <BarChart3 size={16} />
+            </button>
+          </>
+        }
+        above={
+          <>
+            {(replyTo || editing) && (
+              <div className="mb-1.5 flex items-start gap-2 rounded-lg border-l-2 border-brand-500 bg-white px-3 py-1.5 text-[12.5px] dark:bg-[#1B1E23]">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold text-brand-700 dark:text-brand-300">
+                    {editing ? "Редактирование" : `Ответ: ${replyTo?.author?.name || "…"}`}
+                  </div>
+                  <button
+                    type="button"
+                    className="block w-full truncate text-left text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                    onClick={() => {
+                      const id = editing?.id ?? replyTo?.id;
+                      if (id) onJumpToMessage(id);
+                    }}
+                  >
+                    {editing?.body || replyTo?.body}
+                  </button>
+                </div>
+                <button className="rounded p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={editing ? onCancelEdit : onCancelReply} aria-label="Отменить">
+                  <X size={14} />
+                </button>
+              </div>
             )}
-          </div>
-          <button
-            className="p-1 text-neutral-400 hover:text-neutral-700"
-            onClick={editing ? onCancelEdit : onCancelReply}
-            aria-label="Отменить"
-          >
-            <X size={12} />
-          </button>
-        </div>
-      )}
-      {attachmentIds.length > 0 && (
-        <div className="mb-1 flex flex-wrap gap-1">
-          {attachmentIds.map((a) => (
-            <span key={a.id} className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
-              <Paperclip size={10} /> {a.filename}
-              <button className="text-neutral-400 hover:text-rose-500" onClick={() => setAttachmentIds((p) => p.filter((x) => x.id !== a.id))}>
-                <X size={10} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-end gap-1 rounded-xl border border-zinc-300 bg-white p-1.5 shadow-soft focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/15 dark:border-zinc-700 dark:bg-[#1B1E23]">
-        <label className="cursor-pointer rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#23262D]" title="Прикрепить файл" aria-label="Прикрепить файл">
-          <Paperclip size={16} />
-          <input type="file" multiple className="hidden" onChange={onPickFile} disabled={uploading} />
-        </label>
-        <button
-          type="button"
-          className="rounded-md p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-[#23262D]"
-          title="Создать опрос"
-          aria-label="Создать опрос"
-          onClick={onOpenPoll}
-        >
-          <BarChart3 size={16} />
-        </button>
-        <textarea
-          ref={taRef}
-          aria-label="Сообщение"
-          className="max-h-40 min-h-[36px] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-zinc-400"
-          rows={1}
-          placeholder={editing ? "Редактируйте…" : "Написать сообщение… (Shift+Enter — новая строка)"}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-        />
-        <Button
-          className="!px-3"
-          variant="primary"
-          disabled={send.isPending || uploading || (!text.trim() && attachmentIds.length === 0)}
-          onClick={submit}
-        >
-          {editing ? <Check size={16} /> : <Send size={16} />}
-        </Button>
-      </div>
+            {attachmentIds.length > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {attachmentIds.map((a) => (
+                  <span key={a.id} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[12px] shadow-[0_0_0_1px_rgb(0_0_0/0.06)] dark:bg-[#1B1E23]">
+                    <Paperclip size={11} /> {a.filename}
+                    <button className="text-zinc-400 hover:text-rose-500" onClick={() => setAttachmentIds((p) => p.filter((x) => x.id !== a.id))} aria-label="Убрать файл">
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        }
+      />
     </div>
   );
 }

@@ -2,15 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  Archive, ArchiveRestore, Check, CheckCheck, Clock3, Link2, Loader2, MessageCircle, Paperclip, Search, Send,
+  Archive, ArchiveRestore, ArrowLeft, Check, CheckCheck, Clock3, FileText, Link2, Loader2, MessageCircle, PanelRight, Paperclip,
 } from "lucide-react";
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal, Avatar } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 
-import { SearchInput, Segmented } from "@/components/page";
+import { SearchInput } from "@/components/page";
 import { Link } from "react-router-dom";
+import {
+  Composer, DayDivider, IconAction, ListEmpty, ListHeader, ListRow, ListTabs, PaneEmpty, PaneHeader, RowTag, Workspace, dayLabel,
+} from "@/components/workspace";
 type ChannelKind = "telegram" | "whatsapp" | "instagram";
 
 const KIND_LABEL: Record<ChannelKind, string> = {
@@ -147,171 +150,121 @@ export default function Inbox() {
     () => (convs ?? []).reduce((s, c) => s + (c.unread_count || 0), 0),
     [convs],
   );
+  // Карточка клиента — по кнопке; на широком экране открыта по умолчанию.
+  const [cardOpen, setCardOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1280);
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col gap-3">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title flex items-center gap-2">
-            Открытые линии
-            {totalUnread > 0 && (
-              <span className="rounded-md bg-brand-600 px-2 py-0.5 text-xs font-semibold tabular-nums text-white">
-                {totalUnread}
-              </span>
-            )}
-          </h1>
-          <p className="page-subtitle">Telegram, WhatsApp и Instagram в одном окне</p>
-        </div>
-      </div>
-
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-200 bg-white md:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_300px] dark:border-zinc-800 dark:bg-[#1B1E23]">
-        {/* Left: conversation list */}
-        <div className="flex min-h-0 flex-col overflow-hidden border-b border-zinc-200 md:border-b-0 md:border-r dark:border-zinc-800">
-          <div className="space-y-2.5 border-b border-zinc-200 p-3 dark:border-zinc-800">
-            <SearchInput value={search} onChange={setSearch} placeholder="Поиск по контакту" className="sm:w-full" />
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                aria-pressed={!channelFilter}
-                className={clsx(
-                  "chip",
-                  !channelFilter ? "bg-brand-600 text-white ring-brand-600" : "bg-white text-zinc-600 ring-zinc-200 hover:bg-zinc-50 dark:bg-transparent dark:text-zinc-300 dark:ring-zinc-700",
-                )}
-                onClick={() => setChannelFilter(null)}
-              >
-                Все каналы
-              </button>
-              {(channels ?? []).map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  aria-pressed={channelFilter === c.id}
-                  className={clsx(
-                    "chip",
-                    channelFilter === c.id
-                      ? "bg-brand-600 text-white ring-brand-600"
-                      : "bg-white text-zinc-600 ring-zinc-200 hover:bg-zinc-50 dark:bg-transparent dark:text-zinc-300 dark:ring-zinc-700",
-                  )}
-                  onClick={() => setChannelFilter(channelFilter === c.id ? null : c.id)}
-                  title={c.name}
-                >
-                  <span className={clsx("h-2 w-2 rounded-full", KIND_DOT[c.kind])} />
-                  {KIND_LABEL[c.kind]}
-                </button>
-              ))}
+    <>
+      <Workspace
+        showDetailOnMobile={!!selected}
+        list={
+          <>
+            <ListHeader
+              search={<SearchInput value={search} onChange={setSearch} placeholder="Поиск по клиенту" className="sm:w-full" />}
+              action={
+                (channels?.length ?? 0) > 1 ? (
+                  <select
+                    aria-label="Канал"
+                    value={channelFilter ?? ""}
+                    onChange={(e) => setChannelFilter(e.target.value ? Number(e.target.value) : null)}
+                    className="h-8 w-[108px] shrink-0 cursor-pointer rounded-lg border border-zinc-200 bg-white px-2 text-[12.5px] text-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-zinc-700 dark:bg-[#1B1E23] dark:text-zinc-300"
+                  >
+                    <option value="">Все каналы</option>
+                    {(channels ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name || KIND_LABEL[c.kind]}
+                      </option>
+                    ))}
+                  </select>
+                ) : undefined
+              }
+            >
+              <ListTabs
+                label="Статус диалогов"
+                value={showClosed ? "all" : "open"}
+                onChange={(v) => setShowClosed(v === "all")}
+                items={[
+                  { key: "open", label: "Открытые", count: totalUnread },
+                  { key: "all", label: "Все" },
+                ]}
+              />
+            </ListHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {convsLoading ? (
+                <div className="flex items-center justify-center p-6 text-zinc-400">
+                  <Loader2 size={16} className="animate-spin" />
+                </div>
+              ) : (convs ?? []).length === 0 ? (
+                <ListEmpty>
+                  {search ? "Ничего не найдено" : "Диалогов пока нет"}
+                </ListEmpty>
+              ) : (
+                (convs ?? []).map((c) => {
+                  const contact = c.contact;
+                  const name = contact?.display_name || contact?.username || contact?.phone || contact?.external_id || `#${c.id}`;
+                  return (
+                    <ListRow
+                      key={c.id}
+                      active={c.id === selectedId}
+                      unread={c.unread_count > 0}
+                      onClick={() => setSelectedId(c.id)}
+                      avatar={<ContactAvatar name={name} url={contact?.avatar_url} kind={c.channel_kind} />}
+                      title={name}
+                      time={formatWhen(c.last_message_at)}
+                      preview={c.last_message_preview || "—"}
+                      count={c.unread_count}
+                      meta={
+                        (c.is_closed || contact?.linked_lead_id) && (
+                          <>
+                            {c.is_closed && <RowTag>закрыт</RowTag>}
+                            {contact?.linked_lead_id && <RowTag tone="green">Лид #{contact.linked_lead_id}</RowTag>}
+                          </>
+                        )
+                      }
+                    />
+                  );
+                })
+              )}
             </div>
-            <Segmented
-              label="Статус диалогов"
-              value={showClosed ? "all" : "open"}
-              onChange={(v) => setShowClosed(v === "all")}
-              className="w-full [&>button]:flex-1 [&>button]:justify-center"
-              items={[
-                { key: "open", label: "Открытые" },
-                { key: "all", label: "Все, включая закрытые" },
-              ]}
-            />
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {convsLoading && (
-              <div className="flex items-center justify-center p-6 text-neutral-500">
-                <Loader2 size={16} className="animate-spin" />
-              </div>
-            )}
-            {!convsLoading && (convs ?? []).length === 0 && (
-              <div className="p-6 text-center text-sm text-neutral-500">
-                <MessageCircle size={24} className="mx-auto mb-2 text-neutral-400" />
-                Пока нет диалогов
-              </div>
-            )}
-            {(convs ?? []).map((c) => {
-              const isSelected = c.id === selectedId;
-              const contact = c.contact;
-              const name = contact?.display_name || contact?.username || contact?.phone || contact?.external_id || `#${c.id}`;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedId(c.id)}
-                  className={clsx(
-                    "relative w-full border-b border-zinc-100 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:border-zinc-800/70",
-                    isSelected
-                      ? "bg-brand-50 shadow-[inset_3px_0_0_rgb(var(--brand-600))] dark:bg-brand-500/10"
-                      : "hover:bg-zinc-50 dark:hover:bg-[#23262D]",
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <ContactAvatar name={name} url={contact?.avatar_url} kind={c.channel_kind} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={clsx("truncate text-sm", c.unread_count > 0 ? "font-semibold text-zinc-900 dark:text-white" : "font-medium")}>{name}</span>
-                        <span className="shrink-0 text-xs tabular-nums text-zinc-500">
-                          {formatWhen(c.last_message_at)}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 flex items-center justify-between gap-2">
-                        <span className={clsx("truncate text-[13px]", c.unread_count > 0 ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-500")}>
-                          {c.last_message_preview || "—"}
-                        </span>
-                        {c.unread_count > 0 && (
-                          <span className="min-w-[18px] shrink-0 rounded-full bg-brand-600 px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">
-                            {c.unread_count}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex items-center gap-1 empty:hidden">
-                        {c.is_closed && (
-                          <span className="chip !px-1.5 !py-0 !text-[11px] bg-zinc-100 text-zinc-600 ring-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400">
-                            закрыт
-                          </span>
-                        )}
-                        {contact?.linked_lead_id && (
-                          <span className="chip !px-1.5 !py-0 !text-[11px] bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300">
-                            Лид #{contact.linked_lead_id}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right: chat */}
-        <div className="flex min-h-0 flex-col overflow-hidden bg-[#F5F6F8] dark:bg-[#14161A]">
-          {!selected && (
-            <div className="flex flex-1 items-center justify-center p-6">
-              <div className="text-center">
-                <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500 dark:border-zinc-800 dark:bg-[#1B1E23]">
-                  <MessageCircle size={20} />
-                </span>
-                <div className="text-[15px] font-semibold">Выберите диалог</div>
-                <p className="mt-1 text-sm text-zinc-500">Переписка и карточка клиента откроются здесь.</p>
-              </div>
-            </div>
-          )}
-          {selected && (
-            <Chat
-              conversation={selected}
-              onLinkLead={() => setLinkOpen(true)}
-              onChanged={() => {
-                qc.invalidateQueries({ queryKey: ["messenger-convs"] });
-                qc.invalidateQueries({ queryKey: ["messenger-messages", selected.id] });
-              }}
-            />
-          )}
-        </div>
-
-        {/* Right: client card */}
-        <aside aria-label="Карточка клиента" className="hidden min-h-0 flex-col overflow-y-auto border-l border-zinc-200 xl:flex dark:border-zinc-800">
-          {selected ? (
-            <ContactPanel conversation={selected} onLinkLead={() => setLinkOpen(true)} />
-          ) : (
-            <div className="p-5 text-sm text-zinc-500">Карточка клиента появится после выбора диалога.</div>
-          )}
-        </aside>
-      </div>
+          </>
+        }
+        aside={
+          selected && cardOpen ? (
+            <aside aria-label="Карточка клиента" className="hidden min-h-0 w-[300px] shrink-0 flex-col overflow-y-auto border-l border-zinc-200 bg-white lg:flex dark:border-zinc-800 dark:bg-[#1B1E23]">
+              <ContactPanel conversation={selected} onLinkLead={() => setLinkOpen(true)} />
+            </aside>
+          ) : undefined
+        }
+      >
+        {selected ? (
+          <Chat
+            conversation={selected}
+            onBack={() => setSelectedId(null)}
+            cardOpen={cardOpen}
+            onToggleCard={() => setCardOpen((v) => !v)}
+            onLinkLead={() => setLinkOpen(true)}
+            onChanged={() => {
+              qc.invalidateQueries({ queryKey: ["messenger-convs"] });
+              qc.invalidateQueries({ queryKey: ["messenger-messages", selected.id] });
+            }}
+          />
+        ) : (
+          <PaneEmpty
+            icon={MessageCircle}
+            title={(channels?.length ?? 0) === 0 ? "Каналы ещё не подключены" : "Выберите диалог"}
+            hint={
+              (channels?.length ?? 0) === 0
+                ? "Сообщения клиентов из Telegram, WhatsApp и Instagram будут приходить сюда."
+                : "Переписка с клиентом и его карточка откроются здесь."
+            }
+            action={
+              (channels?.length ?? 0) === 0 ? (
+                <Link to="/settings/messengers" className="btn-primary">Подключить канал</Link>
+              ) : undefined
+            }
+          />
+        )}
+      </Workspace>
 
       {selected && linkOpen && (
         <LinkLeadModal
@@ -323,16 +276,22 @@ export default function Inbox() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
 function Chat({
   conversation,
+  onBack,
+  cardOpen,
+  onToggleCard,
   onLinkLead,
   onChanged,
 }: {
   conversation: Conversation;
+  onBack: () => void;
+  cardOpen: boolean;
+  onToggleCard: () => void;
   onLinkLead: () => void;
   onChanged: () => void;
 }) {
@@ -397,8 +356,7 @@ function Chat({
     onError: (e) => toast.error("Ошибка", extractApiError(e).message),
   });
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     const t = text.trim();
     if (!t || send.isPending) return;
     send.mutate(t);
@@ -408,125 +366,115 @@ function Chat({
   const contactName =
     contact?.display_name || contact?.username || contact?.phone || contact?.external_id || `#${conversation.id}`;
 
+  const list = messages ?? [];
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-5 py-3 dark:border-zinc-800 dark:bg-[#1B1E23]">
-        <div className="flex min-w-0 items-center gap-3">
-          <ContactAvatar name={contactName} url={contact?.avatar_url} kind={conversation.channel_kind} />
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-semibold">{contactName}</span>
-              {conversation.channel_kind && (
-                <span className={clsx("chip", KIND_COLOR[conversation.channel_kind])}>
-                  {KIND_LABEL[conversation.channel_kind]}
-                </span>
-              )}
-            </div>
-            <div className="mt-0.5 truncate text-xs text-zinc-500">
-              {contact?.username && <>@{contact.username} · </>}
-              {contact?.phone && <>{contact.phone} · </>}
-              {contact?.external_id && <span className="font-mono">{contact.external_id}</span>}
-            </div>
+      <PaneHeader
+        back={<span className="md:hidden"><IconAction icon={ArrowLeft} label="Назад" onClick={onBack} /></span>}
+        actions={
+          <>
+            <IconAction
+              icon={Link2}
+              label={contact?.linked_lead_id ? `Связан с лидом #${contact.linked_lead_id}` : "Связать с лидом"}
+              active={!!contact?.linked_lead_id}
+              onClick={onLinkLead}
+            />
+            <IconAction
+              icon={conversation.is_closed ? ArchiveRestore : Archive}
+              label={conversation.is_closed ? "Открыть диалог" : "Закрыть диалог"}
+              onClick={() => closeMut.mutate()}
+              disabled={closeMut.isPending}
+            />
+            <span className="hidden lg:inline-flex">
+              <IconAction icon={PanelRight} label={cardOpen ? "Скрыть карточку клиента" : "Карточка клиента"} active={cardOpen} onClick={onToggleCard} />
+            </span>
+          </>
+        }
+      >
+        <ContactAvatar name={contactName} url={contact?.avatar_url} kind={conversation.channel_kind} size={32} />
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-semibold text-zinc-900 dark:text-white">{contactName}</div>
+          <div className="truncate text-[12px] text-zinc-500">
+            {[conversation.channel_kind ? KIND_LABEL[conversation.channel_kind] : null, contact?.username ? `@${contact.username}` : null, contact?.phone]
+              .filter(Boolean)
+              .join(" · ")}
+            {conversation.is_closed ? " · закрыт" : ""}
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="secondary" size="sm" onClick={onLinkLead}>
-            <Link2 size={14} />
-            {contact?.linked_lead_id ? `Лид #${contact.linked_lead_id}` : "Связать с лидом"}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => closeMut.mutate()} disabled={closeMut.isPending}>
-            {conversation.is_closed ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-            {conversation.is_closed ? "Открыть диалог" : "Закрыть диалог"}
-          </Button>
-        </div>
-      </div>
+      </PaneHeader>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        {isPending && (
-          <div className="flex items-center justify-center py-8 text-neutral-500">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {isPending ? (
+          <div className="flex items-center justify-center py-8 text-zinc-400">
             <Loader2 size={16} className="animate-spin" />
           </div>
+        ) : list.length === 0 ? (
+          <div className="py-10 text-center text-[13px] text-zinc-400">Сообщений пока нет</div>
+        ) : (
+          <div className="space-y-2">
+            {list.map((m, idx) => {
+              const prev = list[idx - 1];
+              const newDay = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
+              return (
+                <div key={m.id}>
+                  {newDay && <DayDivider label={dayLabel(m.created_at)} />}
+                  <MessageBubble msg={m} />
+                </div>
+              );
+            })}
+          </div>
         )}
-        {!isPending && (messages ?? []).length === 0 && (
-          <div className="py-8 text-center text-sm text-neutral-500">Пока нет сообщений</div>
-        )}
-        <div className="space-y-3">
-          {(messages ?? []).map((m) => (
-            <MessageBubble key={m.id} msg={m} />
-          ))}
-        </div>
       </div>
 
-      {/* Input */}
-      <form
-        onSubmit={onSubmit}
-        className="px-5 pb-4 pt-1"
-      >
-        {conversation.is_closed && (
-          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
-            Диалог закрыт. Откройте, чтобы отвечать.
-          </div>
-        )}
-        <div className="rounded-xl border border-zinc-300 bg-white shadow-soft focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/15 dark:border-zinc-700 dark:bg-[#1B1E23]">
-          <div>
-            <textarea
-              aria-label="Ответ клиенту"
-              className="block min-h-[64px] w-full resize-none border-0 bg-transparent px-3.5 py-3 text-sm outline-none placeholder:text-zinc-400"
-              placeholder={`Ответ в ${conversation.channel_kind ? KIND_LABEL[conversation.channel_kind] : "канал"}… (Ctrl+Enter — отправить)`}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              disabled={conversation.is_closed}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                  onSubmit(e as unknown as React.FormEvent);
-                }
-              }}
-            />
-          </div>
-          <div className="flex items-center gap-1 border-t border-zinc-100 px-2 py-1.5 dark:border-zinc-800">
-            <Button
-              variant="ghost"
-              size="sm"
+      <Composer
+        value={text}
+        onChange={setText}
+        onSubmit={submit}
+        disabled={conversation.is_closed}
+        sending={send.isPending}
+        placeholder={
+          conversation.is_closed
+            ? "Диалог закрыт — откройте его, чтобы ответить"
+            : `Ответ в ${conversation.channel_kind ? KIND_LABEL[conversation.channel_kind] : "канал"}…`
+        }
+        tools={
+          (templates?.length ?? 0) > 0 ? (
+            <button
+              type="button"
               onClick={() => setShowTemplates((v) => !v)}
-              disabled={conversation.is_closed || !(templates?.length)}
+              disabled={conversation.is_closed}
               aria-expanded={showTemplates}
+              aria-label="Шаблоны ответов"
+              title="Шаблоны ответов"
+              className={clsx(
+                "grid h-8 w-8 place-items-center rounded-lg transition-colors disabled:opacity-40",
+                showTemplates ? "bg-brand-500/10 text-brand-700 dark:text-brand-300" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/5 dark:hover:text-zinc-200",
+              )}
             >
-              <MessageCircle size={14} /> Шаблоны
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              className="ml-auto"
-              disabled={!text.trim() || send.isPending || conversation.is_closed}
-            >
-              {send.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Отправить
-            </Button>
-          </div>
-        </div>
-        {showTemplates && (templates?.length ?? 0) > 0 && (
-          <div className="mt-2 grid gap-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 text-[13px] shadow-pop dark:border-zinc-800 dark:bg-[#1B1E23]">
-            <div className="section-label px-2 py-1">Шаблоны ответов</div>
-            {templates!.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className="rounded px-2 py-1 text-left hover:bg-neutral-50 dark:hover:bg-neutral-800/40"
-                onClick={() => {
-                  setText(t.body);
-                  setShowTemplates(false);
-                }}
-              >
-                <span className="font-medium">{t.name}</span>{" "}
-                <span className="text-neutral-500 line-clamp-1">— {t.body}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </form>
+              <FileText size={16} />
+            </button>
+          ) : undefined
+        }
+        above={
+          showTemplates && (templates?.length ?? 0) > 0 ? (
+            <div className="mb-1.5 max-h-48 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1 text-[13px] shadow-pop dark:border-zinc-700 dark:bg-[#1B1E23]">
+              {templates!.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="block w-full truncate rounded-md px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-white/5"
+                  onClick={() => {
+                    setText(t.body);
+                    setShowTemplates(false);
+                  }}
+                >
+                  <span className="font-medium">{t.name}</span> <span className="text-zinc-500">— {t.body}</span>
+                </button>
+              ))}
+            </div>
+          ) : undefined
+        }
+      />
     </>
   );
 }
@@ -538,7 +486,7 @@ function MessageBubble({ msg }: { msg: ExtMessage }) {
     <div className={clsx("flex flex-col", isOut ? "items-end" : "items-start")}>
       <div
         className={clsx(
-          "max-w-[72%] px-3.5 py-2.5 text-sm",
+          "max-w-[72%] px-3 py-2 text-[13.5px] leading-[1.45]",
           isOut
             ? "rounded-[12px_12px_4px_12px] bg-brand-600 text-white"
             : "rounded-[12px_12px_12px_4px] border border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-[#1B1E23] dark:text-zinc-100",
@@ -552,7 +500,7 @@ function MessageBubble({ msg }: { msg: ExtMessage }) {
           </div>
         )}
       </div>
-      <div className="mt-1 flex items-center gap-1.5 px-1 text-xs text-zinc-500">
+      <div className="mt-0.5 flex items-center gap-1.5 px-1 text-[11px] text-zinc-400">
         {msg.is_auto && <span className="rounded bg-zinc-100 px-1 text-[11px] dark:bg-[#23262D]">авто</span>}
         <span className="tabular-nums">{time}</span>
         {isOut && msg.status === "pending" && <Clock3 size={12} aria-label="Отправляется" />}

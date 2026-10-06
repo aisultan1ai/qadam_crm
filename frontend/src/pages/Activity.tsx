@@ -6,6 +6,7 @@ import { Activity as ActivityIcon, Plus, Pencil, Trash2, Archive, MessageSquare,
 import { Avatar, EmptyState } from "@/components/ui";
 import type { Page } from "@/types";
 import { fromNow } from "@/lib/date";
+import { activityText } from "@/lib/activityLabels";
 
 type Actor = { id: number; name: string; avatar_url?: string | null };
 
@@ -30,17 +31,6 @@ const ACTION_META: Record<string, { icon: typeof Plus; verb: string; color: stri
 };
 
 const DEFAULT_META = { icon: ActivityIcon, verb: "", color: "text-neutral-600" };
-
-const ENTITY_LABEL: Record<string, string> = {
-  task: "задачу",
-  project: "проект",
-  comment: "комментарий",
-  contact: "контакт",
-  company: "компанию",
-  lead: "лид",
-  deal: "сделку",
-  wiki_article: "статью",
-};
 
 function entityLink(item: ActivityItem): string | null {
   if (item.task_id) return `/tasks/${item.task_id}`;
@@ -95,8 +85,10 @@ export default function ActivityPage() {
   return (
     <div className="space-y-5">
       <div className="page-header">
-        <h1 className="page-title">Хроника</h1>
-        <p className="page-subtitle">События по всем сущностям компании</p>
+        <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Главная</div>
+          <h1 className="page-title">Хроника</h1>
+        </div>
       </div>
 
       {groups.map((g) => (
@@ -109,7 +101,6 @@ export default function ActivityPage() {
               const meta = ACTION_META[it.action] || DEFAULT_META;
               const Icon = meta.icon;
               const link = entityLink(it);
-              const entityWord = it.entity ? ENTITY_LABEL[it.entity] || it.entity : "";
               const body = (
                 <div className="flex items-start gap-3 p-3">
                   <div className={`mt-0.5 shrink-0 ${meta.color}`}>
@@ -121,7 +112,7 @@ export default function ActivityPage() {
                       <div className="min-w-0 flex-1 text-sm">
                         <span className="font-medium">{it.user?.name || "Система"}</span>{" "}
                         <span className="text-neutral-600 dark:text-neutral-400">
-                          {meta.verb} {entityWord}
+                          {activityText(it.action, it.entity)}
                         </span>
                       </div>
                       <span className="shrink-0 text-xs text-neutral-500" title={new Date(it.created_at).toLocaleString("ru-RU")}>

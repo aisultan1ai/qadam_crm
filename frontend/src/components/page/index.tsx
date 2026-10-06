@@ -95,7 +95,7 @@ export function Tabs<K extends string>({
       role="tablist"
       aria-label={label}
       className={clsx(
-        "flex items-center gap-5 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800",
+        "flex items-center gap-5 overflow-x-auto overflow-y-hidden border-b border-zinc-200 [scrollbar-width:none] dark:border-zinc-800 [&::-webkit-scrollbar]:hidden",
         size === "sm" && "gap-4",
         className,
       )}
