@@ -2,18 +2,17 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  AlertTriangle, ArrowRight, CheckCircle2, CircleDot, Clock, Coins, FolderKanban, ListTodo, Plus, Users,
+  AlertTriangle, ArrowRight, CheckCircle2, Clock, Coins, FolderKanban, ListTodo, Plus, Users,
 } from "lucide-react";
 
 import { api } from "@/api/client";
-import { STATUS_LABEL, type Page, type TaskListItem, type TaskStatus } from "@/types";
+import { STATUS_LABEL, type TaskListItem, type TaskStatus } from "@/types";
 import { Skeleton } from "@/components/Skeleton";
 import { PriorityChip, StatusChip } from "@/components/ui";
 import { useAuth } from "@/store/auth";
-import { fromNow } from "@/lib/date";
 import { BirthdaysWidget, MyGoalsWidget, KudosFeedWidget } from "@/components/HRWidgets";
 import { MyWork } from "./dashboard/MyWork";
-import { activityText } from "@/lib/activityLabels";
+import { FeedRow, useFeedActions, type FeedPage } from "@/components/ActivityFeed";
 
 type DashboardStats = {
   total: number;
@@ -31,17 +30,6 @@ type Forecast = {
   open_count: number;
   won_count: number;
   lost_count: number;
-};
-
-type ActivityItem = {
-  id: number;
-  action: string;
-  entity?: string | null;
-  entity_id?: number | null;
-  task_id?: number | null;
-  detail?: string | null;
-  created_at: string;
-  user?: { id: number; name: string } | null;
 };
 
 const STATUS_BAR: Record<TaskStatus, string> = {
@@ -287,16 +275,25 @@ function DealsSummary() {
 }
 
 function RecentActivity() {
+  const actions = useFeedActions();
   const { data, isPending } = useQuery({
-    queryKey: ["activity", "recent"],
+    queryKey: ["activity-feed", "dashboard"],
     queryFn: async () =>
-      (await api.get<Page<ActivityItem>>("/api/activity", { params: { page: 1, per_page: 8 } })).data.items,
+      (await api.get<FeedPage>("/api/activity/feed", { params: { tab: "all", per_page: 6 } })).data,
     staleTime: 30_000,
   });
+  const items = data?.items ?? [];
   return (
     <section className="card">
       <div className="card-header">
-        <h2 className="card-title">Последние события</h2>
+        <h2 className="card-title">
+          Последние события
+          {!!data?.unread && (
+            <span className="ml-2 rounded-full bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:text-brand-300">
+              {data.unread} новых
+            </span>
+          )}
+        </h2>
         <Link to="/activity" className="link inline-flex items-center gap-1 text-[13px]">
           Хроника <ArrowRight size={14} />
         </Link>
@@ -307,30 +304,22 @@ function RecentActivity() {
             <Skeleton key={i} className="h-5" />
           ))}
         </div>
-      ) : !data || data.length === 0 ? (
-        <div className="p-5 text-sm text-zinc-500">Событий пока нет</div>
+      ) : items.length === 0 ? (
+        <div className="p-5 text-sm text-zinc-500">
+          Пока тихо. Здесь появятся комментарии, новые задачи, смена сроков и новые лиды по вашим задачам и проектам.
+        </div>
       ) : (
-        <ol className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-          {data.map((a) => (
-            <li key={a.id} className="flex items-start gap-3 px-5 py-3 text-sm">
-              <CircleDot size={14} className="mt-[3px] shrink-0 text-zinc-400" />
-              <div className="min-w-0 flex-1">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">{a.user?.name || "Система"}</span>{" "}
-                <span className="text-zinc-600 dark:text-zinc-400">
-                  {activityText(a.action, a.entity)}
-                </span>
-                {a.detail && <span className="text-zinc-600 dark:text-zinc-400"> — {a.detail}</span>}
-              </div>
-              <time
-                className="shrink-0 text-xs text-zinc-500"
-                dateTime={a.created_at}
-                title={new Date(a.created_at).toLocaleString("ru-RU")}
-              >
-                {fromNow(a.created_at)}
-              </time>
-            </li>
+        <div className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+          {items.map((it) => (
+            <FeedRow
+              key={it.id}
+              it={it}
+              onOpen={() => actions.open(it)}
+              onToggleRead={() => actions.toggleRead(it)}
+              onToggleLike={() => actions.toggleLike(it)}
+            />
           ))}
-        </ol>
+        </div>
       )}
     </section>
   );
