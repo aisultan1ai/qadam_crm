@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024
     MAX_AVATAR_BYTES: int = 5 * 1024 * 1024
 
-    LOGIN_RATE_LIMIT: str = "5/minute"
+    LOGIN_RATE_LIMIT: str = "15/minute"
 
     # HMAC-подпись для billing webhook. Провайдер (Stripe/Kaspi) шлёт X-Signature = HMAC-SHA256(secret, raw_body).
     # В dev может быть None — тогда подпись НЕ проверяется (только warning в логе).
@@ -71,10 +71,10 @@ class Settings(BaseSettings):
     # Секрет для подписи JWT-конфига OnlyOffice (обязательно если ONLYOFFICE_URL задан).
     ONLYOFFICE_JWT_SECRET: Optional[str] = None
 
-    # Считаем на 2 uvicorn workers: 2 * (POOL_SIZE + MAX_OVERFLOW) = 100 макс соединений.
+    # Считаем на 2 uvicorn workers: 2 * (POOL_SIZE + MAX_OVERFLOW) = 40 макс соединений.
     # Postgres по умолчанию max_connections=100 — оставляем запас для admin/psql/celery.
-    DB_POOL_SIZE: int = 20
-    DB_MAX_OVERFLOW: int = 30
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 10
     DB_POOL_RECYCLE: int = 1800
 
     JWT_ACCESS_MINUTES: int = 30

@@ -7,6 +7,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER not set}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD not set}
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB not set}
+    # Настройки под сервер с 8 ГБ ОЗУ (по умолчанию Postgres берёт 128 МБ под кэш).
+    command: >
+      postgres
+      -c shared_buffers=1GB
+      -c effective_cache_size=4GB
+      -c work_mem=16MB
+      -c maintenance_work_mem=256MB
+      -c max_connections=100
     volumes:
       - qadam_crm_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -62,7 +70,7 @@ services:
     expose:
       - "8000"
     command: >
-      sh -c "python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+      sh -c "python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips='*'"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 5s

@@ -85,7 +85,7 @@ class Article(Base):
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     view_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
-    author_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    author_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     last_editor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     current_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")

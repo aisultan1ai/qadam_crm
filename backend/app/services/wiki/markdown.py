@@ -10,6 +10,7 @@ Backlinks извлекаются функцией `extract_wiki_links()` — и�
 from __future__ import annotations
 
 import re
+from urllib.parse import quote
 from typing import Iterable
 
 from markdown_it import MarkdownIt
@@ -35,6 +36,7 @@ def _highlight(code: str, lang: str, _attrs: str) -> str:
 def _escape(text: str) -> str:
     return (
         text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace('"', "&quot;").replace("'", "&#39;")
     )
 
 
@@ -69,7 +71,7 @@ def render_markdown(text: str, resolve_slug=None) -> str:
         # Уникальный placeholder — не будет сломан markdown-it
         token = f"WLINKPLACEHOLDER{len(replacements)}ENDWL"
         cls = "wiki-link" if exists else "wiki-link wiki-link--missing"
-        href = f"/wiki/{slug}"
+        href = "/wiki/" + quote(slug, safe="")
         replacements[token] = (
             f"<a class=\"{cls}\" href=\"{href}\" title=\"{_escape(title)}\">{_escape(anchor)}</a>"
         )

@@ -38,7 +38,7 @@ class User(Base):
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
-    department_id: Mapped[Optional[int]] = mapped_column(ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
+    department_id: Mapped[Optional[int]] = mapped_column(ForeignKey("departments.id", ondelete="SET NULL"), nullable=True, index=True)
     department: Mapped[Optional[Department]] = relationship("Department", lazy="joined", foreign_keys=[department_id])
 
     # M11: HR-профиль

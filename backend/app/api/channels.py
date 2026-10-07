@@ -586,8 +586,11 @@ def get_channel(
 ):
     ch, m = _require_member(db, ctx, channel_id)
     members_out: List[ChannelMemberOut] = []
+    member_users = {
+        u.id: u for u in db.query(User).filter(User.id.in_([cm.user_id for cm in ch.members])).all()
+    } if ch.members else {}
     for cm in ch.members:
-        u = db.get(User, cm.user_id)
+        u = member_users.get(cm.user_id)
         members_out.append(ChannelMemberOut(
             user_id=cm.user_id, role=cm.role, muted=cm.muted,
             last_read_message_id=cm.last_read_message_id, joined_at=cm.joined_at,
@@ -1250,8 +1253,11 @@ def search_messages(
         qy = qy.filter(Message.channel_id == channel_id)
     rows = qy.limit(limit).all()
     hits: List[SearchHit] = []
+    authors = {
+        u.id: u for u in db.query(User).filter(User.id.in_({m.author_id for m in rows if m.author_id})).all()
+    } if rows else {}
     for m in rows:
-        u = db.get(User, m.author_id) if m.author_id else None
+        u = authors.get(m.author_id) if m.author_id else None
         hits.append(SearchHit(
             message_id=m.id, channel_id=m.channel_id,
             snippet=_snippet(m.body), author=_brief_user(u), created_at=m.created_at,

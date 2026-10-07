@@ -59,7 +59,9 @@ def export_tasks_excel(
         q = q.order_by(Task.created_at.desc())
 
         tasks = list(db.execute(q).scalars())
-        users = {u.id: u for u in db.query(User).all()}
+        # Только нужные пользователи (раньше грузились вообще все пользователи платформы).
+        user_ids = {i for t in tasks for i in (t.assignee_id, t.author_id) if i}
+        users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
 
     wb = Workbook()
     ws = wb.active

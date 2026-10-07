@@ -76,7 +76,7 @@ function TasksTable() {
     queryFn: async () =>
       (
         await api.get<Page<TaskListItem>>("/api/tasks", {
-          params: { scope: "incoming", per_page: 500 },
+          params: { scope: "incoming", per_page: 200 },
         })
       ).data.items,
   });
@@ -257,7 +257,7 @@ function MySchedule() {
     queryFn: async () =>
       (
         await api.get<Page<TaskListItem>>("/api/tasks", {
-          params: { scope: "incoming", per_page: 500 },
+          params: { scope: "incoming", per_page: 200 },
         })
       ).data.items,
   });

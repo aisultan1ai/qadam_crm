@@ -848,9 +848,10 @@ def search_articles(
     """)
     rows = db.execute(sql, {"q": query_str, "tid": ctx.tenant.id, "lim": limit}).fetchall()
     results = []
+    articles = {a.id: a for a in db.query(Article).filter(Article.id.in_([r.id for r in rows])).all()} if rows else {}
     for r in rows:
         # Проверяем доступ (view) — для приватных статей
-        art = db.get(Article, r.id)
+        art = articles.get(r.id)
         if not art or not can_view(db, ctx.tenant.id, ctx.user, art):
             continue
         results.append({

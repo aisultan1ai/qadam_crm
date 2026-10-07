@@ -104,7 +104,7 @@ export default function DealsPage() {
 
   const { data: deals, isPending } = useQuery({
     queryKey: ["deals"],
-    queryFn: async () => (await api.get<Page<Deal>>("/api/deals", { params: { per_page: 500 } })).data.items,
+    queryFn: async () => (await api.get<Page<Deal>>("/api/deals", { params: { per_page: 200 } })).data.items,
     enabled: canView,
   });
   const { data: forecast } = useQuery({

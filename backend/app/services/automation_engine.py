@@ -34,6 +34,7 @@ from ..models import (
     AutomationRunStatus, Channel, ChannelMember, Message, Notification, Task, TenantLead, User,
 )
 from ..models.task import TaskPriority, TaskStatus
+from ..core.ssrf import UnsafeUrl, assert_public_url
 from ..core.ws_hub import publish_to_channel, publish_to_tenant, publish_to_user
 
 log = logging.getLogger("qadam.automation")
@@ -390,6 +391,10 @@ def _action_webhook(config: dict, context: dict) -> dict:
     url = rendered.get("url")
     if not url or not isinstance(url, str) or not url.startswith(("http://", "https://")):
         raise ActionError("webhook: некорректный url")
+    try:
+        assert_public_url(url)
+    except UnsafeUrl as exc:
+        raise ActionError(f"webhook: {exc}") from exc
     method = (rendered.get("method") or "POST").upper()
     if method not in ("POST", "PUT", "PATCH"):
         raise ActionError("webhook: поддерживаются только POST/PUT/PATCH")
@@ -404,7 +409,7 @@ def _action_webhook(config: dict, context: dict) -> dict:
         headers["X-Signature"] = f"sha256={sig}"
 
     try:
-        resp = httpx.request(method, url, content=body_bytes, headers=headers, timeout=15.0)
+        resp = httpx.request(method, url, content=body_bytes, headers=headers, timeout=15.0, follow_redirects=False)
     except httpx.HTTPError as exc:
         raise ActionError(f"webhook: сетевая ошибка: {exc}") from exc
     return {"url": url, "status_code": resp.status_code}

@@ -77,7 +77,7 @@ class Task(Base):
     assignee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     assignee: Mapped[Optional["User"]] = relationship("User", foreign_keys=[assignee_id], lazy="joined")  # type: ignore  # noqa: F821
 
-    author_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    author_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     author: Mapped[Optional["User"]] = relationship("User", foreign_keys=[author_id], lazy="joined")  # type: ignore  # noqa: F821
 
     start_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

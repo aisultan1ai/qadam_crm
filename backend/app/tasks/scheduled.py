@@ -47,14 +47,17 @@ def check_deadlines() -> dict:
             )
         ).all()
 
-        for t in tasks:
-            existing = db.query(Notification).filter(
-                Notification.user_id == t.assignee_id,
-                Notification.task_id == t.id,
+        # Одним запросом: по каким задачам уже есть непрочитанное напоминание (раньше — запрос на каждую задачу).
+        already = {
+            (uid, tid) for uid, tid in db.query(Notification.user_id, Notification.task_id).filter(
+                Notification.task_id.in_([t.id for t in tasks]),
                 Notification.kind == REMINDER_KIND,
                 Notification.is_read == False,  # noqa: E712
-            ).first()
-            if existing:
+            )
+        } if tasks else set()
+
+        for t in tasks:
+            if (t.assignee_id, t.id) in already:
                 continue
 
             hours_left = int((t.deadline - now).total_seconds() // 3600)
