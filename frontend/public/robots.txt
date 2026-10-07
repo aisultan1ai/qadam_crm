@@ -1,8 +1,14 @@
 User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /admin
-Disallow: /settings
-Disallow: /profile
+# Публичные страницы
+Allow: /$
+Allow: /login
+Allow: /register
+Allow: /privacy
+Allow: /terms
+Allow: /f/
+Allow: /book/
+Allow: /landing/
+# Всё остальное — рабочие страницы за входом и служебные пути
+Disallow: /
 
-Sitemap: /sitemap.xml
+Sitemap: https://qcrm.kz/sitemap.xml

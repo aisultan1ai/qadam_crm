@@ -15,6 +15,7 @@ import clsx from "clsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/store/auth";
+import { usePageTitle } from "@/lib/pageTitle";
 import { useTheme } from "@/store/theme";
 import { useSidebar } from "@/store/sidebar";
 import { api, extractApiError, onApiEvent } from "@/api/client";
@@ -222,6 +223,15 @@ function useVisible(me: ReturnType<typeof useAuth.getState>["me"], can: Can) {
 }
 
 export default function Layout() {
+  usePageTitle();
+  // Внутренние страницы — только для вошедших пользователей, в поиске им делать нечего.
+  useEffect(() => {
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    return () => meta.remove();
+  }, []);
   const { me, can, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const { collapsed, toggle: togglePanel } = useSidebar();

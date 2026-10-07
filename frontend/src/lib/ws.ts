@@ -51,7 +51,7 @@ export function useRealtimeUpdates() {
       // Токен читается backend'ом из httpOnly cookie (auto-sent на same-origin handshake).
       // Cookie должна быть на том же origin, что и WS — nginx проксирует /ws на backend,
       // so это работает out-of-the-box.
-      const url = API_URL.replace(/^http/, "ws") + "/ws";
+      const url = (API_URL || window.location.origin).replace(/^http/, "ws") + "/ws";
       ws = new WebSocket(url);
       activeWs = ws;
 

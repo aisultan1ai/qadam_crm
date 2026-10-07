@@ -1,6 +1,8 @@
 import axios, { AxiosError, AxiosRequestConfig } from "axios";
 
-export const API_URL = (import.meta.env.VITE_API_URL as string) || "http://localhost:8000";
+// VITE_API_URL="/" (один домен через nginx) → пустая строка: иначе `${API_URL}/api/...` даёт «//api/...»,
+// а браузер читает это как адрес другого сайта (ломались аватары, обновление сессии, вложения, веб-сокет).
+export const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000").replace(/\/+$/, "");
 
 export type ApiErrorDetail = { field: string; message: string; type?: string };
 export type ApiError = { code: string; message: string; details?: ApiErrorDetail[] };
