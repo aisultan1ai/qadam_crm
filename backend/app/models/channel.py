@@ -140,7 +140,6 @@ class PollVote(Base):
     __tablename__ = "poll_votes"
     __table_args__ = (
         UniqueConstraint("option_id", "user_id", name="uq_poll_votes_option_user"),
-        Index("ix_poll_votes_poll_id", "poll_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
