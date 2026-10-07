@@ -380,10 +380,7 @@ const LeadCard = memo(function LeadCard({
   return (
     <div
       ref={setNodeRef}
-      style={{
-        visibility: isActiveDrag ? "hidden" : "visible",
-        touchAction: "none",
-      }}
+      style={{ touchAction: "none" }}
       {...listeners}
       {...attributes}
       onClick={() => {
@@ -391,8 +388,11 @@ const LeadCard = memo(function LeadCard({
         onOpen(lead.id);
       }}
       className={clsx(
-        "group w-full cursor-pointer rounded-xl border border-neutral-200 bg-white p-3 text-left transition-all duration-[180ms] ease-out-soft dark:border-neutral-800 dark:bg-neutral-900/60",
-        !isActiveDrag && "hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-sm dark:hover:border-neutral-700",
+        "group w-full cursor-pointer rounded-xl border p-3 text-left transition-all duration-[180ms] ease-out-soft",
+        isActiveDrag
+          ? // Посадочное место вместо пустой дыры: видно, откуда взяли и куда вернётся при отмене.
+            "border-2 border-dashed border-brand-300 bg-brand-50 [&>*]:invisible dark:border-brand-500/50 dark:bg-brand-500/10"
+          : "border-zinc-200 bg-white hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-[#1B1E23] dark:hover:border-zinc-700",
       )}
     >
       <div className="font-medium">{lead.name}</div>

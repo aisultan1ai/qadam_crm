@@ -70,7 +70,7 @@ export default function ForgotPassword() {
 
             <FormField label="Email" error={errors.email?.message} className="mb-4">
               <input
-                className="input"
+                className="input input-lg"
                 type="email"
                 autoComplete="email"
                 autoFocus
@@ -85,11 +85,12 @@ export default function ForgotPassword() {
 
             <Button
               type="submit"
-              variant="primary"
+              variant="contrast"
+              size="xl"
               fullWidth
               isLoading={isSubmitting}
               disabled={isCaptchaEnabled() && !captchaToken}
-              className="mt-4 !h-11 !py-0 !text-[15px] disabled:opacity-60"
+              className="mt-4"
             >
               {isSubmitting ? "Отправляем…" : "Отправить ссылку"}
             </Button>

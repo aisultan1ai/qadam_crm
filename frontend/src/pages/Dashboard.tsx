@@ -253,10 +253,13 @@ function DealsSummary() {
           <Skeleton className="h-4 w-full" />
         </div>
       ) : data.open_count + data.won_count + data.lost_count === 0 ? (
-        <div className="p-5 text-sm text-zinc-500">
-          Сделок пока нет.{" "}
-          <Link to="/deals" className="link">
-            Создать первую
+        <div className="flex flex-col items-center px-5 py-6 text-center">
+          <span className="mb-2 grid h-9 w-9 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
+            <Coins size={17} />
+          </span>
+          <div className="text-[13px] text-zinc-600 dark:text-zinc-300">Сделок пока нет</div>
+          <Link to="/deals?new=1" className="btn-secondary mt-3 !h-7 !px-2.5 !text-xs">
+            Создать первую сделку
           </Link>
         </div>
       ) : (

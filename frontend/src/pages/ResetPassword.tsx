@@ -95,7 +95,7 @@ export default function ResetPassword() {
 
             <FormField label="Новый пароль" error={errors.password?.message} className="mb-4">
               <input
-                className="input"
+                className="input input-lg"
                 type="password"
                 autoComplete="new-password"
                 autoFocus
@@ -106,7 +106,7 @@ export default function ResetPassword() {
 
             <FormField label="Повторите пароль" error={errors.confirm?.message} className="mb-4">
               <input
-                className="input"
+                className="input input-lg"
                 type="password"
                 autoComplete="new-password"
                 {...register("confirm")}
@@ -117,10 +117,11 @@ export default function ResetPassword() {
 
             <Button
               type="submit"
-              variant="primary"
+              variant="contrast"
+              size="xl"
               fullWidth
               isLoading={isSubmitting}
-              className="mt-4 !h-11 !py-0 !text-[15px] disabled:opacity-60"
+              className="mt-4"
             >
               {isSubmitting ? "Сохраняем…" : "Установить новый пароль"}
             </Button>

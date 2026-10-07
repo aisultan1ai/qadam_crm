@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types/types";
-import { api, extractApiError } from "@/api/client";
+import { api, API_URL, extractApiError } from "@/api/client";
 import { Plus, Trash2, Pencil, PenSquare, Save } from "lucide-react";
 import { EmptyState, Modal, FieldError, FormError } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
@@ -154,6 +154,8 @@ function BoardEditor({ id, onBack }: { id: number; onBack: () => void }) {
   const [savePending, setSavePending] = useState(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const debounceRef = useRef<number | null>(null);
+  // Сцена, которая ещё не ушла на сервер (ждёт debounce) — её нельзя терять при уходе со страницы.
+  const pendingSceneRef = useRef<any>(null);
 
   const { data, isPending } = useQuery({
     queryKey: ["whiteboard", id],
@@ -172,17 +174,44 @@ function BoardEditor({ id, onBack }: { id: number; onBack: () => void }) {
   });
 
   const scheduleSave = useCallback((scene: any) => {
+    pendingSceneRef.current = scene;
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
+      pendingSceneRef.current = null;
       save.mutate({ data: scene });
     }, 1500);
   }, [save]);
 
+  const savePendingRef = useRef(false);
+  savePendingRef.current = savePending;
+
   useEffect(() => {
-    return () => {
+    // Отправка без ожидания: keepalive переживает закрытие вкладки и уход со страницы.
+    const flush = () => {
+      const scene = pendingSceneRef.current;
+      if (!scene) return;
+      pendingSceneRef.current = null;
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      fetch(`${API_URL}/api/whiteboards/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: scene }),
+      }).catch(() => undefined);
     };
-  }, []);
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!pendingSceneRef.current && !savePendingRef.current) return;
+      flush();
+      e.preventDefault();
+      e.returnValue = ""; // браузер покажет «Изменения могут не сохраниться»
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      flush(); // уход внутри приложения (кнопка «Назад») — дописываем последнее изменение
+    };
+  }, [id]);
 
   if (isPending) return <div className="h-96 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />;
   if (!data) return <EmptyState icon={<PenSquare size={32} />} title="Доска не найдена" />;

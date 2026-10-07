@@ -81,10 +81,13 @@ const COND_OPS = [
 // Node components
 // ============================================================================
 
-function TriggerNode({ data }: NodeProps) {
+// Выбранный узел (его сейчас редактирует инспектор справа) — заметное кольцо акцента.
+const SELECTED = "ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-[#14161A]";
+
+function TriggerNode({ data, selected }: NodeProps) {
   const eventKey = String((data as TriggerNodeData)?.event || "");
   return (
-    <div className="rounded-xl border-2 border-brand-400 bg-white px-4 py-3 shadow-md dark:bg-neutral-900" style={{ minWidth: 180 }}>
+    <div className={clsx("rounded-xl border-2 border-brand-400 bg-white px-4 py-3 shadow-md transition-shadow dark:bg-neutral-900", selected && SELECTED)} style={{ minWidth: 180 }}>
       <div className="flex items-center gap-2 text-xs font-semibold text-brand-700 dark:text-brand-300">
         <Zap size={12} /> ТРИГГЕР
       </div>
@@ -94,11 +97,11 @@ function TriggerNode({ data }: NodeProps) {
   );
 }
 
-function ConditionNode({ data }: NodeProps) {
+function ConditionNode({ data, selected }: NodeProps) {
   const d = data as ConditionNodeData;
   const opLabel = COND_OPS.find((o) => o.v === d?.op)?.l || d?.op;
   return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm dark:border-amber-800 dark:bg-amber-950/40" style={{ minWidth: 200 }}>
+    <div className={clsx("rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm transition-shadow dark:border-amber-800 dark:bg-amber-950/40", selected && SELECTED)} style={{ minWidth: 200 }}>
       <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
         <GitBranch size={12} /> УСЛОВИЕ
       </div>
@@ -116,12 +119,12 @@ function ConditionNode({ data }: NodeProps) {
   );
 }
 
-function DelayNode({ data }: NodeProps) {
+function DelayNode({ data, selected }: NodeProps) {
   const seconds = Number((data as DelayNodeData)?.seconds || 0);
   const label =
     seconds >= 3600 ? `${(seconds / 3600).toFixed(1)} ч` : seconds >= 60 ? `${Math.round(seconds / 60)} мин` : `${seconds} с`;
   return (
-    <div className="rounded-xl border border-violet-300 bg-violet-50 px-4 py-3 shadow-sm dark:border-violet-800 dark:bg-violet-950/40" style={{ minWidth: 160 }}>
+    <div className={clsx("rounded-xl border border-violet-300 bg-violet-50 px-4 py-3 shadow-sm transition-shadow dark:border-violet-800 dark:bg-violet-950/40", selected && SELECTED)} style={{ minWidth: 160 }}>
       <div className="flex items-center gap-2 text-xs font-semibold text-violet-700 dark:text-violet-300">
         <Clock size={12} /> ПАУЗА
       </div>
@@ -132,10 +135,10 @@ function DelayNode({ data }: NodeProps) {
   );
 }
 
-function ActionNode({ data }: NodeProps) {
+function ActionNode({ data, selected }: NodeProps) {
   const d = data as ActionNodeData;
   return (
-    <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/40" style={{ minWidth: 200 }}>
+    <div className={clsx("rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 shadow-sm transition-shadow dark:border-emerald-800 dark:bg-emerald-950/40", selected && SELECTED)} style={{ minWidth: 200 }}>
       <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
         <Bolt size={12} /> ДЕЙСТВИЕ
       </div>

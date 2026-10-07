@@ -743,6 +743,20 @@ function ArticleEditor({
   const [title, setTitle] = useState(article?.title ?? "");
   const [summary, setSummary] = useState(article?.summary ?? "");
   const [content, setContent] = useState(article?.content_md ?? "");
+  // Синхронная прокрутка редактора и превью (по доле прокрутки), без зацикливания.
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const syncingRef = useRef(false);
+  const syncScroll = (from: HTMLElement | null, to: HTMLElement | null) => {
+    if (!from || !to || syncingRef.current) return;
+    const max = from.scrollHeight - from.clientHeight;
+    const ratio = max > 0 ? from.scrollTop / max : 0;
+    syncingRef.current = true;
+    to.scrollTop = ratio * (to.scrollHeight - to.clientHeight);
+    requestAnimationFrame(() => {
+      syncingRef.current = false;
+    });
+  };
   const [commitMessage, setCommitMessage] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
@@ -826,6 +840,8 @@ function ArticleEditor({
             Markdown
           </div>
           <textarea
+            ref={editorRef}
+            onScroll={() => syncScroll(editorRef.current, previewRef.current)}
             className="input min-h-0 flex-1 resize-none font-mono text-sm"
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -836,7 +852,11 @@ function ArticleEditor({
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Превью
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto card p-4">
+          <div
+            ref={previewRef}
+            onScroll={() => syncScroll(previewRef.current, editorRef.current)}
+            className="min-h-0 flex-1 overflow-y-auto card p-4"
+          >
             <div className="prose prose-neutral max-w-none dark:prose-invert prose-sm">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
             </div>

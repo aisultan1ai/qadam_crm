@@ -9,6 +9,7 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
+import { SafeHtmlFrame } from "@/components/SafeHtmlFrame";
 import { Button } from "@/components/lib/Button";
 
 import { SearchInput } from "@/components/page";
@@ -154,6 +155,7 @@ export default function Mail() {
   return (
     <>
       <Workspace
+        storageKey="mail"
         showDetailOnMobile={!!selected}
         list={
           <>
@@ -376,7 +378,7 @@ function ThreadView({ thread, onBack, onChanged }: { thread: ThreadRow; onBack: 
 }
 
 function MessageCard({ m }: { m: MailMsg }) {
-  const [showHtml, setShowHtml] = useState(false);
+  const [showHtml, setShowHtml] = useState(!!m.body_html);
   const isOut = m.direction === "outbound";
   return (
     <div
@@ -414,12 +416,8 @@ function MessageCard({ m }: { m: MailMsg }) {
       )}
       <div className="mt-3">
         {m.body_html && showHtml ? (
-          // HTML от внешних отправителей приходит уже очищенным на сервере
-          // (backend/app/core/html_sanitize.py: без script/style/on*/javascript:).
-          <div
-            className="prose prose-sm max-w-none dark:prose-invert"
-            dangerouslySetInnerHTML={{ __html: m.body_html }}
-          />
+          // HTML уже очищен на сервере (backend/app/core/html_sanitize.py), а iframe изолирует его стили от CRM.
+          <SafeHtmlFrame html={m.body_html} />
         ) : (
           <div className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-zinc-800 dark:text-zinc-200">
             {m.body_text || (m.body_html ? "(письмо в HTML — переключите вид)" : "")}

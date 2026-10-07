@@ -3,32 +3,104 @@
  * Одна схема на все три раздела: на всю высоту, без внешней рамки, слева список с поиском и тихими
  * вкладками, справа разговор с компактной шапкой. Название раздела уже есть в панели модуля каркаса.
  */
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
 
 /** Сетка рабочей области. `detail` — показывать ли на телефоне вторую колонку вместо списка. */
+const LIST_MIN = 260;
+const LIST_MAX = 560;
+const LIST_DEFAULT = 320;
+
+/** Ширина списка, которую пользователь подобрал перетаскиванием границы (своя для каждого раздела). */
+function useListWidth(storageKey?: string) {
+  const key = storageKey ? `workspace:list-width:${storageKey}` : null;
+  const [width, setWidth] = useState(() => {
+    if (!key) return LIST_DEFAULT;
+    try {
+      const v = Number(window.localStorage.getItem(key));
+      return v >= LIST_MIN && v <= LIST_MAX ? v : LIST_DEFAULT;
+    } catch {
+      return LIST_DEFAULT;
+    }
+  });
+  useEffect(() => {
+    if (!key) return;
+    try {
+      window.localStorage.setItem(key, String(width));
+    } catch {
+      // localStorage недоступен — ширина просто не запомнится.
+    }
+  }, [key, width]);
+  return [width, setWidth] as const;
+}
+
 export function Workspace({
   list,
   children,
   aside,
   showDetailOnMobile,
+  storageKey,
 }: {
   list: ReactNode;
   children: ReactNode;
   /** Необязательная третья колонка (карточка клиента). */
   aside?: ReactNode;
   showDetailOnMobile: boolean;
+  /** Ключ для запоминания ширины списка (например, "messenger"). */
+  storageKey?: string;
 }) {
+  const [width, setWidth] = useListWidth(storageKey);
+  const listRef = useRef<HTMLDivElement>(null);
+  const clamp = (v: number) => Math.min(LIST_MAX, Math.max(LIST_MIN, v));
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      const left = listRef.current?.getBoundingClientRect().left ?? 0;
+      const move = (ev: PointerEvent) => setWidth(clamp(ev.clientX - left));
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        document.body.style.removeProperty("cursor");
+        document.body.style.removeProperty("user-select");
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    },
+    [setWidth],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-white dark:bg-[#1B1E23]">
       <div
+        ref={listRef}
+        style={{ ["--list-w" as string]: `${width}px` }}
         className={clsx(
-          "min-h-0 w-full shrink-0 flex-col border-zinc-200 md:flex md:w-[320px] md:border-r dark:border-zinc-800",
+          "relative min-h-0 w-full shrink-0 flex-col border-zinc-200 md:flex md:w-[var(--list-w)] md:border-r dark:border-zinc-800",
           showDetailOnMobile ? "hidden" : "flex",
         )}
       >
         {list}
+        {/* Граница-ручка: тянуть мышью, стрелками — с клавиатуры, двойной клик — исходная ширина. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ширина списка"
+          aria-valuemin={LIST_MIN}
+          aria-valuemax={LIST_MAX}
+          aria-valuenow={width}
+          tabIndex={0}
+          onPointerDown={onPointerDown}
+          onDoubleClick={() => setWidth(LIST_DEFAULT)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") setWidth((w) => clamp(w - 16));
+            if (e.key === "ArrowRight") setWidth((w) => clamp(w + 16));
+          }}
+          className="absolute -right-1 top-0 z-10 hidden h-full w-2 cursor-col-resize outline-none transition-colors hover:bg-brand-500/20 focus-visible:bg-brand-500/30 md:block"
+        />
       </div>
       <div className={clsx("min-h-0 min-w-0 flex-1 flex-col bg-[#F7F8FA] md:flex dark:bg-[#16181C]", showDetailOnMobile ? "flex" : "hidden")}>
         {children}

@@ -10,6 +10,7 @@ import {
   Mail, Shield, Layers, Clock, CheckCircle2, Camera, Trash2, KeyRound, Check, Pencil,
   Cake, Phone, Briefcase, User as UserIcon, Award, Target, X, Plus, Trophy, AlertCircle,
 } from "lucide-react";
+import { useNewParam } from "@/hooks/useNewParam";
 
 type Role = { id: number; name: string };
 type Department = { id: number; name: string };
@@ -94,6 +95,7 @@ export default function Profile() {
   const canEdit = isSelf || can("users.update");
   const canManageSkills = isSelf;
   const canManageGoals = isSelf;
+  useNewParam(() => setGoalOpen("new"), canManageGoals);
 
   if (!user && !isSelf && otherUserQ.isPending) {
     return <div className="text-sm text-neutral-500">Загрузка…</div>;

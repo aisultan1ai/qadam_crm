@@ -72,19 +72,19 @@ export default function Register() {
     >
       <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
         <FormField label="Название компании" htmlFor="reg-company" error={errors.company_name?.message}>
-          <input id="reg-company" className="input" type="text" autoComplete="organization" autoFocus {...register("company_name")} />
+          <input id="reg-company" className="input input-lg" type="text" autoComplete="organization" autoFocus {...register("company_name")} />
         </FormField>
 
         <FormField label="Ваше имя" htmlFor="reg-name" error={errors.full_name?.message}>
-          <input id="reg-name" className="input" type="text" autoComplete="name" {...register("full_name")} />
+          <input id="reg-name" className="input input-lg" type="text" autoComplete="name" {...register("full_name")} />
         </FormField>
 
         <FormField label="Рабочий email" htmlFor="reg-email" error={errors.email?.message}>
-          <input id="reg-email" className="input" type="email" autoComplete="email" {...register("email")} />
+          <input id="reg-email" className="input input-lg" type="email" autoComplete="email" {...register("email")} />
         </FormField>
 
         <FormField label="Пароль" htmlFor="reg-password" error={errors.password?.message}>
-          <input id="reg-password" className="input" type="password" autoComplete="new-password" {...register("password")} />
+          <input id="reg-password" className="input input-lg" type="password" autoComplete="new-password" {...register("password")} />
           <PasswordStrength password={passwordValue} />
         </FormField>
 
@@ -94,11 +94,11 @@ export default function Register() {
 
         <Button
           type="submit"
-          variant="primary"
+          variant="contrast"
+              size="xl"
           fullWidth
           isLoading={disabled}
           disabled={isCaptchaEnabled() && !captchaToken}
-          className="!h-11 !py-0 !text-[15px]"
         >
           {loading ? "Создаём компанию…" : "Создать компанию"}
         </Button>

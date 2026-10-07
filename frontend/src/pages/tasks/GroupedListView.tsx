@@ -448,7 +448,8 @@ function Row({
         COLS,
         depth === 1 ? "pl-[72px]" : "pl-12",
         selected && "bg-brand-50/60 dark:bg-brand-500/10",
-        isDragging && "opacity-40",
+        // Посадочное место: пунктирный плейсхолдер вместо полупрозрачной строки.
+        isDragging && "!border-transparent !bg-brand-50 outline-dashed outline-2 -outline-offset-2 outline-brand-300 [&>*]:invisible dark:!bg-brand-500/10 dark:outline-brand-500/50",
       )}
     >
       <div className="absolute left-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">

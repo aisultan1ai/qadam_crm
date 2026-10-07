@@ -205,7 +205,20 @@ function TasksAnalytics() {
             </div>
           </div>
 
-          {/* Mobile: карточки */}
+          {/* Mobile: карточки + своя сортировка (заголовки таблицы на телефоне скрыты) */}
+          <MobileSort
+            value={sortKey}
+            dir={sortDir}
+            options={[
+              { key: "efficiency", label: "Эффективность" },
+              { key: "done", label: "Завершено" },
+              { key: "overdue", label: "Просрочено" },
+              { key: "total", label: "Всего задач" },
+              { key: "name", label: "Имя" },
+            ]}
+            onChange={(k) => { setSortKey(k as SortKey); setSortDir(k === "name" ? "asc" : "desc"); }}
+            onToggleDir={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+          />
           <div className="grid gap-2 md:hidden">
             {rows.map((r) => (
               <div key={r.user_id} className="card p-3 text-sm">
@@ -352,7 +365,20 @@ function LeadsAnalyticsPanel() {
        </div>
       </div>
 
-      {/* Mobile: карточки */}
+      {/* Mobile: карточки + своя сортировка */}
+      <MobileSort
+        value={sortKey}
+        dir={sortDir}
+        options={[
+          { key: "total", label: "Всего лидов" },
+          { key: "converted", label: "Клиенты" },
+          { key: "conversion", label: "Конверсия" },
+          { key: "worked", label: "Связались" },
+          { key: "name", label: "Менеджер" },
+        ]}
+        onChange={(k) => { setSortKey(k as LeadsSortKey); setSortDir(k === "name" ? "asc" : "desc"); }}
+        onToggleDir={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+      />
       <div className="grid gap-2 md:hidden">
         {rows.map((r) => (
           <div key={r.user_id ?? "unassigned"} className="card p-3 text-sm">
@@ -517,6 +543,45 @@ function AnalyticsSkeleton() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Сортировка для мобильных карточек: поле + направление. */
+function MobileSort({
+  value,
+  dir,
+  options,
+  onChange,
+  onToggleDir,
+}: {
+  value: string;
+  dir: SortDir;
+  options: { key: string; label: string }[];
+  onChange: (k: string) => void;
+  onToggleDir: () => void;
+}) {
+  return (
+    <div className="mb-2 flex items-center gap-2 md:hidden">
+      <label className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-zinc-500">
+        Сортировка
+        <select value={value} onChange={(e) => onChange(e.target.value)} className="input !h-8 min-w-0 flex-1 !py-0 text-[13px]">
+          {options.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        onClick={onToggleDir}
+        className="btn-secondary !h-8 !px-2.5"
+        aria-label={dir === "asc" ? "По возрастанию — сменить" : "По убыванию — сменить"}
+        title={dir === "asc" ? "По возрастанию" : "По убыванию"}
+      >
+        {dir === "asc" ? "↑" : "↓"}
+      </button>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { CheckCircle2, AlertTriangle, Info, X } from "lucide-react";
 import clsx from "clsx";
 
@@ -30,8 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const push = useCallback<Ctx["push"]>((t) => {
     const id = Date.now() + Math.random();
     setItems((xs) => [...xs, { ...t, id }]);
-    window.setTimeout(() => remove(id), 5000);
-  }, [remove]);
+  }, []);
 
   const api: Ctx = {
     push,
@@ -52,12 +51,36 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Ошибки обычно длиннее и важнее — показываем дольше.
+const DURATION: Record<ToastKind, number> = { success: 4500, info: 5000, error: 9000 };
+
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   const [leaving, setLeaving] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setLeaving(true), 4700);
-    return () => clearTimeout(t);
+  // Таймер с паузой: пока курсор над уведомлением (или фокус внутри), оно не исчезает.
+  const remaining = useRef(DURATION[toast.kind]);
+  const startedAt = useRef(0);
+  const timer = useRef<number | null>(null);
+  const start = useCallback(() => {
+    startedAt.current = Date.now();
+    timer.current = window.setTimeout(() => setLeaving(true), remaining.current);
   }, []);
+  const pause = useCallback(() => {
+    if (timer.current == null) return;
+    window.clearTimeout(timer.current);
+    timer.current = null;
+    remaining.current = Math.max(800, remaining.current - (Date.now() - startedAt.current));
+  }, []);
+  useEffect(() => {
+    start();
+    return () => {
+      if (timer.current != null) window.clearTimeout(timer.current);
+    };
+  }, [start]);
+  useEffect(() => {
+    if (!leaving) return;
+    const t = window.setTimeout(onClose, 250);
+    return () => window.clearTimeout(t);
+  }, [leaving, onClose]);
 
   const palette: Record<ToastKind, { bar: string; icon: ReactNode }> = {
     success: {
@@ -77,7 +100,11 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 
   return (
     <div
-      role="status"
+      role={toast.kind === "error" ? "alert" : "status"}
+      onMouseEnter={pause}
+      onMouseLeave={() => !leaving && start()}
+      onFocus={pause}
+      onBlur={() => !leaving && start()}
       className={clsx(
         "pointer-events-auto relative flex gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 pr-8 shadow-soft transition-all dark:border-zinc-700/50 dark:bg-[#1B1E23]",
         leaving ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100 animate-slide-up",

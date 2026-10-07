@@ -2,8 +2,8 @@ import { forwardRef, ReactNode, ButtonHTMLAttributes } from "react";
 import clsx from "clsx";
 import { Loader2 } from "lucide-react";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
-type Size = "sm" | "md" | "lg" | "icon";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "contrast";
+type Size = "sm" | "md" | "lg" | "xl" | "icon";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -19,12 +19,14 @@ const VARIANT_CLASS: Record<Variant, string> = {
   secondary: "btn-secondary",
   ghost: "btn-ghost",
   danger: "btn-danger",
+  contrast: "btn-contrast",
 };
 
 const SIZE_CLASS: Record<Size, string> = {
   sm: "!px-3 !py-1.5 !text-xs",
   md: "",
   lg: "!px-5 !py-3 !text-base",
+  xl: "btn-xl",
   icon: "!p-1.5",
 };
 
@@ -59,7 +61,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
     >
       {isLoading ? (
-        <Loader2 size={size === "lg" ? 18 : 14} className="animate-spin" />
+        <Loader2 size={size === "lg" || size === "xl" ? 18 : 14} className="animate-spin" />
       ) : (
         leftIcon
       )}

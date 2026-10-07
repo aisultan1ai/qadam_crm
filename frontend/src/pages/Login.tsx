@@ -51,7 +51,7 @@ export default function Login() {
         <FormField label="Email" htmlFor="login-email" error={errors.email?.message}>
           <input
             id="login-email"
-            className="input"
+            className="input input-lg"
             type="email"
             autoComplete="email"
             autoFocus
@@ -74,7 +74,7 @@ export default function Login() {
         >
           <input
             id="login-password"
-            className="input"
+            className="input input-lg"
             type="password"
             autoComplete="current-password"
             aria-invalid={!!errors.password}
@@ -84,7 +84,7 @@ export default function Login() {
 
         <div aria-live="polite">{error && <FormError msg={error} />}</div>
 
-        <Button type="submit" fullWidth isLoading={isSubmitting} className="!h-11 !py-0 !text-[15px]">
+        <Button type="submit" variant="contrast" size="xl" fullWidth isLoading={isSubmitting}>
           {isSubmitting ? "Входим…" : "Войти"}
         </Button>
       </form>

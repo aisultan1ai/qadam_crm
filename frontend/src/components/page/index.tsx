@@ -3,7 +3,7 @@
  * список, карточка объекта, настройки, рабочий экран.
  * Все страницы собираются из этих блоков — разметка и отступы задаются здесь, а не в каждой странице.
  */
-import { ReactNode, useId } from "react";
+import { ReactNode, useId, useRef } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { ChevronLeft, Search, X } from "lucide-react";
@@ -220,6 +220,7 @@ export function SearchInput({
   label?: string;
 }) {
   const id = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className={clsx("relative w-full min-w-[200px] sm:w-72", className)}>
       <label htmlFor={id} className="sr-only">
@@ -227,6 +228,7 @@ export function SearchInput({
       </label>
       <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
       <input
+        ref={inputRef}
         id={id}
         type="search"
         className="input !h-8 !py-0 pl-8 pr-8 text-[13px]"
@@ -238,7 +240,10 @@ export function SearchInput({
         <button
           type="button"
           aria-label="Очистить поиск"
-          onClick={() => onChange("")}
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus(); // курсор остаётся в поле — можно сразу печатать заново
+          }}
           className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-[#23262D]"
         >
           <X size={13} />

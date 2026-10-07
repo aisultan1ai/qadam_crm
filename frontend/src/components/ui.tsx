@@ -242,7 +242,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 animate-fade-in sm:items-center sm:p-4"
       onClick={onClose}
       role="presentation"
     >
@@ -254,18 +254,22 @@ export function Modal({
         aria-label={title ? undefined : "Диалог"}
         aria-describedby={contentId}
         tabIndex={-1}
-        className={clsx("card w-full animate-slide-up p-0 shadow-pop outline-none", width)}
+        className={clsx(
+          // Телефон: на весь экран (dvh учитывает открытую клавиатуру); от sm — окно по центру.
+          "card flex h-[100dvh] w-full animate-slide-up flex-col rounded-none p-0 shadow-pop outline-none sm:h-auto sm:max-h-[85vh] sm:rounded-xl",
+          width,
+        )}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 dark:border-zinc-800">
+          <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-5 py-3.5 dark:border-zinc-800">
             <h3 id={titleId} className="text-base font-semibold">{title}</h3>
             <button className="btn-ghost !p-1.5" onClick={onClose} aria-label="Закрыть">
               <X size={18} />
             </button>
           </div>
         )}
-        <div id={contentId} className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
+        <div id={contentId} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
       </div>
     </div>
   );

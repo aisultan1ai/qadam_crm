@@ -93,6 +93,14 @@ html.dark mark {
     @apply btn text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900
            dark:text-zinc-400 dark:hover:bg-[#23262D] dark:hover:text-white;
   }
+  /* Тёмная «пилюля» как на лендинге (вход/регистрация); в тёмной теме — светлая. */
+  .btn-contrast {
+    @apply btn rounded-full bg-zinc-950 text-white hover:bg-zinc-800 active:bg-zinc-900
+           dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200;
+  }
+  .btn-xl {
+    @apply h-12 px-5 text-[15px];
+  }
   .btn-danger {
     @apply btn bg-rose-600 text-white shadow-soft hover:bg-rose-700;
   }
@@ -104,14 +112,23 @@ html.dark mark {
            disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500
            dark:border-zinc-700 dark:bg-[#14161A] dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-400;
   }
+  /* Многострочные поля: высота по содержимому (34px из .input только для однострочных). */
+  textarea.input {
+    @apply h-auto min-h-[76px] py-2 leading-relaxed;
+  }
+  /* Крупное поле (вход/регистрация) — после .input, чтобы перекрыть его размеры. */
+  .input-lg {
+    @apply h-12 rounded-xl px-4 text-[15px];
+  }
   .label {
     @apply mb-1 block text-[12.5px] font-medium text-zinc-600 dark:text-zinc-400;
   }
 
   /* ---------- Surfaces ---------- */
+  /* Белые карточки на сером фоне + едва заметная тень: контент отделяется от фона, без «плоскости». */
   .card {
-    @apply rounded-xl border border-zinc-200 bg-white
-           dark:border-zinc-800 dark:bg-[#1B1E23];
+    @apply rounded-xl border border-zinc-200/80 bg-white shadow-[0_1px_2px_rgb(13_15_19/0.04),0_2px_8px_rgb(13_15_19/0.03)]
+           dark:border-zinc-800 dark:bg-[#1B1E23] dark:shadow-none;
   }
   .card-interactive {
     @apply card transition-[border-color,box-shadow] duration-150 hover:border-zinc-300 hover:shadow-pop
@@ -148,7 +165,7 @@ html.dark mark {
 
   /* ---------- Tables ---------- */
   .table-container {
-    @apply overflow-hidden rounded-xl border border-zinc-200 bg-white
+    @apply overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-[0_1px_2px_rgb(13_15_19/0.04),0_2px_8px_rgb(13_15_19/0.03)] dark:shadow-none
            dark:border-zinc-800 dark:bg-[#1B1E23];
   }
   .table-scroll {

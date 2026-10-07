@@ -14,6 +14,8 @@ export interface Column<T> {
   className?: string;
   headerClassName?: string;
   sortable?: boolean;
+  /** Не показывать в мобильной карточке (служебные колонки, действия). */
+  hideOnMobile?: boolean;
 }
 
 export interface DataTableProps<T> {
@@ -73,9 +75,40 @@ export function DataTable<T>({
     return <div className={clsx("table-container", className)}>{empty}</div>;
   }
 
+  const [primary, ...rest] = columns;
   return (
     <div className={clsx("table-container", className)}>
-      <div className="table-scroll">
+      {/* Телефон: карточки вместо таблицы — без горизонтальной прокрутки. */}
+      <ul className="divide-y divide-zinc-100 md:hidden dark:divide-zinc-800/70">
+        {isLoading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <li key={`msk-${i}`} className="space-y-2 p-4">
+                <div className="h-3.5 w-2/3 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                <div className="h-3 w-1/2 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+              </li>
+            ))
+          : sortedRows.map((row, i) => (
+              <li
+                key={rowKey(row, i)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={clsx("px-4 py-3", onRowClick && "cursor-pointer active:bg-zinc-50 dark:active:bg-white/5")}
+              >
+                <div className="text-[14px] font-medium text-zinc-900 dark:text-zinc-100">{primary?.render(row, i)}</div>
+                <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12.5px]">
+                  {rest
+                    .filter((c) => !c.hideOnMobile)
+                    .map((c) => (
+                      <div key={c.key} className="contents">
+                        <dt className="text-zinc-500">{c.header}</dt>
+                        <dd className="min-w-0 text-zinc-700 dark:text-zinc-300">{c.render(row, i)}</dd>
+                      </div>
+                    ))}
+                </dl>
+              </li>
+            ))}
+      </ul>
+      {/* Десктоп: своя область прокрутки — шапка прилипает и при длинном списке колонки не теряются. */}
+      <div className="hidden max-h-[calc(100vh-13rem)] overflow-auto [scrollbar-gutter:stable] md:block">
         <table className="w-full border-collapse">
           <thead className="table-head">
             <tr>

@@ -10,6 +10,7 @@ import { Modal, Avatar } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 
 import { SearchInput } from "@/components/page";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { Link } from "react-router-dom";
 import {
   Composer, DayDivider, IconAction, ListEmpty, ListHeader, ListRow, ListTabs, PaneEmpty, PaneHeader, RowTag, Workspace, dayLabel,
@@ -150,12 +151,16 @@ export default function Inbox() {
     () => (convs ?? []).reduce((s, c) => s + (c.unread_count || 0), 0),
     [convs],
   );
-  // Карточка клиента — по кнопке; на широком экране открыта по умолчанию.
-  const [cardOpen, setCardOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1280);
+  // Карточка клиента: по умолчанию открыта на широком экране и пересчитывается при смене ширины/повороте;
+  // как только пользователь переключил её сам — уважаем его выбор.
+  const wide = useMediaQuery("(min-width: 1280px)");
+  const [cardPref, setCardPref] = useState<boolean | null>(null);
+  const cardOpen = cardPref ?? wide;
 
   return (
     <>
       <Workspace
+        storageKey="inbox"
         showDetailOnMobile={!!selected}
         list={
           <>
@@ -241,7 +246,7 @@ export default function Inbox() {
             conversation={selected}
             onBack={() => setSelectedId(null)}
             cardOpen={cardOpen}
-            onToggleCard={() => setCardOpen((v) => !v)}
+            onToggleCard={() => setCardPref(!cardOpen)}
             onLinkLead={() => setLinkOpen(true)}
             onChanged={() => {
               qc.invalidateQueries({ queryKey: ["messenger-convs"] });

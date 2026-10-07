@@ -812,8 +812,9 @@ function TableView({
   return (
     <div className="card overflow-hidden">
       <div className="min-w-[900px]">
+        {/* Шапка и строки резервируют одинаковое место под полосу прокрутки — колонки не съезжают. */}
         <div
-          className="grid bg-neutral-50 px-5 py-2.5 text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-800/40"
+          className="grid overflow-hidden bg-neutral-50 px-5 py-2.5 text-xs uppercase tracking-wide text-neutral-500 [scrollbar-gutter:stable] dark:bg-neutral-800/40"
           style={{ gridTemplateColumns: gridCols }}
         >
           {withSelect && (
@@ -842,6 +843,7 @@ function TableView({
           height={Math.min(tasks.length, 14) * TASK_ROW_HEIGHT + 4}
           getKey={(t) => t.id}
           threshold={50}
+          className="[scrollbar-gutter:stable]"
           renderItem={(t) => {
             const isSelected = !!selectedIds?.has(t.id);
             return (

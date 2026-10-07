@@ -120,16 +120,7 @@ export function AuthLayout({
         </header>
 
         <main className="flex flex-1 items-center justify-center py-10">
-          <div
-            className={[
-              "w-full max-w-[420px]",
-              // Поля и главная кнопка — как на лендинге: крупные, скруглённые, кнопка-«пилюля».
-              "[&_.input]:h-12 [&_.input]:rounded-xl [&_.input]:px-4 [&_.input]:text-[15px]",
-              "[&_button[type=submit]]:!h-12 [&_button[type=submit]]:!rounded-full [&_button[type=submit]]:!border-0 [&_button[type=submit]]:!bg-zinc-950 [&_button[type=submit]]:!text-[15px] [&_button[type=submit]]:!font-medium [&_button[type=submit]]:!text-white [&_button[type=submit]]:!shadow-none",
-              "[&_button[type=submit]:hover]:!bg-zinc-800",
-              "dark:[&_button[type=submit]]:!bg-white dark:[&_button[type=submit]]:!text-zinc-950 dark:[&_button[type=submit]:hover]:!bg-zinc-200",
-            ].join(" ")}
-          >
+          <div className="w-full max-w-[420px]">
             <h1 className="font-display text-[32px] font-bold leading-[1.1] tracking-[-0.035em] text-zinc-950 sm:text-[38px] dark:text-white">
               {title}
             </h1>

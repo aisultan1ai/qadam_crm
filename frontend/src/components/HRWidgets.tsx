@@ -118,7 +118,15 @@ export function MyGoalsWidget() {
       </div>
       {isPending && <div className="text-sm text-neutral-500 dark:text-neutral-400">Загрузка…</div>}
       {data && active.length === 0 && (
-        <div className="text-sm text-neutral-500 dark:text-neutral-400">Активных целей нет</div>
+        <div className="flex flex-col items-center py-3 text-center">
+          <span className="mb-2 grid h-9 w-9 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
+            <Target size={17} />
+          </span>
+          <div className="text-[13px] text-zinc-600 dark:text-zinc-300">Активных целей нет</div>
+          <Link to="/profile?new=1" className="btn-secondary mt-3 !h-7 !px-2.5 !text-xs">
+            Создать цель
+          </Link>
+        </div>
       )}
       <div className="space-y-2">
         {active.slice(0, 4).map((g) => {

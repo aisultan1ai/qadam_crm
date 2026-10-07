@@ -383,7 +383,10 @@ function Rail({
               aria-current={on ? "page" : undefined}
               className={clsx(
                 "relative flex w-full flex-col items-center gap-[3px] rounded-[10px] py-[7px] text-[9.5px] font-medium leading-none tracking-[-0.01em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
-                on ? "bg-rail-active text-white" : "hover:bg-rail-hover hover:text-zinc-100",
+                // Акцентная полоска слева — активный модуль считывается и боковым зрением.
+                on
+                  ? "bg-rail-active text-white shadow-[inset_3px_0_0_rgb(var(--brand-400))]"
+                  : "hover:bg-rail-hover hover:text-zinc-100",
               )}
             >
               <Icon size={18} strokeWidth={on ? 2.1 : 1.8} className={on ? "text-brand-400" : undefined} />
