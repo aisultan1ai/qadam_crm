@@ -33,6 +33,8 @@ const KIND_ICON: Record<string, typeof Bell> = {
   task_reminder: BellRing,
   calendar_reminder: CalendarClock,
   messenger_digest: Mail,
+  deadline_request: CalendarClock,
+  deadline_decision: CalendarClock,
 };
 
 function at(hours: number, addDays: number) {

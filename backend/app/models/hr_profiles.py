@@ -92,6 +92,10 @@ class Goal(Base):
 
     deadline: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
+    # numeric — значение вручную (KPI); daily — привычка: отметка «выполнено» раз в день,
+    # target_value = сколько дней нужно, current_value = сколько отмечено.
+    kind: Mapped[str] = mapped_column(String(16), default="numeric", server_default="numeric")
+
     status: Mapped[GoalStatus] = mapped_column(
         SAEnum(GoalStatus, name="goal_status"),
         default=GoalStatus.not_started,
@@ -106,6 +110,19 @@ class Goal(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GoalCheckin(Base):
+    """Отметка «выполнено» по ежедневной цели за конкретный день."""
+    __tablename__ = "goal_checkins"
+    __table_args__ = (
+        UniqueConstraint("goal_id", "day", name="uq_goal_checkins_goal_day"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    goal_id: Mapped[int] = mapped_column(ForeignKey("goals.id", ondelete="CASCADE"), index=True)
+    day: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class OneOnOne(Base):

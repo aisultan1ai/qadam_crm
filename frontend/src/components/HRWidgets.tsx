@@ -4,6 +4,7 @@ import { Cake, Target, Award, ArrowRight } from "lucide-react";
 import { api } from "@/api/client";
 import { Avatar } from "@/components/ui";
 import { useAuth } from "@/store/auth";
+import { GoalCheckinButton, GoalStreak, todayLocal } from "@/components/GoalCheckin";
 
 type BirthdayUser = {
   id: number;
@@ -18,6 +19,7 @@ type BirthdayUser = {
 type Goal = {
   id: number; title: string; deadline?: string | null;
   target_value?: number | string | null; current_value?: number | string | null; unit?: string | null;
+  kind?: "numeric" | "daily"; checked_today?: boolean; streak?: number;
   status: "not_started" | "in_progress" | "completed" | "cancelled";
 };
 
@@ -100,7 +102,7 @@ export function MyGoalsWidget() {
   const { data, isPending } = useQuery({
     enabled: !!me?.id,
     queryKey: ["hr", "goals", me?.id],
-    queryFn: async () => (await api.get<Goal[]>("/api/hr/goals")).data,
+    queryFn: async () => (await api.get<Goal[]>("/api/hr/goals", { params: { today: todayLocal() } })).data,
     staleTime: 30_000,
   });
 
@@ -143,6 +145,12 @@ export function MyGoalsWidget() {
               {g.deadline && (
                 <div className="mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400">
                   до {new Date(g.deadline).toLocaleDateString("ru-RU")}
+                </div>
+              )}
+              {g.kind === "daily" && (
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <GoalStreak streak={g.streak ?? 0} />
+                  <GoalCheckinButton goalId={g.id} checked={!!g.checked_today} className="ml-auto" />
                 </div>
               )}
               {progress !== null && (

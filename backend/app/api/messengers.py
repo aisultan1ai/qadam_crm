@@ -411,7 +411,8 @@ async def receive_webhook(
         log.warning("webhook: verify failed for channel %s: %s", channel_id, e)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(e))
     except ProviderError as e:
-        raise HTTPException(500, f"Provider error: {e}")
+        log.warning("webhook: provider error for channel %s: %s", channel_id, e)
+        raise HTTPException(502, "Мессенджер не ответил. Попробуйте ещё раз позже")
 
     # Payload JSON
     try:

@@ -439,6 +439,8 @@ def public_submit(
         referer=(request.headers.get("referer") or "")[:500] or None,
     )
     db.add(lead)
+    db.flush()
+    log_action(db, tenant_id=tenant.id, user_id=None, action="lead_new", entity="lead", entity_id=lead.id, detail=lead.name)
     db.commit()
     db.refresh(lead)
 
@@ -568,6 +570,12 @@ def create_lead(
         db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
         action="create", entity="lead", detail=lead.name,
     )
+    if resolved_assignee and resolved_assignee != ctx.user.id:
+        db.flush()
+        log_action(
+            db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
+            action="lead_assigned", entity="lead", entity_id=lead.id, detail=lead.name,
+        )
     db.commit()
     db.refresh(lead)
     publish_to_tenant(ctx.tenant.id, "lead.new", {
@@ -606,8 +614,14 @@ def update_lead(
 
     data = payload.model_dump(exclude_unset=True)
     old_status = lead.status
+    old_assignee = lead.assignee_id
     for k, v in data.items():
         setattr(lead, k, v)
+    if "assignee_id" in data and lead.assignee_id and lead.assignee_id != old_assignee and lead.assignee_id != ctx.user.id:
+        log_action(
+            db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
+            action="lead_assigned", entity="lead", entity_id=lead.id, detail=lead.name,
+        )
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="lead", entity_id=lead.id, detail=str(data.get("status") or ""))
     db.commit()
     db.refresh(lead)

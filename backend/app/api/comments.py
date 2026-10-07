@@ -80,7 +80,7 @@ def create_comment(task_id: int, payload: CommentCreate, ctx: TenantContext = De
                 ))
                 notify_user_ids.add(m.id)
 
-    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="comment", entity="task", entity_id=task.id, task_id=task.id)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="comment", entity="task", entity_id=task.id, task_id=task.id, detail=payload.body[:200])
     db.commit()
     db.refresh(comment)
 

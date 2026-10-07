@@ -52,7 +52,11 @@ class GoalOut(BaseModel):
     current_value: Optional[Decimal] = None
     unit: Optional[str] = None
     deadline: Optional[date] = None
+    kind: Literal["numeric", "daily"] = "numeric"
     status: Literal["not_started", "in_progress", "completed", "cancelled"]
+    # Только для kind=daily (считаются в API):
+    checked_today: bool = False
+    streak: int = 0
     created_by_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
@@ -67,7 +71,14 @@ class GoalCreate(BaseModel):
     current_value: Optional[Decimal] = None
     unit: Optional[str] = Field(default=None, max_length=30)
     deadline: Optional[date] = None
+    kind: Literal["numeric", "daily"] = "numeric"
     status: Literal["not_started", "in_progress", "completed", "cancelled"] = "not_started"
+
+
+class GoalCheckinIn(BaseModel):
+    # День, за который отмечаем (локальная дата клиента). По умолчанию — сегодня.
+    day: Optional[date] = None
+    done: bool = True
 
 
 class GoalUpdate(BaseModel):

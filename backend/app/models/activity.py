@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Index, func, Text
+from sqlalchemy import Boolean, String, Integer, ForeignKey, DateTime, Index, UniqueConstraint, func, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 
@@ -28,3 +28,19 @@ class ActivityLog(Base):
 
     user: Mapped[Optional["User"]] = relationship("User", lazy="joined")  # type: ignore  # noqa: F821
     task: Mapped[Optional["Task"]] = relationship("Task", back_populates="activities")  # type: ignore  # noqa: F821
+
+
+class ActivityState(Base):
+    """Личное состояние события ленты: прочитано / «лайк» конкретным пользователем."""
+    __tablename__ = "activity_states"
+    __table_args__ = (
+        UniqueConstraint("activity_id", "user_id", name="uq_activity_states_activity_user"),
+        Index("ix_activity_states_user", "user_id", "is_read"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    activity_id: Mapped[int] = mapped_column(ForeignKey("activity_logs.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    liked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -101,6 +101,9 @@ export type TaskListItem = {
   order_index: number;
   parent_task_id?: number | null;
   custom_status_id?: number | null;
+  /** Срок напрямую меняют постановщик и аудиторы; остальные отправляют запрос на перенос. */
+  author_id?: number | null;
+  auditor_ids?: number[];
 };
 
 /** Свой статус задачи компании; category — базовый статус для фильтров, отчётов и канбана. */

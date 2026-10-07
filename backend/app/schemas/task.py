@@ -164,6 +164,9 @@ class TaskListItem(BaseModel):
     order_index: int
     parent_task_id: Optional[int] = None
     custom_status_id: Optional[int] = None
+    # Кто может менять срок напрямую (остальные шлют запрос): постановщик и аудиторы.
+    author_id: Optional[int] = None
+    auditor_ids: List[int] = []
 
 
 class TaskOut(TaskListItem):

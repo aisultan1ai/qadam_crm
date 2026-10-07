@@ -10,13 +10,13 @@ from sqlalchemy.orm import Session, aliased
 
 from ..database import get_db
 from ..models import (
-    Skill, UserSkill, Goal, OneOnOne, Kudos, GoalStatus, KudosBadge, SkillLevel,
+    Skill, UserSkill, Goal, GoalCheckin, OneOnOne, Kudos, GoalStatus, KudosBadge, SkillLevel,
     User, Department, TenantMembership,
 )
 from ..schemas.hr import (
     SkillOut, SkillCreate, SkillUpdate,
     UserSkillOut, UserSkillAssign,
-    GoalOut, GoalCreate, GoalUpdate,
+    GoalOut, GoalCreate, GoalUpdate, GoalCheckinIn,
     OneOnOneOut, OneOnOneCreate, OneOnOneUpdate,
     KudosOut, KudosCreate,
     OrgChartOut, OrgChartUser, OrgChartDepartment,
@@ -212,10 +212,46 @@ def remove_user_skill(
 # GOALS
 # =========================================================================
 
+def _client_today(today: Optional[date]) -> date:
+    """Локальная дата клиента (чтобы «сегодня» не зависело от часового пояса сервера).
+    Допускаем только ±1 день от UTC — защита от произвольных дат."""
+    utc_today = datetime.now(timezone.utc).date()
+    if today is None or abs((today - utc_today).days) > 1:
+        return utc_today
+    return today
+
+
+def _goals_out(db: Session, goals: List[Goal], today: date) -> List[GoalOut]:
+    """GoalOut + для daily-целей: отмечено ли сегодня и серия дней подряд."""
+    daily_ids = [g.id for g in goals if g.kind == "daily"]
+    days_by_goal: dict[int, set[date]] = {gid: set() for gid in daily_ids}
+    if daily_ids:
+        rows = db.query(GoalCheckin.goal_id, GoalCheckin.day).filter(GoalCheckin.goal_id.in_(daily_ids)).all()
+        for gid, day in rows:
+            days_by_goal[gid].add(day)
+
+    out: List[GoalOut] = []
+    for g in goals:
+        item = GoalOut.model_validate(g)
+        if g.kind == "daily":
+            days = days_by_goal[g.id]
+            checked = today in days
+            # Серия идёт до сегодня, а если сегодня ещё не отмечено — до вчера (серия не «сгорает» до конца дня).
+            cursor = today if checked else today - timedelta(days=1)
+            streak = 0
+            while cursor in days:
+                streak += 1
+                cursor -= timedelta(days=1)
+            item = item.model_copy(update={"checked_today": checked, "streak": streak})
+        out.append(item)
+    return out
+
+
 @router.get("/goals", response_model=List[GoalOut])
 def list_goals(
     user_id: Optional[int] = None,
     status: Optional[str] = None,
+    today: Optional[date] = None,
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
@@ -233,7 +269,7 @@ def list_goals(
     if status:
         query = query.filter(Goal.status == GoalStatus(status))
 
-    return query.order_by(Goal.deadline.nullslast(), Goal.id.desc()).all()
+    return _goals_out(db, query.order_by(Goal.deadline.nullslast(), Goal.id.desc()).all(), _client_today(today))
 
 
 @router.post("/goals", response_model=GoalOut, status_code=201)
@@ -255,6 +291,7 @@ def create_goal(
         current_value=payload.current_value,
         unit=payload.unit,
         deadline=payload.deadline,
+        kind=payload.kind,
         status=GoalStatus(payload.status),
         created_by_id=ctx.user.id,
         completed_at=datetime.now(timezone.utc) if payload.status == "completed" else None,
@@ -263,7 +300,7 @@ def create_goal(
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="create", entity="goal", entity_id=None, detail=payload.title)
     db.commit()
     db.refresh(goal)
-    return goal
+    return _goals_out(db, [goal], _client_today(None))[0]
 
 
 @router.patch("/goals/{goal_id}", response_model=GoalOut)
@@ -303,7 +340,55 @@ def update_goal(
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="goal", entity_id=goal.id)
     db.commit()
     db.refresh(goal)
-    return goal
+    return _goals_out(db, [goal], _client_today(None))[0]
+
+
+@router.post("/goals/{goal_id}/checkin", response_model=GoalOut)
+def checkin_goal(
+    goal_id: int,
+    payload: GoalCheckinIn,
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    """Отметить (или снять отметку) «выполнено» по ежедневной цели за день."""
+    goal = db.get(Goal, goal_id)
+    if not goal or goal.tenant_id != ctx.tenant.id:
+        raise HTTPException(404, "Цель не найдена")
+    if goal.user_id != ctx.user.id:
+        raise HTTPException(403, "Отмечать прогресс может только владелец цели")
+    if goal.kind != "daily":
+        raise HTTPException(400, "Отметки доступны только для ежедневных целей")
+    if goal.status in (GoalStatus.cancelled,):
+        raise HTTPException(400, "Цель отменена")
+
+    today = _client_today(payload.day)
+    existing = (
+        db.query(GoalCheckin)
+        .filter(GoalCheckin.goal_id == goal.id, GoalCheckin.day == today)
+        .first()
+    )
+    if payload.done and not existing:
+        db.add(GoalCheckin(goal_id=goal.id, day=today))
+    elif not payload.done and existing:
+        db.delete(existing)
+    db.flush()
+
+    # current_value — число отмеченных дней; статус подтягиваем автоматически.
+    done_days = db.query(GoalCheckin).filter(GoalCheckin.goal_id == goal.id).count()
+    goal.current_value = done_days
+    target = float(goal.target_value) if goal.target_value is not None else None
+    if target and done_days >= target:
+        if goal.status != GoalStatus.completed:
+            goal.status = GoalStatus.completed
+            goal.completed_at = datetime.now(timezone.utc)
+    else:
+        if goal.status == GoalStatus.completed:
+            goal.completed_at = None
+        goal.status = GoalStatus.in_progress if done_days > 0 else GoalStatus.not_started
+
+    db.commit()
+    db.refresh(goal)
+    return _goals_out(db, [goal], today)[0]
 
 
 @router.delete("/goals/{goal_id}", response_model=Message)

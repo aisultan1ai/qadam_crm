@@ -282,7 +282,7 @@ def list_files(
     except Exception as e:
         db.rollback()
         log.exception("%s list failed", provider)
-        raise HTTPException(502, f"{provider} list failed: {e}")
+        raise HTTPException(502, "Не удалось получить список файлов из хранилища. Проверьте подключение и попробуйте ещё раз")
 
 
 class ImportIn(BaseModel):
@@ -324,7 +324,7 @@ async def import_file(
         log.exception("%s download failed", provider)
         acc.last_error = str(e)[:1000]
         db.commit()
-        raise HTTPException(502, f"{provider} download failed: {e}")
+        raise HTTPException(502, "Не удалось скачать файл из хранилища. Проверьте подключение и попробуйте ещё раз")
 
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"tenant_{ctx.tenant.id}", "documents")
     os.makedirs(upload_dir, exist_ok=True)

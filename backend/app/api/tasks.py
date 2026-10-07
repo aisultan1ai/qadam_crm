@@ -12,6 +12,7 @@ from ..models.task import (
 )
 from ..core.events import build_change_payload, fire_event, serialize_task
 from ..core.permissions import user_has
+from ..core.task_access import can_set_deadline
 from ..core.ws_hub import publish_to_user
 from ..core.cache import invalidate_analytics
 from ..schemas.task import (
@@ -324,6 +325,11 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
     if "start_date" in sent:
         task.start_date = payload.start_date
     if "deadline" in sent and payload.deadline != task.deadline:
+        if not can_set_deadline(user, ctx.membership, task):
+            raise HTTPException(
+                403,
+                "Срок задачи меняет постановщик или аудитор. Отправьте запрос на перенос срока.",
+            )
         task.deadline = payload.deadline
         changes.append("срок")
     if payload.order_index is not None:
@@ -439,9 +445,9 @@ def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("t
         if p.project_id is not None and p.project_id != t.project_id:
             t.project_id = p.project_id
             changes.append("проект")
-        if p.deadline is not None and p.deadline != t.deadline:
+        if p.deadline is not None and p.deadline != t.deadline and can_set_deadline(user, ctx.membership, t):
             t.deadline = p.deadline
-            changes.append("дедлайн")
+            changes.append("срок")
 
         if changes:
             log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="task", entity_id=t.id, task_id=t.id, detail=", ".join(changes))

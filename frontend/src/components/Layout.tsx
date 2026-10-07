@@ -51,7 +51,7 @@ type PanelItem = {
   ownerOnly?: boolean;
   /** Владельцу доступно без права code (как в настройках). */
   ownerBypass?: boolean;
-  badge?: "notifications" | "messenger" | "overdue";
+  badge?: "notifications" | "messenger" | "overdue" | "feed";
 };
 
 type Module = {
@@ -78,7 +78,7 @@ const MODULES: Module[] = [
       { to: "/", label: "Обзор", icon: LayoutGrid, exact: true },
       { to: "/notifications", label: "Входящие", icon: InboxIcon, badge: "notifications" },
       { to: "/planner", label: "Планировщик", icon: CalendarClock },
-      { to: "/activity", label: "Хроника", icon: ActivityIcon },
+      { to: "/activity", label: "Хроника", icon: ActivityIcon, badge: "feed" },
     ],
   },
   {
@@ -359,7 +359,7 @@ function Rail({
   const nav = useNavigate();
   const meRef = useRef<HTMLButtonElement>(null);
   const [meOpen, setMeOpen] = useState(false);
-  const notifCount = useNotifCounts().unread;
+  const notifCount = useNotifCounts().unread + useFeedUnread();
 
   return (
     <nav aria-label="Модули" className="flex h-full w-16 shrink-0 flex-col items-center bg-rail py-2.5 text-zinc-400">
@@ -552,7 +552,8 @@ function PanelBadge({ kind, active }: { kind: NonNullable<PanelItem["badge"]>; a
   const notif = useNotifCounts().unread;
   const messenger = useMessengerUnread();
   const overdue = useOverdueCount(kind === "overdue");
-  const n = kind === "notifications" ? notif : kind === "messenger" ? messenger : overdue;
+  const feed = useFeedUnread();
+  const n = kind === "notifications" ? notif : kind === "messenger" ? messenger : kind === "feed" ? feed : overdue;
   if (!n) return null;
   return (
     <span
@@ -916,6 +917,17 @@ function useNotifCounts(online = true) {
     staleTime: 15000,
   });
   return { unread: data?.unread ?? 0, mentions: data?.mentions ?? 0 };
+}
+
+/** Непрочитанные события «Хроники». Ключ под ["activity-feed"], чтобы «прочитано» на странице обновляло счётчик. */
+function useFeedUnread(online = true) {
+  const { data } = useQuery({
+    queryKey: ["activity-feed", "unread-count"],
+    queryFn: async () => (await api.get<{ unread: number }>("/api/activity/feed/unread-count")).data,
+    refetchInterval: online ? 60000 : false,
+    staleTime: 30000,
+  });
+  return data?.unread ?? 0;
 }
 
 function useMessengerUnread() {

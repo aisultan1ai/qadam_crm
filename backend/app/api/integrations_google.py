@@ -242,7 +242,8 @@ def sync_now(
         db.rollback()
         acc.last_sync_error = str(e)[:1000]
         db.commit()
-        raise HTTPException(502, f"Sync failed: {e}")
+        log.exception("Google Calendar sync failed")
+        raise HTTPException(502, "Не удалось синхронизировать Google Календарь. Попробуйте позже или переподключите аккаунт")
     return SyncResult(created=created, updated=updated, deleted=deleted)
 
 

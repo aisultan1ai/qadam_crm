@@ -11,6 +11,7 @@ import {
   Cake, Phone, Briefcase, User as UserIcon, Award, Target, X, Plus, Trophy, AlertCircle,
 } from "lucide-react";
 import { useNewParam } from "@/hooks/useNewParam";
+import { GoalCheckinButton, GoalStreak, todayLocal } from "@/components/GoalCheckin";
 
 type Role = { id: number; name: string };
 type Department = { id: number; name: string };
@@ -41,6 +42,7 @@ type Goal = {
   id: number; user_id: number; title: string; description?: string | null;
   target_value?: number | string | null; current_value?: number | string | null; unit?: string | null;
   deadline?: string | null;
+  kind?: "numeric" | "daily"; checked_today?: boolean; streak?: number;
   status: "not_started" | "in_progress" | "completed" | "cancelled";
   created_at: string; completed_at?: string | null;
 };
@@ -83,7 +85,7 @@ export default function Profile() {
 
   const goalsQ = useQuery({
     queryKey: ["hr", "goals", viewedId],
-    queryFn: async () => (await api.get<Goal[]>("/api/hr/goals", { params: { user_id: viewedId } })).data,
+    queryFn: async () => (await api.get<Goal[]>("/api/hr/goals", { params: { user_id: viewedId, today: todayLocal() } })).data,
     enabled: viewedId > 0 && (isSelf || can("hr.view_profiles")),
     staleTime: 30_000,
   });
@@ -159,7 +161,7 @@ export default function Profile() {
               <div className="text-sm text-neutral-500">Пока целей нет</div>
             )}
             {(goalsQ.data ?? []).map((g) => (
-              <GoalRow key={g.id} goal={g} onOpen={() => setGoalOpen(g)} />
+              <GoalRow key={g.id} goal={g} onOpen={() => setGoalOpen(g)} isSelf={isSelf} />
             ))}
           </div>
         </div>
@@ -671,17 +673,19 @@ function ManageSkillsModal({
 // Goals
 // ============================================================================
 
-function GoalRow({ goal, onOpen }: { goal: Goal; onOpen: () => void }) {
+function GoalRow({ goal, onOpen, isSelf }: { goal: Goal; onOpen: () => void; isSelf?: boolean }) {
   const status = GOAL_STATUS_LABEL[goal.status];
   const target = num(goal.target_value);
   const current = num(goal.current_value);
   const progress = target && target > 0 ? Math.min(100, ((current ?? 0) / target) * 100) : null;
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="w-full rounded-lg border border-neutral-200 p-3 text-left hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50"
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
+      className="w-full cursor-pointer rounded-lg border border-neutral-200 p-3 text-left hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -703,12 +707,20 @@ function GoalRow({ goal, onOpen }: { goal: Goal; onOpen: () => void }) {
             />
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
-            <span>{current ?? 0}{goal.unit ? ` ${goal.unit}` : ""}</span>
-            <span>{target}{goal.unit ? ` ${goal.unit}` : ""}</span>
+            <span>{current ?? 0}{goal.kind === "daily" ? " дн." : goal.unit ? ` ${goal.unit}` : ""}</span>
+            <span>{target}{goal.kind === "daily" ? " дн." : goal.unit ? ` ${goal.unit}` : ""}</span>
           </div>
         </div>
       )}
-    </button>
+      {goal.kind === "daily" && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <GoalStreak streak={goal.streak ?? 0} />
+          {isSelf && goal.status !== "cancelled" && goal.status !== "completed" && (
+            <GoalCheckinButton goalId={goal.id} checked={!!goal.checked_today} className="ml-auto" />
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -734,8 +746,10 @@ function GoalModal({
     current_value: goal?.current_value != null ? String(goal.current_value) : "",
     unit: goal?.unit ?? "",
     deadline: goal?.deadline ?? "",
+    kind: (goal?.kind ?? "numeric") as "numeric" | "daily",
     status: goal?.status ?? "not_started" as Goal["status"],
   });
+  const isDaily = form.kind === "daily";
 
   const save = useMutation({
     mutationFn: async () => {
@@ -748,7 +762,14 @@ function GoalModal({
         deadline: form.deadline || null,
         status: form.status,
       };
+      if (isDaily) {
+        // Для ежедневной цели прогресс считается по отметкам, статус — автоматически.
+        delete body.current_value;
+        delete body.unit;
+        if (isNew) delete body.status;
+      }
       if (isNew) {
+        body.kind = form.kind;
         body.user_id = userId;
         await api.post("/api/hr/goals", body);
       } else {
@@ -784,6 +805,29 @@ function GoalModal({
         onSubmit={(e) => { e.preventDefault(); if (form.title.trim()) save.mutate(); }}
         className="space-y-4"
       >
+        {isNew && (
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              ["numeric", "Число / KPI", "Обновляете значение вручную"],
+              ["daily", "Ежедневная", "Отмечаете «выполнено» раз в день"],
+            ] as const).map(([k, label, hint]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setForm({ ...form, kind: k })}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  form.kind === k
+                    ? "border-brand-500 bg-brand-500/10"
+                    : "border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50"
+                }`}
+              >
+                <div className="text-sm font-medium">{label}</div>
+                <div className="mt-0.5 text-[11px] text-neutral-500">{hint}</div>
+              </button>
+            ))}
+          </div>
+        )}
+
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
           <input
@@ -806,6 +850,18 @@ function GoalModal({
           />
         </label>
 
+        {isDaily ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Сколько дней нужно отметить</span>
+            <input
+              className="input" type="number" min={1} step={1}
+              value={form.target_value}
+              onChange={(e) => setForm({ ...form, target_value: e.target.value })}
+              disabled={managingFieldsDisabled}
+              placeholder="Например, 30"
+            />
+          </label>
+        ) : (
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Цель</span>
@@ -836,6 +892,7 @@ function GoalModal({
             />
           </label>
         </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
@@ -847,6 +904,7 @@ function GoalModal({
               disabled={managingFieldsDisabled}
             />
           </label>
+          {(!isDaily || !isNew) && (
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Статус</span>
             <select
@@ -860,6 +918,7 @@ function GoalModal({
               ))}
             </select>
           </label>
+          )}
         </div>
 
         <div className="flex justify-between gap-2 pt-2">

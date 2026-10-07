@@ -44,9 +44,10 @@ import { Button } from "@/components/lib/Button";
 import {
   ArrowLeft, Paperclip, Send, Trash2, Plus, Check, X, Smile, Pencil,
   ChevronRight, Calendar, User as UserIcon, Flag, FolderKanban, UserCircle2,
-  AlertTriangle, Clock, Flame, Eye, Users, BellRing, CircleDot,
+  AlertTriangle, Clock, Flame, Eye, Users, BellRing, CircleDot, CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
+import { DeadlineRequestButton, DeadlineRequestsPanel, canSetDeadline } from "@/components/DeadlineRequest";
 import { useToast } from "@/components/Toast";
 import { TaskTimerButton } from "@/components/TaskTimerButton";
 import { SaveIndicator } from "@/components/lib/SaveIndicator";
@@ -317,6 +318,8 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
 
   return (
     <div className="space-y-5">
+      <DeadlineRequestsPanel taskId={taskId} />
+
       {/* ============ HEADER: breadcrumbs + title + status + deadline ============ */}
       <div className="border-b border-zinc-200 pb-5 dark:border-zinc-800">
         <nav aria-label="Хлебные крошки" className="mb-2 flex items-center gap-1.5 text-[13px] text-zinc-500">
@@ -591,13 +594,24 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
             </SidebarField>
 
             <SidebarField icon={<Calendar size={14} />} label="Дата завершения">
-              <input
-                className="input !h-8 !py-0 text-[13px]"
-                type="datetime-local"
-                disabled={!can("tasks.update")}
-                value={toLocalInput(task.deadline)}
-                onChange={(e) => patch.mutate({ deadline: e.target.value ? new Date(e.target.value).toISOString() : null })}
-              />
+              {canSetDeadline(task, me) ? (
+                <input
+                  className="input !h-8 !py-0 text-[13px]"
+                  type="datetime-local"
+                  disabled={!can("tasks.update")}
+                  value={toLocalInput(task.deadline)}
+                  onChange={(e) => patch.mutate({ deadline: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                />
+              ) : (
+                <DeadlineRequestButton
+                  taskId={taskId}
+                  deadline={task.deadline}
+                  className="input !h-8 !py-0 flex w-full items-center text-left text-[13px] hover:border-brand-400"
+                >
+                  <CalendarClock size={13} className="mr-1.5 shrink-0 text-zinc-400" />
+                  {task.deadline ? new Date(task.deadline).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Запросить срок"}
+                </DeadlineRequestButton>
+              )}
             </SidebarField>
 
             <SidebarField icon={<FolderKanban size={14} />} label="Проект">

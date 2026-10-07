@@ -20,6 +20,8 @@ import {
 import { api, extractApiError } from "@/api/client";
 import { Avatar } from "@/components/ui";
 import { Popover, PopoverItem } from "@/components/Popover";
+import { DeadlineRequestPopover, canSetDeadline } from "@/components/DeadlineRequest";
+import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
 import type { Project, TaskListItem, TaskPriority, TaskStatus, TaskStatusDef, UserBrief } from "@/types";
 import { endOfDayISO, useTaskPatch } from "./useTaskPatch";
@@ -88,6 +90,7 @@ export function GroupedListView({
 }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const meUser = useAuth((st) => st.me);
   const patch = useTaskPatch();
 
   const byId = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -171,6 +174,9 @@ export function GroupedListView({
     const to = containerOf(String(over.id), dragOrder);
     if (!from || !to || from === to || !groupByKey.get(to)?.accepts) return;
     const id = Number(String(active.id).slice(5));
+    // Срок «по перетаскиванию» меняют только постановщик и аудиторы — остальным группы срока не принимают задачу.
+    const dragged = byId.get(id);
+    if (to.startsWith("due:") && dragged && !canSetDeadline(dragged, meUser)) return;
     const overKey = String(over.id);
     const target = (dragOrder[to] ?? []).filter((x) => x !== id);
     const overIdx = overKey.startsWith("task:") ? target.indexOf(Number(overKey.slice(5))) : -1;
@@ -195,6 +201,10 @@ export function GroupedListView({
       if (oldIdx >= 0 && newIdx >= 0 && oldIdx !== newIdx) list = arrayMove(list, oldIdx, newIdx);
     }
     const moved = keyOf(task) !== groupKey;
+    if (moved && groupKey.startsWith("due:") && !canSetDeadline(task, meUser)) {
+      toast.info("Срок меняет постановщик", "Нажмите на срок задачи и отправьте запрос на перенос.");
+      return;
+    }
     const change: TaskChange | undefined = moved ? groupByKey.get(groupKey)?.drop?.(task) : undefined;
     if (moved && !change) return;
     if (!moved && list.join(",") === (baseOrder[groupKey] ?? []).join(",")) return;
@@ -429,6 +439,7 @@ function Row({
     disabled: depth === 1 || !perms.update,
   });
   const [renaming, setRenaming] = useState(false);
+  const me = useAuth((s) => s.me);
   const closed = isClosed(t.status);
   const hasSubs = !!subtasks && subtasks.total > 0;
 
@@ -559,7 +570,8 @@ function Row({
         <DueCell
           deadline={t.deadline}
           closed={closed}
-          disabled={!perms.update}
+          disabled={!perms.update && canSetDeadline(t, me)}
+          requestTaskId={canSetDeadline(t, me) ? undefined : t.id}
           onChange={(iso) => onPatch({ body: { deadline: iso }, optimistic: { deadline: iso } })}
         />
       </div>
@@ -744,11 +756,14 @@ function DueCell({
   deadline,
   closed,
   disabled,
+  requestTaskId,
   onChange,
 }: {
   deadline?: string | null;
   closed: boolean;
   disabled: boolean;
+  /** Задан, если срок напрямую менять нельзя: клик открывает запрос на перенос. */
+  requestTaskId?: number;
   onChange: (iso: string | null) => void;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -780,6 +795,9 @@ function DueCell({
       >
         {due ? due.label : <CalendarDays size={14} className="text-zinc-300 dark:text-zinc-600" />}
       </button>
+      {requestTaskId ? (
+        <DeadlineRequestPopover anchorRef={ref} open={open} onClose={() => setOpen(false)} taskId={requestTaskId} currentDeadline={deadline} />
+      ) : (
       <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={220}>
         <PopoverItem onClick={() => set(inDays(0))}>Сегодня</PopoverItem>
         <PopoverItem onClick={() => set(inDays(1))}>Завтра</PopoverItem>
@@ -801,6 +819,7 @@ function DueCell({
           </PopoverItem>
         )}
       </Popover>
+      )}
     </>
   );
 }

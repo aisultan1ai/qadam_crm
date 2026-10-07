@@ -9,7 +9,8 @@ from .task import (
 from .comment import Comment
 from .attachment import Attachment
 from .notification import Notification
-from .activity import ActivityLog
+from .activity import ActivityLog, ActivityState
+from .deadline_request import DeadlineRequest
 from .reaction import CommentReaction
 from .invitation import Invitation
 from .subscription import Subscription, SubscriptionStatus
@@ -38,7 +39,7 @@ from .booking import (
 )
 from .time_tracking import TimeEntry, Timer, TimesheetApproval, ApprovalStatus
 from .hr_profiles import (
-    Skill, UserSkill, Goal, OneOnOne, Kudos,
+    Skill, UserSkill, Goal, GoalCheckin, OneOnOne, Kudos,
     SkillLevel, GoalStatus, KudosBadge,
 )
 from .lead import Lead
@@ -95,6 +96,8 @@ __all__ = [
     "Attachment",
     "Notification",
     "ActivityLog",
+    "DeadlineRequest",
+    "ActivityState",
     "CommentReaction",
     "Invitation",
     "Subscription",
@@ -156,6 +159,7 @@ __all__ = [
     "Skill",
     "UserSkill",
     "Goal",
+    "GoalCheckin",
     "OneOnOne",
     "Kudos",
     "SkillLevel",

@@ -14,6 +14,19 @@ type Ctx = {
 
 const ToastCtx = createContext<Ctx | null>(null);
 
+// Мост для кода вне React (глобальные обработчики ошибок): провайдер подставляет сюда push.
+let externalPush: ((t: Omit<Toast, "id">) => void) | null = null;
+const recent = new Map<string, number>();
+
+/** Показать ошибку из любого места. Одинаковое сообщение не чаще раза в 5 секунд — чтобы не заспамить. */
+export function notifyError(title: string, description?: string) {
+  const key = `${title}|${description ?? ""}`;
+  const now = Date.now();
+  if ((recent.get(key) ?? 0) > now - 5000) return;
+  recent.set(key, now);
+  externalPush?.({ kind: "error", title, description });
+}
+
 export function useToast(): Ctx {
   const ctx = useContext(ToastCtx);
   if (!ctx) throw new Error("useToast must be used within ToastProvider");
@@ -31,6 +44,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const id = Date.now() + Math.random();
     setItems((xs) => [...xs, { ...t, id }]);
   }, []);
+
+  useEffect(() => {
+    externalPush = push;
+    return () => {
+      if (externalPush === push) externalPush = null;
+    };
+  }, [push]);
 
   const api: Ctx = {
     push,

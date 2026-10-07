@@ -105,6 +105,10 @@ class Task(Base):
     # Пользовательские поля (значения). Ключи — code из custom_field_defs.
     custom_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
 
+    @property
+    def auditor_ids(self) -> List[int]:
+        return [u.id for u in (self.auditors or [])]
+
     checklist: Mapped[List["ChecklistItem"]] = relationship(
         "ChecklistItem", back_populates="task", cascade="all, delete-orphan", lazy="selectin", order_by="ChecklistItem.id"
     )

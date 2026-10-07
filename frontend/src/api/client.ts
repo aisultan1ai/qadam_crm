@@ -10,19 +10,61 @@ type ErrorBody = {
   detail?: string | Array<{ msg?: string }>;
 };
 
+const STATUS_TEXT: Record<number, string> = {
+  400: "Не удалось выполнить действие: проверьте введённые данные",
+  401: "Сессия истекла — войдите снова",
+  403: "Недостаточно прав для этого действия",
+  404: "Не найдено — возможно, это уже удалили",
+  409: "Данные изменились или уже существуют — обновите страницу и повторите",
+  413: "Файл слишком большой",
+  422: "Проверьте введённые данные",
+  429: "Слишком много запросов — подождите минуту и повторите",
+  500: "Внутренняя ошибка сервера. Попробуйте ещё раз, а если повторится — сообщите в поддержку",
+  502: "Сервис временно недоступен. Попробуйте через минуту",
+  503: "Сервис временно недоступен. Попробуйте через минуту",
+  504: "Сервер не ответил вовремя. Попробуйте ещё раз",
+};
+
+const HAS_CYRILLIC = /[А-Яа-яЁё]/;
+
+/** Пользователю — только русский текст: «Network Error», «Request failed with status code 502» и HTML от прокси сюда не попадают. */
+function friendly(message: string | undefined, status: number | undefined): string {
+  if (message && HAS_CYRILLIC.test(message)) return message;
+  if (status && STATUS_TEXT[status]) return STATUS_TEXT[status];
+  if (status && status >= 500) return STATUS_TEXT[500];
+  if (status) return "Не удалось выполнить действие. Попробуйте ещё раз";
+  return "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз";
+}
+
 export function extractApiError(err: unknown): ApiError {
   const axErr = err as AxiosError<ErrorBody>;
+  const status = axErr?.response?.status;
   const body = axErr?.response?.data;
   if (body && typeof body === "object" && body.error) {
-    return body.error;
+    return { ...body.error, message: friendly(body.error.message, status) };
   }
   if (body && typeof body === "object" && body.detail) {
     const d = body.detail;
-    if (typeof d === "string") return { code: "http_error", message: d };
-    if (Array.isArray(d)) return { code: "http_error", message: d.map((x) => x?.msg || String(x)).join("; ") };
+    if (typeof d === "string") return { code: "http_error", message: friendly(d, status) };
+    if (Array.isArray(d)) return { code: "http_error", message: friendly(d.map((x) => x?.msg || String(x)).join("; "), status) };
   }
-  const status = axErr?.response?.status;
-  return { code: "network_error", message: axErr?.message || `Ошибка (${status ?? "?"})` };
+  // Ошибка не от сервера (например, throw new Error("Выберите слот")) — оставляем, если уже по-русски.
+  if (!axErr?.isAxiosError && err instanceof Error && HAS_CYRILLIC.test(err.message)) {
+    return { code: "client_error", message: err.message };
+  }
+  if (axErr?.code === "ECONNABORTED" || axErr?.code === "ETIMEDOUT") {
+    return { code: "timeout", message: "Сервер не ответил вовремя. Попробуйте ещё раз" };
+  }
+  return { code: status ? "http_error" : "network_error", message: friendly(undefined, status) };
+}
+
+/** Ошибки, о которых пользователь уже узнал иначе: редирект на вход, баннер «нет прав» или «нет сети». */
+export function isShownGlobally(err: unknown): boolean {
+  const axErr = err as AxiosError;
+  if (axErr?.code === "ERR_CANCELED") return true;
+  if (!axErr?.isAxiosError) return false;
+  const status = axErr.response?.status;
+  return status === 401 || status === 403 || !axErr.response;
 }
 
 export function fieldErrorsFrom(err: unknown): Record<string, string> {
