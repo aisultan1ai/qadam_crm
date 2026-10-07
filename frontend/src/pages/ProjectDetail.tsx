@@ -6,7 +6,7 @@ import { Suspense, lazy, useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle, Calendar, CalendarDays, CheckCircle2, GanttChart, LayoutGrid, List as ListIcon, ListTodo,
+  AlertTriangle, CalendarDays, CheckCircle2, GanttChart, LayoutGrid, List as ListIcon, ListTodo,
   MessageSquare, PieChart, Plus, Users,
 } from "lucide-react";
 
@@ -260,9 +260,6 @@ function Overview({ project, stats }: { project: Project; stats: { total: number
       </Panel>
       <Panel title="О проекте">
         <PropertyList>
-          <PropertyRow icon={Calendar} label="Срок">
-            {project.deadline ? new Date(project.deadline).toLocaleDateString("ru-RU") : <span className="text-zinc-500">Не задан</span>}
-          </PropertyRow>
           <PropertyRow icon={Users} label="Участники">
             {project.members.length === 0 ? (
               <span className="text-zinc-500">Нет</span>

@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
-import { Plus, Trash2, Pencil, Coins, TrendingUp, KanbanSquare, List } from "lucide-react";
+import { Plus, Trash2, Pencil, Coins, TrendingUp, TrendingDown, KanbanSquare, List } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
 import { EmptyState, Modal, Avatar, FormError } from "@/components/ui";
@@ -43,6 +43,7 @@ type Forecast = {
   total_amount_cents: number;
   weighted_amount_cents: number;
   won_amount_cents: number;
+  lost_amount_cents?: number;
   open_count: number;
   won_count: number;
   lost_count: number;
@@ -225,8 +226,8 @@ export default function DealsPage() {
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-200 bg-zinc-200 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-800">
           <ForecastCard label="В работе" value={fmtMoney(forecast.total_amount_cents, currency)} sub={`${forecast.open_count} сделок`} icon={<Coins size={16} />} />
           <ForecastCard label="Взвешенный прогноз" value={fmtMoney(forecast.weighted_amount_cents, currency)} sub="с учётом вероятности" icon={<TrendingUp size={16} />} accent />
-          <ForecastCard label="Выиграно" value={fmtMoney(forecast.won_amount_cents, currency)} sub={`${forecast.won_count} сделок`} icon={<TrendingUp size={16} />} />
-          <ForecastCard label="Проиграно" value={String(forecast.lost_count)} sub="закрыты неудачно" icon={<Coins size={16} />} />
+          <ForecastCard label="Успешные" value={fmtMoney(forecast.won_amount_cents, currency)} sub={`${forecast.won_count} сделок`} icon={<TrendingUp size={16} />} tone="won" />
+          <ForecastCard label="Неуспешные" value={fmtMoney(forecast.lost_amount_cents ?? 0, currency)} sub={`${forecast.lost_count} сделок`} icon={<TrendingDown size={16} />} tone="lost" />
         </div>
       )}
 
@@ -237,8 +238,8 @@ export default function DealsPage() {
         items={[
           { key: "all", label: "Все", count: counts.all },
           { key: "open", label: "Открытые", count: counts.open },
-          { key: "won", label: "Выигранные", count: counts.won },
-          { key: "lost", label: "Проигранные", count: counts.lost },
+          { key: "won", label: "Успешные", count: counts.won },
+          { key: "lost", label: "Неуспешные", count: counts.lost },
         ]}
       />
 
@@ -448,14 +449,14 @@ export default function DealsPage() {
   );
 }
 
-function ForecastCard({ label, value, sub, icon, accent }: { label: string; value: string; sub?: string; icon: React.ReactNode; accent?: boolean }) {
+function ForecastCard({ label, value, sub, icon, accent, tone }: { label: string; value: string; sub?: string; icon: React.ReactNode; accent?: boolean; tone?: "won" | "lost" }) {
   return (
     <div className="bg-white p-5 dark:bg-[#1B1E23]">
       <div className="flex items-center justify-between text-[13px] font-medium text-zinc-500 dark:text-zinc-400">
         <span>{label}</span>
-        <span className={accent ? "text-brand-600 dark:text-brand-400" : undefined}>{icon}</span>
+        <span className={clsx(accent && "text-brand-600 dark:text-brand-400", tone === "won" && "text-emerald-600 dark:text-emerald-400", tone === "lost" && "text-rose-600 dark:text-rose-400")}>{icon}</span>
       </div>
-      <div className={clsx("mt-3 text-xl font-semibold tabular-nums tracking-tight", accent && "text-brand-700 dark:text-brand-300")}>{value}</div>
+      <div className={clsx("mt-3 text-xl font-semibold tabular-nums tracking-tight", accent && "text-brand-700 dark:text-brand-300", tone === "won" && "text-emerald-700 dark:text-emerald-300", tone === "lost" && "text-rose-700 dark:text-rose-300")}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
     </div>
   );

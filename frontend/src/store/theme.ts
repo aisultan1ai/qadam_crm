@@ -15,6 +15,12 @@ function readStored(): Theme | null {
 
 function applyDomClass(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
+  // Цвет статус-бара/адресной строки на мобильных следует выбранной теме, а не системной.
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.remove());
+  const meta = document.createElement("meta");
+  meta.name = "theme-color";
+  meta.content = theme === "dark" ? "#12151B" : "#F6F7F9";
+  document.head.appendChild(meta);
 }
 
 interface ThemeState {
@@ -23,6 +29,7 @@ interface ThemeState {
 }
 
 const initial: Theme = readStored() ?? (systemPrefersDark() ? "dark" : "light");
+applyDomClass(initial);
 
 export const useTheme = create<ThemeState>((set, get) => ({
   theme: initial,

@@ -117,7 +117,6 @@ export default function Projects() {
                   <th className="table-head-cell w-44">Руководитель</th>
                   <th className="table-head-cell w-36">Участники</th>
                   <th className="table-head-cell w-24 text-right">Задачи</th>
-                  <th className="table-head-cell w-28">Срок</th>
                   <th className="table-head-cell w-28">Статус</th>
                   <th className="table-head-cell w-20" />
                 </tr>
@@ -160,9 +159,6 @@ export default function Projects() {
                       {p.members.length ? <MembersRow members={p.members} /> : <span className="text-zinc-400">—</span>}
                     </td>
                     <td className="table-cell text-right tabular-nums">{p.tasks_count}</td>
-                    <td className="table-cell tabular-nums text-zinc-500">
-                      {p.deadline ? new Date(p.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" }) : "—"}
-                    </td>
                     <td className="table-cell">
                       {p.is_archived ? (
                         <span className="chip bg-zinc-100 text-zinc-500 dark:bg-white/5 dark:text-zinc-400">Архив</span>
@@ -251,7 +247,7 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
   } = useForm<ProjectForm>({
     resolver: zodResolver(projectSchema),
     mode: "onChange",
-    defaultValues: { name: "", description: "", color: "#2A52C4", deadline: "", member_ids: [] },
+    defaultValues: { name: "", description: "", color: "#2A52C4", member_ids: [] },
   });
   const memberIds = watch("member_ids");
 
@@ -266,7 +262,6 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
         name: data.name,
         description: data.description || null,
         color: data.color,
-        deadline: data.deadline || null,
         member_ids: data.member_ids,
       }),
     onSuccess: () => {
@@ -304,10 +299,6 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
               )}
             />
             <FieldError msg={errors.color?.message} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дедлайн</span>
-            <input type="date" className="input" {...register("deadline")} />
           </label>
         </div>
         <div>

@@ -22,7 +22,6 @@ export const projectSchema = z.object({
   name: z.string().trim().min(2, "Минимум 2 символа").max(200),
   description: z.string().max(5000).optional().nullable(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Формат #rrggbb").default("#2A52C4"),
-  deadline: z.string().optional().nullable(),
   member_ids: z.array(z.number()).default([]),
 });
 export type ProjectForm = z.infer<typeof projectSchema>;

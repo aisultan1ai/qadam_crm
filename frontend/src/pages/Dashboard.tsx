@@ -274,7 +274,7 @@ function DealsSummary() {
               <dd className="mt-0.5 font-medium tabular-nums">{money(data.weighted_amount_cents, data.currency)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-zinc-500">Выиграно · {data.won_count}</dt>
+              <dt className="text-xs text-zinc-500">Успешные · {data.won_count}</dt>
               <dd className="mt-0.5 font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
                 {money(data.won_amount_cents, data.currency)}
               </dd>

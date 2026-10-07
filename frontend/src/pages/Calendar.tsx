@@ -5,6 +5,7 @@ import { Calendar as BigCalendar, dateFnsLocalizer, View, Views, type Formats } 
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { ru } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import "@/styles/calendar.css";
 import clsx from "clsx";
 import {
   Plus, Loader2, Trash2, Save, Copy, Users as UsersIcon, MapPin, Link as LinkIcon,

@@ -137,7 +137,6 @@ def create_project(payload: ProjectCreate, ctx: TenantContext = Depends(require(
         description=payload.description,
         color=payload.color,
         start_date=payload.start_date,
-        deadline=payload.deadline,
         owner_id=owner_id,
     )
     if payload.member_ids:
@@ -224,7 +223,7 @@ def update_project(project_id: int, payload: ProjectUpdate, ctx: TenantContext =
     project = db.get(Project, project_id)
     if not project or project.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Проект не найден")
-    for field in ("name", "description", "color", "start_date", "deadline"):
+    for field in ("name", "description", "color", "start_date"):
         val = getattr(payload, field)
         if val is not None:
             setattr(project, field, val)

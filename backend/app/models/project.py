@@ -29,7 +29,6 @@ class Project(Base):
     owner: Mapped[Optional["User"]] = relationship("User", foreign_keys=[owner_id], lazy="joined")  # type: ignore  # noqa: F821
 
     start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    deadline: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

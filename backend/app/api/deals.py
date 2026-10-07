@@ -80,6 +80,7 @@ class ForecastOut(BaseModel):
     total_amount_cents: int
     weighted_amount_cents: int
     won_amount_cents: int
+    lost_amount_cents: int = 0
     open_count: int
     won_count: int
     lost_count: int
@@ -117,6 +118,7 @@ def forecast(
     total = sum(d.amount_cents for d in rows if d.status == DealStatus.open.value)
     weighted = sum(int(d.amount_cents * d.probability / 100) for d in rows if d.status == DealStatus.open.value)
     won = sum(d.amount_cents for d in rows if d.status == DealStatus.won.value)
+    lost = sum(d.amount_cents for d in rows if d.status == DealStatus.lost.value)
 
     by_stage: dict[str, dict] = {}
     for d in rows:
@@ -132,6 +134,7 @@ def forecast(
         total_amount_cents=total,
         weighted_amount_cents=weighted,
         won_amount_cents=won,
+        lost_amount_cents=lost,
         open_count=sum(1 for d in rows if d.status == DealStatus.open.value),
         won_count=sum(1 for d in rows if d.status == DealStatus.won.value),
         lost_count=sum(1 for d in rows if d.status == DealStatus.lost.value),

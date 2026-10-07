@@ -1,0 +1,257 @@
+/* Тема для react-big-calendar: светлая/тёмная на переменных из index.css.
+   Подключается в Calendar.tsx ПОСЛЕ react-big-calendar.css. */
+
+.rbc-calendar {
+  --cal-text: #18181b;
+  --cal-muted: #71717a;
+  --cal-line: var(--line, #e5e7eb);
+  --cal-surface: var(--surface, #fff);
+  --cal-surface-2: var(--surface-2, #f5f6f8);
+  --cal-today: rgb(var(--brand-500) / 0.08);
+  --cal-now: #ef4444;
+  color: var(--cal-text);
+  font-size: 13px;
+  gap: 12px;
+}
+html.dark .rbc-calendar {
+  --cal-text: #e4e4e7;
+  --cal-muted: #9ca3af;
+  --cal-today: rgb(var(--brand-500) / 0.14);
+}
+
+/* ---- Toolbar ---- */
+.rbc-toolbar {
+  gap: 8px;
+  margin-bottom: 0;
+}
+.rbc-toolbar .rbc-toolbar-label {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--cal-text);
+}
+.rbc-btn-group {
+  display: inline-flex;
+  border: 1px solid var(--cal-line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--cal-surface);
+}
+.rbc-btn-group > button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cal-text);
+  padding: 6px 12px;
+  font-size: 13px;
+  box-shadow: none;
+}
+.rbc-btn-group > button + button {
+  border-left: 1px solid var(--cal-line);
+}
+.rbc-btn-group > button:hover,
+.rbc-btn-group > button:focus {
+  background: var(--cal-surface-2);
+  color: var(--cal-text);
+}
+.rbc-btn-group > button.rbc-active,
+.rbc-btn-group > button.rbc-active:hover,
+.rbc-btn-group > button.rbc-active:focus {
+  background: rgb(var(--brand-600));
+  color: #fff;
+  box-shadow: none;
+}
+
+/* ---- Общие линии и фон ---- */
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view table.rbc-agenda-table {
+  border: 1px solid var(--cal-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--cal-surface);
+}
+.rbc-header,
+.rbc-month-row,
+.rbc-day-bg + .rbc-day-bg,
+.rbc-time-header-content,
+.rbc-time-content,
+.rbc-time-content > * + * > *,
+.rbc-timeslot-group,
+.rbc-day-slot .rbc-time-slot,
+.rbc-time-header.rbc-overflowing,
+.rbc-agenda-view table.rbc-agenda-table tbody > tr > td + td,
+.rbc-agenda-view table.rbc-agenda-table .rbc-agenda-time-cell,
+.rbc-agenda-view table.rbc-agenda-table tbody > tr + tr {
+  border-color: var(--cal-line);
+}
+.rbc-day-slot .rbc-time-slot {
+  border-top-color: color-mix(in srgb, var(--cal-line) 55%, transparent);
+}
+.rbc-header {
+  padding: 8px 4px;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--cal-muted);
+  text-transform: capitalize;
+  border-bottom-color: var(--cal-line);
+}
+.rbc-header + .rbc-header {
+  border-left-color: var(--cal-line);
+}
+.rbc-header.rbc-today {
+  color: rgb(var(--brand-600));
+}
+html.dark .rbc-header.rbc-today {
+  color: rgb(var(--brand-300));
+}
+
+/* ---- Месяц ---- */
+.rbc-month-view .rbc-month-header {
+  background: var(--cal-surface-2);
+}
+.rbc-date-cell {
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--cal-text);
+}
+.rbc-date-cell.rbc-now {
+  font-weight: 700;
+  color: rgb(var(--brand-600));
+}
+html.dark .rbc-date-cell.rbc-now {
+  color: rgb(var(--brand-300));
+}
+.rbc-off-range {
+  color: var(--cal-muted);
+}
+.rbc-off-range-bg {
+  background: var(--cal-surface-2);
+}
+html.dark .rbc-off-range-bg {
+  background: rgb(0 0 0 / 0.18);
+}
+.rbc-day-bg + .rbc-day-bg,
+.rbc-month-row + .rbc-month-row {
+  border-color: var(--cal-line);
+}
+
+/* ---- Сегодня ---- */
+.rbc-today {
+  background-color: var(--cal-today);
+}
+
+/* ---- Неделя / день ---- */
+.rbc-time-view .rbc-time-header {
+  background: var(--cal-surface-2);
+}
+.rbc-time-view .rbc-allday-cell {
+  background: var(--cal-surface);
+}
+.rbc-time-gutter .rbc-timeslot-group {
+  border-bottom-color: var(--cal-line);
+}
+.rbc-label {
+  color: var(--cal-muted);
+  font-size: 11px;
+  padding: 0 8px;
+}
+.rbc-timeslot-group {
+  border-bottom: 1px solid var(--cal-line);
+  min-height: 44px;
+}
+.rbc-current-time-indicator {
+  background-color: var(--cal-now);
+  height: 2px;
+}
+.rbc-time-content {
+  border-top: 1px solid var(--cal-line);
+}
+.rbc-day-slot.rbc-today {
+  background-color: var(--cal-today);
+}
+
+/* ---- События ---- */
+.rbc-event {
+  border-radius: 6px;
+  padding: 2px 6px;
+  box-shadow: none;
+  border: 0;
+}
+.rbc-event:focus,
+.rbc-selected.rbc-event {
+  outline: 2px solid rgb(var(--brand-400));
+  outline-offset: 1px;
+}
+.rbc-event-label {
+  font-size: 11px;
+  opacity: 0.9;
+}
+.rbc-show-more {
+  color: rgb(var(--brand-600));
+  background: transparent;
+  font-weight: 500;
+  font-size: 11px;
+}
+html.dark .rbc-show-more {
+  color: rgb(var(--brand-300));
+}
+.rbc-slot-selection {
+  background: rgb(var(--brand-500) / 0.25);
+  color: var(--cal-text);
+}
+
+/* ---- Попап «+ ещё» ---- */
+.rbc-overlay {
+  background: var(--cal-surface);
+  border: 1px solid var(--cal-line);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+  color: var(--cal-text);
+}
+.rbc-overlay > * + * {
+  border-top: 0;
+}
+.rbc-overlay-header {
+  border-bottom: 1px solid var(--cal-line);
+  color: var(--cal-text);
+}
+
+/* ---- Список (agenda) ---- */
+.rbc-agenda-view table.rbc-agenda-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  background: var(--cal-surface-2);
+  color: var(--cal-muted);
+  border-bottom: 1px solid var(--cal-line);
+  padding: 8px 10px;
+  font-weight: 500;
+}
+.rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+  padding: 8px 10px;
+  color: var(--cal-text);
+}
+.rbc-agenda-empty {
+  color: var(--cal-muted);
+  padding: 24px;
+  text-align: center;
+}
+
+/* ---- Мобильные ---- */
+@media (max-width: 640px) {
+  .rbc-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .rbc-toolbar .rbc-btn-group {
+    justify-content: center;
+  }
+  .rbc-toolbar .rbc-btn-group > button {
+    flex: 1;
+    padding: 7px 8px;
+  }
+  .rbc-timeslot-group {
+    min-height: 40px;
+  }
+}

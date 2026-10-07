@@ -10,7 +10,6 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
     start_date: Optional[date] = None
-    deadline: Optional[date] = None
 
 
 class ProjectCreate(ProjectBase):
@@ -23,7 +22,6 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
     start_date: Optional[date] = None
-    deadline: Optional[date] = None
     owner_id: Optional[int] = None
     member_ids: Optional[List[int]] = None
     is_archived: Optional[bool] = None
