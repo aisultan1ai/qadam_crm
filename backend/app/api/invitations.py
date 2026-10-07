@@ -7,7 +7,6 @@ Owner (или юзер с permission users.create) генерит приглаш
 
 Rate-limit на создание — 30 приглашений/час на юзера (защита от массового спама).
 """
-from __future__ import annotations
 
 import secrets
 from datetime import datetime, timedelta, timezone
