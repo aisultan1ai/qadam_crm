@@ -10,6 +10,7 @@ from ..models.project import project_members
 from ..models.task import task_assignees, task_auditors, task_participants
 from ..schemas.common import Page, PageParams, page_params, paginate
 from .deps import TenantContext, get_current_context
+from ..core.task_scope import visible_tasks_clause
 from pydantic import BaseModel, ConfigDict
 
 
@@ -45,6 +46,14 @@ def list_activity(
     db: Session = Depends(get_db),
 ):
     q = db.query(ActivityLog).filter(ActivityLog.tenant_id == ctx.tenant.id)
+    # Полный журнал — тем, кто видит все задачи (и владельцу). Остальным: свои действия
+    # и события по задачам, которые им видны (иначе в журнале всплывают чужие задачи).
+    visible = visible_tasks_clause(db, ctx.user, ctx.tenant.id)
+    if visible is not None:
+        q = q.filter(or_(
+            ActivityLog.user_id == ctx.user.id,
+            ActivityLog.task_id.in_(db.query(Task.id).filter(Task.tenant_id == ctx.tenant.id, visible)),
+        ))
     if entity:
         q = q.filter(ActivityLog.entity == entity)
     if user_id is not None:

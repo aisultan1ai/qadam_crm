@@ -100,8 +100,24 @@ class TaskReminderOut(TaskReminderBase):
     created_at: datetime
 
 
+def _task_title(v):
+    if v is None:
+        return v
+    v = v.strip()
+    if not v:
+        raise ValueError("Введите название задачи")
+    if len(v) > 300:
+        raise ValueError("Название слишком длинное: максимум 300 символов")
+    return v
+
+
 class TaskBase(BaseModel):
     title: str
+
+    @field_validator("title")
+    @classmethod
+    def _valid_title(cls, v):
+        return _task_title(v)
     description: Optional[str] = None
     status: TaskStatus = TaskStatus.new
     priority: TaskPriority = TaskPriority.medium
@@ -126,6 +142,11 @@ class TaskCreate(TaskBase):
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def _valid_title(cls, v):
+        return _task_title(v)
     description: Optional[str] = None
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None

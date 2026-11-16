@@ -252,3 +252,14 @@ html.dark mark {
     transition-duration: .001ms !important;
   }
 }
+
+/* React Flow (оргструктура, конструктор автоматизаций): кнопки масштаба в тёмной теме */
+html.dark .react-flow__controls-button {
+  background: #23262d;
+  border-bottom-color: #33363d;
+  fill: #d4d4d8;
+  color: #d4d4d8;
+}
+html.dark .react-flow__controls-button:hover {
+  background: #2c3038;
+}

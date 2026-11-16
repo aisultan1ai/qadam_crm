@@ -20,6 +20,7 @@ PERMISSIONS: dict[str, list[tuple[str, str]]] = {
     ],
     "Задачи": [
         ("tasks.view_all", "Просмотр всех задач"),
+        ("tasks.view_department", "Просмотр задач своего отдела"),
         ("tasks.view_own", "Просмотр только своих задач"),
         ("tasks.create", "Создание задач"),
         ("tasks.update", "Редактирование задач"),

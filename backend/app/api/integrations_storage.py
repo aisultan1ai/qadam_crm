@@ -135,7 +135,8 @@ def auth_url(
     if not _tenant_configured(ctx.tenant, provider):
         raise HTTPException(
             503,
-            f"{provider} не настроен в этой компании. Owner должен ввести client credentials в /settings/integrations.",
+            "Подключение к этому хранилищу ещё не настроено в вашей компании. "
+            "Владелец компании может включить его в Настройки → Сервисы и хранилища.",
         )
     nonce = pysecrets.token_urlsafe(16)
     state = _encode_state(ctx.tenant.id, ctx.user.id, provider, nonce)
@@ -160,7 +161,7 @@ def callback(
     if error:
         return RedirectResponse(url=f"{redirect_target}&error={error}", status_code=302)
     if not code or not state:
-        raise HTTPException(400, "code и state обязательны")
+        raise HTTPException(400, "Не удалось завершить подключение — попробуйте ещё раз")
     try:
         tenant_id, user_id, state_provider = _decode_state(state)
     except Exception:
@@ -247,7 +248,7 @@ def list_files(
     _check_provider(provider)
     acc = _get_account(db, ctx.tenant.id, ctx.user.id, provider)
     if not acc:
-        raise HTTPException(404, f"{provider} не подключён")
+        raise HTTPException(404, "Сервис не подключён")
     try:
         if provider == "google_drive":
             r = gdrive.list_files(db, ctx.tenant, acc, folder_id=folder_id, page_token=page_token, query=q)
@@ -307,12 +308,12 @@ async def import_file(
     _check_provider(provider)
     acc = _get_account(db, ctx.tenant.id, ctx.user.id, provider)
     if not acc:
-        raise HTTPException(404, f"{provider} не подключён")
+        raise HTTPException(404, "Сервис не подключён")
 
     try:
         if provider == "google_drive":
             if not payload.file_id:
-                raise HTTPException(400, "file_id обязателен для google_drive")
+                raise HTTPException(400, "Выберите файл")
             content, name, mime = gdrive.download_file(db, ctx.tenant, acc, payload.file_id)
         else:
             if not payload.path:

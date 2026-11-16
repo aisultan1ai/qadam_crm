@@ -25,7 +25,7 @@ from ..core.captcha import verify_captcha
 from ..core.permissions import all_permission_codes
 from ..core.redis_client import get_redis
 from ..core.security import hash_password
-from ..core.tenant_setup import create_sample_project, create_tenant_with_owner
+from ..core.tenant_setup import create_tenant_with_owner
 from ..models import User, Tenant, TenantMembership, UserSession
 from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshRequest
 from ..schemas.user import MeOut
@@ -277,7 +277,6 @@ def register(
         owner=user,
         plan="free",
     )
-    create_sample_project(db, tenant=tenant, owner=user)
 
     log_action(db, tenant_id=tenant.id, user_id=user.id, action="register", entity="tenant", entity_id=tenant.id, detail=tenant.name)
     access, refresh, ttl, _sid = _issue_pair_with_session(db, request, user.id, tenant.id)

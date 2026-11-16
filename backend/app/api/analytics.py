@@ -9,6 +9,7 @@ from ..models.task import TaskStatus
 from ..core.cache import make_key, get_or_set_json
 from ..core.permissions import user_has
 from .deps import TenantContext, require, get_current_context
+from ..core.task_scope import member_department_id, task_scope, visible_tasks_clause
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -20,14 +21,16 @@ def dashboard(ctx: TenantContext = Depends(get_current_context), db: Session = D
     tenant_id = ctx.tenant.id
     # Scope: юзер с tasks.view_own видит только свою статистику. Иначе агрегаты
     # раскрывают чужую производительность даже без прямого доступа к задачам.
-    view_all = user_has(ctx.user, ["tasks.view_all"], tenant_id=ctx.tenant.id)
-    scope_uid = None if view_all else ctx.user.id
-    key = make_key(tenant_id, "dashboard", "all" if view_all else f"u{scope_uid}")
+    scope = task_scope(db, ctx.user, tenant_id)
+    visible = visible_tasks_clause(db, ctx.user, tenant_id)
+    scope_uid = None if scope == "all" else ctx.user.id
+    dep = member_department_id(db, tenant_id, ctx.user.id) if scope == "department" else None
+    key = make_key(tenant_id, "dashboard", "all" if scope == "all" else f"{scope}-u{ctx.user.id}-d{dep}")
 
     def _base_task_query():
         q = db.query(func.count(Task.id)).filter(Task.tenant_id == tenant_id)
-        if scope_uid is not None:
-            q = q.filter(Task.assignee_id == scope_uid)
+        if visible is not None:
+            q = q.filter(visible)
         return q
 
     def _compute():
@@ -53,8 +56,8 @@ def dashboard(ctx: TenantContext = Depends(get_current_context), db: Session = D
             .filter(Task.tenant_id == tenant_id)
             .group_by(Task.status)
         )
-        if scope_uid is not None:
-            by_status_q = by_status_q.filter(Task.assignee_id == scope_uid)
+        if visible is not None:
+            by_status_q = by_status_q.filter(visible)
         by_status_rows = by_status_q.all()
         by_status = {s.value: c for s, c in by_status_rows}
 
@@ -92,9 +95,11 @@ def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: 
     tenant_id = ctx.tenant.id
     # Scope: если у юзера нет tasks.view_all — показываем только его собственную
     # статистику. Иначе аналитика могла бы утечь чужую производительность.
-    view_all = user_has(ctx.user, ["tasks.view_all"], tenant_id=ctx.tenant.id)
-    scope_uid = None if view_all else ctx.user.id
-    key = make_key(tenant_id, "employees", "all" if view_all else f"u{scope_uid}")
+    # Все сотрудники — для «все задачи»; руководителю с «задачи отдела» — его отдел; иначе — только сам.
+    scope = task_scope(db, ctx.user, tenant_id)
+    dep = member_department_id(db, tenant_id, ctx.user.id) if scope == "department" else None
+    scope_uid = None if scope == "all" or dep else ctx.user.id
+    key = make_key(tenant_id, "employees", "all" if scope == "all" else f"{scope}-u{ctx.user.id}-d{dep}")
 
     def _compute():
         now = datetime.now(timezone.utc)
@@ -119,6 +124,8 @@ def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: 
         )
         if scope_uid is not None:
             q = q.filter(User.id == scope_uid)
+        elif dep:
+            q = q.filter(TenantMembership.department_id == dep)
         rows = q.all()
 
         result = []

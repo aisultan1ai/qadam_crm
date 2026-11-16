@@ -20,7 +20,7 @@ from ..config import settings
 from ..core.cookies import set_auth_cookies
 from ..core.limiter import limiter
 from ..core.plans import check_feature, check_user_limit
-from ..core.security import hash_password
+from ..core.security import hash_password, verify_password
 from ..database import get_db
 from ..models import Invitation, Role, Tenant, TenantMembership, User
 from ..schemas.auth import TokenResponse
@@ -194,6 +194,19 @@ def get_invitation(request: Request, token: str, db: Session = Depends(get_db)):
     }
 
 
+def _is_logged_in_as(request: Request, db: Session, user: User) -> bool:
+    """Текущая сессия браузера принадлежит этому пользователю."""
+    from .deps import get_current_user
+    from fastapi import HTTPException as _H
+    try:
+        auth = request.headers.get("Authorization", "")
+        bearer = auth[7:] if auth.lower().startswith("bearer ") else None
+        current = get_current_user(request, bearer, db)
+    except _H:
+        return False
+    return current.id == user.id
+
+
 @router.post("/invitations/{token}/accept", response_model=TokenResponse)
 @limiter.limit("10/minute")
 def accept_invitation(
@@ -211,6 +224,20 @@ def accept_invitation(
     check_user_limit(db, invite.tenant)
 
     user = db.query(User).filter(User.email == invite.email).first()
+
+    if user is not None:
+        # Аккаунт уже есть. Ссылку видит и тот, кто приглашал («Копировать ссылку»), поэтому
+        # одной ссылки мало: нужен вход под этим аккаунтом либо его пароль. Иначе приглашающий
+        # мог бы войти в чужой аккаунт (и в его компании) по своей же ссылке.
+        if not _is_logged_in_as(request, db, user) and not (
+            payload.password and user.password_hash and verify_password(payload.password, user.password_hash)
+        ):
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                "У вас уже есть аккаунт Qadam — введите пароль от него, чтобы принять приглашение",
+            )
+        if not user.is_active:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Аккаунт заблокирован")
 
     if user is None:
         # Новый юзер — нужны пароль и имя.
@@ -240,12 +267,18 @@ def accept_invitation(
         )
         .first()
     )
+    if invite.make_owner:
+        # Компанию создал платформенный админ — приглашённый становится её владельцем.
+        invite.tenant.owner_id = user.id
+        if exists:
+            exists.is_owner = True
+            exists.role_id = invite.role_id or exists.role_id
     if not exists:
         db.add(TenantMembership(
             tenant_id=invite.tenant_id,
             user_id=user.id,
             role_id=invite.role_id,
-            is_owner=False,
+            is_owner=invite.make_owner,
         ))
         # Роль назначаем и на глобальном уровне (user.roles), т.к. permissions читаются оттуда.
         if invite.role_id:
@@ -273,7 +306,7 @@ def list_invites(
     db: Session = Depends(get_db),
 ):
     if tenant_id != ctx.tenant.id:
-        raise HTTPException(403, "Другой tenant")
+        raise HTTPException(403, "Нет доступа")
     rows = (
         db.query(Invitation)
         .filter(Invitation.tenant_id == ctx.tenant.id)
@@ -302,7 +335,7 @@ def revoke_invite(
     db: Session = Depends(get_db),
 ):
     if tenant_id != ctx.tenant.id:
-        raise HTTPException(403, "Другой tenant")
+        raise HTTPException(403, "Нет доступа")
     invite = db.get(Invitation, invite_id)
     if not invite or invite.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Приглашение не найдено")

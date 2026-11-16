@@ -104,7 +104,7 @@ def create_field(payload: FieldCreate, ctx: TenantContext = Depends(get_current_
         .first()
     )
     if exists:
-        raise HTTPException(409, f"Поле {payload.entity_type}.{payload.code} уже существует")
+        raise HTTPException(409, "Поле с таким кодом уже существует")
     row = CustomFieldDef(tenant_id=ctx.tenant.id, **payload.model_dump())
     db.add(row)
     db.flush()
@@ -148,7 +148,7 @@ def update_values(
 ):
     Model = ENTITY_MODELS.get(entity_type)
     if not Model:
-        raise HTTPException(400, f"Unknown entity_type: {entity_type}")
+        raise HTTPException(400, "Неизвестный тип объекта")
     row = db.get(Model, entity_id)
     if not row or getattr(row, "tenant_id", None) != ctx.tenant.id:
         raise HTTPException(404, f"{entity_type}#{entity_id} not found")

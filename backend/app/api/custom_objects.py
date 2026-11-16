@@ -112,7 +112,7 @@ def create_schema(payload: SchemaCreate, ctx: TenantContext = Depends(get_curren
         .first()
     )
     if exists:
-        raise HTTPException(409, f"Схема с code={payload.code} уже существует")
+        raise HTTPException(409, "Сущность с таким кодом уже существует")
     row = CustomObjectSchema(
         tenant_id=ctx.tenant.id,
         code=payload.code,
@@ -167,7 +167,7 @@ def _get_schema_by_code(db: Session, tenant_id: int, code: str) -> CustomObjectS
         .first()
     )
     if not row:
-        raise HTTPException(404, f"Схема {code} не найдена")
+        raise HTTPException(404, "Сущность не найдена")
     return row
 
 

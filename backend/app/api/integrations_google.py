@@ -58,8 +58,8 @@ def _require_tenant_configured(tenant: Tenant):
     if not gcal.tenant_configured(tenant):
         raise HTTPException(
             503,
-            "Google-интеграция не настроена в этой компании. "
-            "Owner должен ввести client_id/secret/redirect_uri в /settings/integrations.",
+            "Подключение к Google ещё не настроено в вашей компании. "
+            "Владелец компании может включить его в Настройки → Интеграции.",
         )
 
 
@@ -186,7 +186,7 @@ def callback(
     if error:
         return RedirectResponse(url=f"/settings/integrations?google_error={error}", status_code=302)
     if not code or not state:
-        raise HTTPException(400, "code и state обязательны")
+        raise HTTPException(400, "Не удалось завершить подключение — попробуйте ещё раз")
     try:
         tenant_id, user_id, _nonce = _decode_state(state)
     except Exception:

@@ -61,6 +61,67 @@ def _load_tenant_user(db: Session, tenant_id: int, user_id: int) -> User:
     return user
 
 
+def _user_out(db: Session, tenant_id: int, user: User) -> UserOut:
+    """Пользователь глазами текущей компании: только её роли и её отдел
+    (у человека в другой компании — свои роли и отдел, их здесь не показываем)."""
+    out = UserOut.model_validate(user)
+    roles = [r for r in out.roles if any(ur.id == r.id and ur.tenant_id == tenant_id for ur in user.roles)]
+    m = db.query(TenantMembership.department_id, TenantMembership.manager_id).filter(
+        TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user.id,
+    ).first()
+    dep_id, manager_id = (m.department_id, m.manager_id) if m else (None, None)
+    dep = db.get(Department, dep_id) if dep_id else None
+    return out.model_copy(update={
+        "roles": roles,
+        "manager_id": manager_id,
+        "department_id": dep.id if dep else None,
+        "department": DepartmentOut.model_validate(dep) if dep else None,
+    })
+
+
+def _set_member_department(db: Session, tenant_id: int, user_id: int, department_id: Optional[int]) -> None:
+    if department_id:
+        dep = db.get(Department, department_id)
+        if not dep or dep.tenant_id != tenant_id:
+            raise HTTPException(400, "Отдел не найден в этой компании")
+    m = db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id,
+    ).first()
+    if m:
+        m.department_id = department_id or None
+
+
+def _set_member_manager(db: Session, tenant_id: int, user_id: int, manager_id: Optional[int]) -> None:
+    """Руководитель в рамках компании. Запрещаем любой цикл (А→Б→В→А), а не только на одну ступень."""
+    membership = db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id,
+    ).first()
+    if not membership:
+        raise HTTPException(404, "Пользователь не найден")
+    if manager_id:
+        if manager_id == user_id:
+            raise HTTPException(400, "Сотрудник не может быть руководителем самому себе")
+        _load_tenant_user(db, tenant_id, manager_id)
+        managers = dict(
+            db.query(TenantMembership.user_id, TenantMembership.manager_id)
+            .filter(TenantMembership.tenant_id == tenant_id)
+            .all()
+        )
+        cur, seen = manager_id, set()
+        while cur and cur not in seen:
+            if cur == user_id:
+                raise HTTPException(400, "Так нельзя: получится замкнутый круг руководителей")
+            seen.add(cur)
+            cur = managers.get(cur)
+    membership.manager_id = manager_id or None
+
+
+def _replace_tenant_roles(db: Session, tenant_id: int, user: User, role_ids: list[int]) -> None:
+    """Меняем роли только в этой компании; роли человека в других компаниях не трогаем."""
+    others = [r for r in user.roles if r.tenant_id != tenant_id]
+    user.roles = others + _tenant_roles_query(db, tenant_id, role_ids).all()
+
+
 def _tenant_roles_query(db: Session, tenant_id: int, role_ids: list[int]):
     """Роли, доступные для назначения в tenant'е — только собственные роли компании
     (системные шаблоны прав не дают, см. core.permissions.user_has).
@@ -91,7 +152,9 @@ def list_users(
     if role_id:
         query = query.join(User.roles).filter(Role.id == role_id)
     query = query.order_by(User.id)
-    return paginate(query, pagination)
+    page = paginate(query, pagination)
+    page.items = [_user_out(db, ctx.tenant.id, u) for u in page.items]
+    return page
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
@@ -130,18 +193,19 @@ def create_user(payload: UserCreate, ctx: TenantContext = Depends(require("users
         password_hash=hash_password(payload.password),
         is_active=payload.is_active,
         avatar_url=payload.avatar_url,
-        department_id=payload.department_id,
     )
     if payload.role_ids:
         user.roles = _tenant_roles_query(db, ctx.tenant.id, payload.role_ids).all()
     db.add(user)
     db.flush()
     # Добавляем в текущий tenant.
-    db.add(TenantMembership(tenant_id=ctx.tenant.id, user_id=user.id, is_owner=False))
+    db.add(TenantMembership(
+        tenant_id=ctx.tenant.id, user_id=user.id, is_owner=False, department_id=payload.department_id or None,
+    ))
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="create", entity="user", entity_id=user.id, detail=user.email)
     db.commit()
     db.refresh(user)
-    return user
+    return _user_out(db, ctx.tenant.id, user)
 
 
 @router.patch("/users/me", response_model=UserOut)
@@ -230,7 +294,7 @@ def update_me(
             import logging
             logging.getLogger("qadam.users").warning("Не удалось поставить письма о смене email в очередь", exc_info=True)
 
-    return user
+    return _user_out(db, ctx.tenant.id, user)
 
 
 @router.post("/users/me/avatar", response_model=UserOut)
@@ -294,7 +358,7 @@ def upload_my_avatar(
     log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar")
     db.commit()
     db.refresh(user)
-    return user
+    return _user_out(db, ctx.tenant.id, user)
 
 
 @router.delete("/users/me/avatar", response_model=UserOut)
@@ -310,12 +374,12 @@ def delete_my_avatar(ctx: TenantContext = Depends(get_current_context), db: Sess
     log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="update", entity="user", entity_id=user.id, detail="avatar_removed")
     db.commit()
     db.refresh(user)
-    return user
+    return _user_out(db, ctx.tenant.id, user)
 
 
 @router.get("/users/{user_id}", response_model=UserOut)
 def get_user(user_id: int, ctx: TenantContext = Depends(require("users.view")), db: Session = Depends(get_db)):
-    return _load_tenant_user(db, ctx.tenant.id, user_id)
+    return _user_out(db, ctx.tenant.id, _load_tenant_user(db, ctx.tenant.id, user_id))
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
@@ -343,27 +407,12 @@ def update_user(user_id: int, payload: UserUpdate, ctx: TenantContext = Depends(
     if payload.avatar_url is not None:
         user.avatar_url = payload.avatar_url
     if payload.department_id is not None:
-        if payload.department_id:
-            dep = db.get(Department, payload.department_id)
-            if not dep or dep.tenant_id != ctx.tenant.id:
-                raise HTTPException(400, "Отдел не найден в этой компании")
-            user.department_id = payload.department_id
-        else:
-            user.department_id = None
+        _set_member_department(db, ctx.tenant.id, user.id, payload.department_id)
     if payload.role_ids is not None:
-        user.roles = _tenant_roles_query(db, ctx.tenant.id, payload.role_ids).all()
+        _replace_tenant_roles(db, ctx.tenant.id, user, payload.role_ids)
     # M11 HR-профиль
     if payload.manager_id is not None:
-        if payload.manager_id == 0:
-            user.manager_id = None
-        else:
-            if payload.manager_id == user.id:
-                raise HTTPException(400, "Пользователь не может быть руководителем самого себя")
-            manager = _load_tenant_user(db, ctx.tenant.id, payload.manager_id)
-            # Простая защита от цикла: если manager подчиняется этому юзеру (одна ступень), запрет.
-            if manager.manager_id == user.id:
-                raise HTTPException(400, "Циклическая иерархия руководителей")
-            user.manager_id = manager.id
+        _set_member_manager(db, ctx.tenant.id, user.id, payload.manager_id or None)
     if payload.position is not None:
         user.position = payload.position or None
     if payload.phone is not None:
@@ -377,7 +426,7 @@ def update_user(user_id: int, payload: UserUpdate, ctx: TenantContext = Depends(
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="update", entity="user", entity_id=user.id)
     db.commit()
     db.refresh(user)
-    return user
+    return _user_out(db, ctx.tenant.id, user)
 
 
 @router.delete("/users/{user_id}", response_model=Message)

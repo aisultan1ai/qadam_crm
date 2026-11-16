@@ -124,7 +124,7 @@ def list_statuses(ctx: TenantContext = Depends(get_current_context), db: Session
 def create_status(payload: StatusCreate, ctx: TenantContext = Depends(MANAGE), db: Session = Depends(get_db)):
     exists = db.query(TaskStatusDef).filter(TaskStatusDef.tenant_id == ctx.tenant.id, TaskStatusDef.code == payload.code).first()
     if exists:
-        raise HTTPException(409, f"Статус с code={payload.code} уже существует")
+        raise HTTPException(409, "Такой статус уже существует")
     if payload.is_default:
         # снимаем default с других
         for r in db.query(TaskStatusDef).filter(TaskStatusDef.tenant_id == ctx.tenant.id, TaskStatusDef.is_default == True).all():  # noqa

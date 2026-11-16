@@ -12,6 +12,7 @@ from ..models.task import (
 )
 from ..core.events import build_change_payload, fire_event, serialize_task
 from ..core.permissions import user_has
+from ..core.task_scope import apply_task_scope, can_list_tasks, can_view_task
 from ..core.task_access import can_set_deadline
 from ..core.ws_hub import publish_to_user
 from ..core.cache import invalidate_analytics
@@ -44,38 +45,12 @@ def _assert_parent_in_tenant(db: Session, tenant_id: int, parent_id: int, self_i
 
 
 def _user_can_view_task(user: User, task: Task) -> bool:
-    if user_has(user, ["tasks.view_all"], tenant_id=task.tenant_id):
-        return True
-    if user_has(user, ["tasks.view_own"], tenant_id=task.tenant_id):
-        if task.assignee_id == user.id or task.author_id == user.id:
-            return True
-        # Множественные роли: assignees / auditors / participants
-        uids = {u.id for u in (task.assignees or [])} \
-            | {u.id for u in (task.auditors or [])} \
-            | {u.id for u in (task.participants or [])}
-        return user.id in uids
-    return False
+    """Видимость задачи — по общему правилу (свои / отдел / все), см. core/task_scope.py."""
+    return can_view_task(user, task)
 
 
 def _apply_view_scope(query, user: User, tenant_id: int):
-    if user_has(user, ["tasks.view_all"], tenant_id=tenant_id):
-        return query
-    if user_has(user, ["tasks.view_own"], tenant_id=tenant_id):
-        # Пользователь видит задачу, если он: author, legacy assignee_id,
-        # либо состоит в assignees/auditors/participants.
-        assignee_ids = db_subq(task_assignees, user.id)
-        auditor_ids = db_subq(task_auditors, user.id)
-        participant_ids = db_subq(task_participants, user.id)
-        return query.filter(
-            or_(
-                Task.assignee_id == user.id,
-                Task.author_id == user.id,
-                Task.id.in_(assignee_ids),
-                Task.id.in_(auditor_ids),
-                Task.id.in_(participant_ids),
-            )
-        )
-    return query.filter(Task.id == -1)
+    return apply_task_scope(query, query.session, user, tenant_id)
 
 
 def db_subq(assoc_table, user_id: int):
@@ -133,7 +108,7 @@ def list_tasks(
     db: Session = Depends(get_db),
 ):
     user = ctx.user
-    if not user_has(user, ["tasks.view_all", "tasks.view_own"], tenant_id=ctx.tenant.id):
+    if not can_list_tasks(db, user, ctx.tenant.id):
         raise HTTPException(403, "Нет доступа к задачам")
     query = db.query(Task).filter(Task.tenant_id == ctx.tenant.id).options(
         noload(Task.checklist),

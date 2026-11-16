@@ -319,13 +319,13 @@ type InviteCreated = {
 };
 
 const EMAIL_ERROR_MESSAGE: Record<string, string> = {
-  smtp_not_configured: "SMTP не настроен — скопируйте ссылку вручную",
-  celery_unavailable: "Очередь отправки недоступна — скопируйте ссылку вручную",
+  smtp_not_configured: "Почта для отправки не настроена — скопируйте ссылку и отправьте её сотруднику",
+  celery_unavailable: "Письмо сейчас не отправилось — скопируйте ссылку и отправьте её сотруднику",
 };
 
 function emailErrorText(code?: string | null): string {
   if (!code) return "Письмо не отправлено — скопируйте ссылку вручную";
-  return EMAIL_ERROR_MESSAGE[code] || `Письмо не отправлено (${code}) — скопируйте ссылку вручную`;
+  return EMAIL_ERROR_MESSAGE[code] || "Письмо не отправлено — скопируйте ссылку вручную";
 }
 
 function inviteStatus(inv: Invitation): "accepted" | "expired" | "pending" {
@@ -356,6 +356,11 @@ function TeamSettings() {
 
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState<string>("");
+  // Без роли у сотрудника нет доступа ни к одному разделу — по умолчанию предлагаем «Сотрудник».
+  const defaultRoleId = roles?.find((r) => r.name === "Сотрудник")?.id;
+  useEffect(() => {
+    if (!roleId && defaultRoleId) setRoleId(String(defaultRoleId));
+  }, [defaultRoleId, roleId]);
   const [lastCreated, setLastCreated] = useState<InviteCreated | null>(null);
 
   const create = useMutation({
@@ -367,7 +372,7 @@ function TeamSettings() {
     onSuccess: (data) => {
       setLastCreated(data);
       setEmail("");
-      setRoleId("");
+      setRoleId(defaultRoleId ? String(defaultRoleId) : "");
       qc.invalidateQueries({ queryKey: ["invitations", tenantId] });
       if (data.email_sent) {
         toast.success("Приглашение отправлено", `На ${data.email}`);
@@ -428,7 +433,7 @@ function TeamSettings() {
           <h2 className="text-base font-semibold">Пригласить в компанию</h2>
         </div>
         <p className="mb-4 text-sm text-neutral-500">
-          Сотрудник получит письмо с ссылкой. Ссылка действует 7 дней. Если SMTP не настроен, вы сможете скопировать ссылку вручную ниже.
+          Сотрудник получит письмо со ссылкой — по ней он задаёт имя и пароль и сразу попадает в компанию. Ссылка действует 7 дней. Если почта не настроена, ссылку можно скопировать ниже.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex-1 min-w-[220px]">
@@ -451,7 +456,7 @@ function TeamSettings() {
               value={roleId}
               onChange={(e) => setRoleId(e.target.value)}
             >
-              <option value="">Без роли</option>
+              <option value="">Без роли (нет доступа к разделам)</option>
               {roles?.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}

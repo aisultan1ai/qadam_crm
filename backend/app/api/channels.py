@@ -722,7 +722,7 @@ def update_channel(
 ):
     ch, me = _require_member(db, ctx, channel_id)
     if ch.kind == "dm":
-        raise HTTPException(400, "DM нельзя редактировать")
+        raise HTTPException(400, "Личный чат нельзя редактировать")
     if ch.kind == "project":
         raise HTTPException(400, "Канал проекта редактируется через проект")
     if me.role != "owner" and not user_has(ctx.user, ["messenger.manage_any"], tenant_id=ctx.tenant.id):
@@ -835,7 +835,7 @@ def send_message(
     if payload.reply_to_id:
         parent = db.get(Message, payload.reply_to_id)
         if not parent or parent.channel_id != ch.id:
-            raise HTTPException(400, "reply_to_id не из этого канала")
+            raise HTTPException(400, "Сообщение для ответа не найдено в этом чате")
 
     msg = Message(
         tenant_id=ctx.tenant.id,

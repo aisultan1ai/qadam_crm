@@ -118,20 +118,23 @@ def seed_roles(db) -> None:
             role.permissions = target_perms
             db.add(role)
             db.flush()
-        else:
-            # Добавляем недостающие permissions — не убирая уже назначенные.
-            existing = {p.code for p in role.permissions}
-            missing = [p for p in target_perms if p.code not in existing]
-            if missing:
-                role.permissions = list(role.permissions) + missing
+            return role
+        role.description = description
+        # Права, которых в шаблоне ещё не было (появились в новой версии продукта).
+        existing = {p.code for p in role.permissions}
+        newly_added = [p for p in target_perms if p.code not in existing]
+        if not newly_added:
+            return role
+        role.permissions = list(role.permissions) + newly_added
 
-        # Также синхронизируем per-tenant копии с тем же именем.
+        # Раздаём компаниям только эти новые права и только один раз. Остальные настройки
+        # ролей компании — её собственные: если владелец что-то убрал, мы это не возвращаем.
         tenant_roles = db.query(Role).filter(Role.tenant_id.is_not(None), Role.name == name).all()
         for tr in tenant_roles:
-            existing = {p.code for p in tr.permissions}
-            missing = [p for p in target_perms if p.code not in existing]
-            if missing:
-                tr.permissions = list(tr.permissions) + missing
+            have = {p.code for p in tr.permissions}
+            add = [p for p in newly_added if p.code not in have]
+            if add:
+                tr.permissions = list(tr.permissions) + add
         return role
 
     ensure_role(
@@ -164,10 +167,10 @@ def seed_roles(db) -> None:
         ],
     )
     ensure_role(
-        "Сотрудник", "Работа со своими задачами",
+        "Сотрудник", "Свои задачи и задачи своего отдела: создаёт, ведёт и комментирует",
         [
             "projects.view",
-            "tasks.view_own", "tasks.update", "tasks.change_status",
+            "tasks.view_own", "tasks.view_department", "tasks.create", "tasks.update", "tasks.change_status",
             "comments.view", "comments.create", "comments.update_own",
             "files.upload", "files.download",
             "messenger.use",

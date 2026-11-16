@@ -346,7 +346,7 @@ def test_channel(
     except (ProviderError, Exception) as e:
         ch.last_error = str(e)[:2000]
         db.commit()
-        raise HTTPException(400, f"Ошибка подключения: {e}")
+        raise HTTPException(400, "Не удалось подключиться. Проверьте данные и попробуйте ещё раз")
 
 
 @router.post("/channels/{channel_id}/set-webhook")
@@ -375,7 +375,7 @@ def set_webhook(
     except (ProviderError, Exception) as e:
         ch.last_error = str(e)[:2000]
         db.commit()
-        raise HTTPException(400, f"Ошибка setWebhook: {e}")
+        raise HTTPException(400, "Не удалось подключить бота. Проверьте токен и попробуйте ещё раз")
 
 
 # =============================================================================

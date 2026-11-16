@@ -6,6 +6,7 @@ from ..database import get_db
 from ..models import Task, Project, User, Comment, TenantMembership
 from ..core.permissions import user_has
 from .deps import TenantContext, get_current_context
+from ..core.task_scope import apply_task_scope, can_list_tasks, visible_tasks_clause
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -20,14 +21,13 @@ def search(q: str, ctx: TenantContext = Depends(get_current_context), db: Sessio
     like = f"%{q}%"
 
     tasks: list = []
-    if user_has(user, ["tasks.view_all", "tasks.view_own"], tenant_id=tenant_id):
+    if can_list_tasks(db, user, tenant_id):
         tq = (
             db.query(Task)
             .filter(Task.tenant_id == tenant_id)
             .filter(or_(Task.title.ilike(like), Task.description.ilike(like)))
         )
-        if not user_has(user, ["tasks.view_all"], tenant_id=tenant_id):
-            tq = tq.filter(or_(Task.assignee_id == user.id, Task.author_id == user.id))
+        tq = apply_task_scope(tq, db, user, tenant_id)
         tasks = [{"id": t.id, "title": t.title, "status": t.status.value, "project_id": t.project_id} for t in tq.limit(20).all()]
 
     projects: list = []
@@ -56,6 +56,10 @@ def search(q: str, ctx: TenantContext = Depends(get_current_context), db: Sessio
             .filter(Comment.tenant_id == tenant_id)
             .filter(Comment.body.ilike(like))
         )
+        # Комментарии — только к задачам, которые пользователь видит.
+        visible = visible_tasks_clause(db, user, tenant_id)
+        if visible is not None:
+            cq = cq.filter(Comment.task_id.in_(db.query(Task.id).filter(Task.tenant_id == tenant_id, visible)))
         comments = [{"id": c.id, "task_id": c.task_id, "body": c.body[:200]} for c in cq.limit(20).all()]
 
     return {"tasks": tasks, "projects": projects, "users": users, "comments": comments}

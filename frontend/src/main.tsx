@@ -9,6 +9,21 @@ import { ConfirmProvider } from "./components/Confirm";
 import { initAnalytics } from "./lib/analytics";
 import "./index.css";
 
+// После деплоя в открытой вкладке старые чанки уже удалены — ленивая страница не загрузится.
+// Один раз тихо перезагружаем страницу (с защитой от цикла), вместо экрана «Что-то пошло не так».
+window.addEventListener("vite:preloadError", (event) => {
+  const KEY = "qd:reloaded-after-deploy";
+  try {
+    const last = Number(sessionStorage.getItem(KEY) || 0);
+    if (Date.now() - last < 30_000) return;
+    sessionStorage.setItem(KEY, String(Date.now()));
+  } catch {
+    // sessionStorage недоступен — всё равно пробуем перезагрузить один раз.
+  }
+  event.preventDefault();
+  window.location.reload();
+});
+
 initAnalytics();
 
 // staleTime 30s — уменьшает refetch при WS-инвалидациях в hot-paths (мессенджер).

@@ -379,7 +379,7 @@ def reply_to_thread(
     db: Session = Depends(get_db),
 ):
     if not (payload.body_text or payload.body_html):
-        raise HTTPException(400, "body_text или body_html обязателен")
+        raise HTTPException(400, "Введите текст письма")
     t = _load_thread(db, ctx, thread_id)
     mb = _my_mailbox(db, ctx)
     m = send_reply(
@@ -403,7 +403,7 @@ def send_new_message(
     db: Session = Depends(get_db),
 ):
     if not (payload.body_text or payload.body_html):
-        raise HTTPException(400, "body_text или body_html обязателен")
+        raise HTTPException(400, "Введите текст письма")
     mb = _my_mailbox(db, ctx)
     if not mb:
         raise HTTPException(400, "Настройте mailbox в Настройки → Почта")

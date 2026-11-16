@@ -25,11 +25,11 @@ def _client():
     """Ленивая инициализация — при отсутствии SDK или ключа возвращает 501/503."""
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        raise HTTPException(503, "AI не настроен: ANTHROPIC_API_KEY не задан. Обратитесь к администратору.")
+        raise HTTPException(503, "AI-ассистент не подключён. Обратитесь к администратору")
     try:
         from anthropic import Anthropic
     except ImportError:
-        raise HTTPException(501, "AI не установлен: пакет anthropic отсутствует в бекенде.")
+        raise HTTPException(501, "AI-ассистент не подключён. Обратитесь к администратору")
     return Anthropic(api_key=api_key)
 
 
@@ -97,7 +97,7 @@ def generate_tasks(
             messages=[{"role": "user", "content": user_message}],
         )
     except Exception as e:
-        raise HTTPException(502, f"AI не смог обработать запрос: {type(e).__name__}")
+        raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
 
     text_blocks = [b.text for b in response.content if b.type == "text"]
     raw = (text_blocks[0] if text_blocks else "").strip()
@@ -182,7 +182,7 @@ def summarize(
             messages=[{"role": "user", "content": payload.text}],
         )
     except Exception as e:
-        raise HTTPException(502, f"AI не смог обработать запрос: {type(e).__name__}")
+        raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
 
     text_blocks = [b.text for b in response.content if b.type == "text"]
     return SummarizeOut(
@@ -254,7 +254,7 @@ def report_suggest(
             messages=[{"role": "user", "content": payload.description}],
         )
     except Exception as e:
-        raise HTTPException(502, f"AI не смог обработать запрос: {type(e).__name__}")
+        raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
 
     text_blocks = [b.text for b in response.content if b.type == "text"]
     raw = (text_blocks[0] if text_blocks else "").strip()
@@ -267,7 +267,7 @@ def report_suggest(
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        raise HTTPException(502, "AI вернул некорректный JSON")
+        raise HTTPException(502, "AI-ассистент вернул непонятный ответ. Попробуйте ещё раз")
 
     metric = str(parsed.get("metric", "tasks_count"))
     group_by = str(parsed.get("group_by", "assignee"))

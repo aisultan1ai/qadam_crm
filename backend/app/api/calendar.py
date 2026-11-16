@@ -32,6 +32,7 @@ from ..services.calendar.ics import calendar_to_ics
 from ..services.calendar.rrule import expand_event
 from ..services.calendar.task_events import task_events_in_range
 from .deps import TenantContext, get_current_context, log_action, require
+from ..core.task_scope import visible_tasks_clause
 
 log = logging.getLogger("qadam.calendar.api")
 
@@ -180,7 +181,7 @@ def _assert_user_in_tenant(db: Session, tenant_id: int, user_id: int) -> None:
         .first()
     )
     if not exists:
-        raise HTTPException(400, f"User {user_id} не в этой компании")
+        raise HTTPException(400, "Участник не состоит в компании")
 
 
 # =============================================================================
@@ -299,7 +300,7 @@ def list_events(
     из tasks.deadline.
     """
     if end <= start:
-        raise HTTPException(400, "end должен быть > start")
+        raise HTTPException(400, "Окончание должно быть позже начала")
     if (end - start).days > 400:
         raise HTTPException(400, "диапазон слишком большой (макс 400 дней)")
 
@@ -308,7 +309,7 @@ def list_events(
         try:
             ids = [int(x) for x in calendar_ids.split(",") if x.strip()]
         except ValueError:
-            raise HTTPException(400, "calendar_ids должны быть числами")
+            raise HTTPException(400, "Некорректный список календарей")
 
     q = (
         db.query(Calendar)
@@ -363,7 +364,9 @@ def list_events(
 
     result = base_events
     if include_tasks:
-        result = result + task_events_in_range(db, ctx.tenant.id, start, end)
+        result = result + task_events_in_range(
+            db, ctx.tenant.id, start, end, visible=visible_tasks_clause(db, ctx.user, ctx.tenant.id),
+        )
     result.sort(key=lambda x: x["start"])
     return result
 
@@ -386,7 +389,7 @@ def create_event(
 ):
     cal = _load_calendar(db, ctx, payload.calendar_id, allow_others=False)
     if payload.end_at <= payload.start_at:
-        raise HTTPException(400, "end_at должен быть > start_at")
+        raise HTTPException(400, "Окончание должно быть позже начала")
     try:
         kind = EventKind(payload.kind)
     except ValueError:
@@ -480,7 +483,7 @@ def patch_event(
         except ValueError:
             pass
     if e.end_at <= e.start_at:
-        raise HTTPException(400, "end_at должен быть > start_at")
+        raise HTTPException(400, "Окончание должно быть позже начала")
 
     if payload.participant_user_ids is not None:
         # Полная замена списка

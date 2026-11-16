@@ -38,6 +38,7 @@ type GlobalUser = {
   is_superuser: boolean;
   is_platform_admin: boolean;
   created_at: string | null;
+  companies?: { tenant_id: number; tenant_name: string; is_owner: boolean; role: string | null }[];
 };
 
 type Tab = "tenants" | "users" | "plans";
@@ -102,6 +103,7 @@ export default function Admin() {
   const [editing, setEditing] = useState<AdminTenant | null>(null);
   const [deleting, setDeleting] = useState<AdminTenant | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
 
   if (me && !me.is_platform_admin) return <Navigate to="/" replace />;
 
@@ -164,6 +166,11 @@ export default function Admin() {
         <div>
           <h1 className="page-title">Платформа</h1>
         </div>
+        {tab === "tenants" && (
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            <Plus size={15} /> Новая компания
+          </Button>
+        )}
       </div>
 
       <Tabs
@@ -335,6 +342,14 @@ export default function Admin() {
         </table>
       </div>
         </>
+      )}
+
+      {creating && (
+        <CreateTenantModal
+          plans={plansData ?? []}
+          onClose={() => setCreating(false)}
+          onCreated={() => qc.invalidateQueries({ queryKey: ["admin-tenants"] })}
+        />
       )}
 
       {editing && (
@@ -697,7 +712,7 @@ function GlobalUsersTab({ query }: { query: string }) {
             <th className="table-head-cell">Email</th>
             <th className="table-head-cell">Имя</th>
             <th className="table-head-cell">Статус</th>
-            <th className="table-head-cell">Роли</th>
+            <th className="table-head-cell">Компании и роли</th>
             <th className="table-head-cell">Создан</th>
           </tr>
         </thead>
@@ -733,23 +748,30 @@ function GlobalUsersTab({ query }: { query: string }) {
                       : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
                   )}
                 >
-                  {u.is_active ? "active" : "inactive"}
+                  {u.is_active ? "Активен" : "Отключён"}
                 </span>
               </td>
               <td className="table-cell">
                 <div className="flex flex-wrap gap-1">
                   {u.is_platform_admin && (
                     <span className="chip bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
-                      platform admin
+                      Супер-админ платформы
                     </span>
                   )}
-                  {u.is_superuser && (
+                  {u.is_superuser && !u.is_platform_admin && (
                     <span className="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25">
-                      super
+                      Суперпользователь
                     </span>
                   )}
-                  {!u.is_platform_admin && !u.is_superuser && (
-                    <span className="text-xs text-neutral-400">—</span>
+                  {(u.companies ?? []).map((c) => (
+                    <span key={c.tenant_id} className="chip bg-zinc-100 text-zinc-700 dark:bg-white/5 dark:text-zinc-300" title={c.tenant_name}>
+                      <span className="max-w-[160px] truncate">{c.tenant_name}</span>
+                      <span className="text-zinc-400">·</span>
+                      {c.is_owner ? "Владелец" : c.role || "без роли"}
+                    </span>
+                  ))}
+                  {!u.is_platform_admin && !u.is_superuser && !(u.companies ?? []).length && (
+                    <span className="text-xs text-neutral-400">Не состоит в компаниях</span>
                   )}
                 </div>
               </td>
@@ -1185,6 +1207,142 @@ function PlanFormModal({
           </Button>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+type CreatedTenant = AdminTenant & { owner: "admin" | "existing_user" | "invited"; invite_url: string | null; email_sent: boolean };
+
+/** Новая компания от имени платформы: владелец — вы, существующий пользователь или приглашённый по email. */
+function CreateTenantModal({
+  plans,
+  onClose,
+  onCreated,
+}: {
+  plans: PlanRow[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [plan, setPlan] = useState(plans[0]?.key ?? "free");
+  const [ownerMode, setOwnerMode] = useState<"me" | "email">("email");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<CreatedTenant | null>(null);
+
+  const create = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<CreatedTenant>("/api/admin/tenants", {
+          name: name.trim(),
+          plan,
+          owner_email: ownerMode === "email" ? ownerEmail.trim() : null,
+        })
+      ).data,
+    onSuccess: (data) => {
+      onCreated();
+      if (data.owner === "invited") setResult(data);
+      else {
+        toast.success("Компания создана", data.owner === "admin" ? "Вы — её владелец, переключитесь на неё в верхней строке" : "Владелец назначен");
+        onClose();
+      }
+    },
+    onError: (e) => setError(extractApiError(e).message),
+  });
+
+  if (result) {
+    return (
+      <Modal open onClose={onClose} title="Компания создана" size="md">
+        <div className="space-y-3 text-sm">
+          <p>
+            «{result.name}» создана. Владельцем станет <b>{ownerEmail.trim()}</b> после того, как примет приглашение.
+          </p>
+          <p className="text-zinc-500">
+            {result.email_sent ? "Письмо с приглашением отправлено." : "Письмо не отправлено (почта не настроена) — передайте ссылку вручную:"}
+          </p>
+          {result.invite_url && (
+            <div className="flex gap-2">
+              <input readOnly value={result.invite_url} className="input flex-1 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  navigator.clipboard?.writeText(result.invite_url!).then(() => toast.success("Ссылка скопирована"));
+                }}
+              >
+                Копировать
+              </Button>
+            </div>
+          )}
+          <p className="text-xs text-zinc-500">Ссылка действует 7 дней.</p>
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={onClose}>Готово</Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  const canSubmit = name.trim().length >= 2 && (ownerMode === "me" || /.+@.+\..+/.test(ownerEmail.trim()));
+  return (
+    <Modal open onClose={onClose} title="Новая компания" size="md">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          if (canSubmit && !create.isPending) create.mutate();
+        }}
+      >
+        <label className="block">
+          <span className="label">Название компании</span>
+          <input autoFocus className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} placeholder="ТОО «Пример»" />
+        </label>
+        <label className="block">
+          <span className="label">Тариф</span>
+          <select className="input" value={plan} onChange={(e) => setPlan(e.target.value)}>
+            {(plans.length ? plans : FALLBACK_PLAN_KEYS.map((k) => ({ key: k, title: k }) as PlanRow)).map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.title || p.key}
+              </option>
+            ))}
+          </select>
+        </label>
+        <fieldset>
+          <legend className="label">Владелец</legend>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-[13px]">
+              <input type="radio" className="accent-brand-600" checked={ownerMode === "email"} onChange={() => setOwnerMode("email")} />
+              Клиент (по email)
+            </label>
+            {ownerMode === "email" && (
+              <div className="pl-6">
+                <input
+                  type="email"
+                  className="input"
+                  value={ownerEmail}
+                  onChange={(e) => setOwnerEmail(e.target.value)}
+                  placeholder="director@company.kz"
+                />
+                <p className="mt-1 text-xs text-zinc-500">
+                  Есть аккаунт — станет владельцем сразу. Нет — получит приглашение и станет владельцем после регистрации.
+                </p>
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-[13px]">
+              <input type="radio" className="accent-brand-600" checked={ownerMode === "me"} onChange={() => setOwnerMode("me")} />
+              Я (платформенный админ)
+            </label>
+          </div>
+        </fieldset>
+        {error && <div className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</div>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit} isLoading={create.isPending}>
+            Создать компанию
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

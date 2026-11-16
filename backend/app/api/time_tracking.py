@@ -287,7 +287,7 @@ def create_entry(
     seconds = payload.seconds
     if seconds is None:
         if not ended:
-            raise HTTPException(400, "Укажите ended_at или seconds")
+            raise HTTPException(400, "Укажите время окончания или длительность")
         seconds = max(0, int((ended - started).total_seconds()))
     if seconds <= 0:
         raise HTTPException(400, "Длительность должна быть > 0")
@@ -471,7 +471,7 @@ def submit_timesheet(
     period_start = _to_utc(payload.period_start)
     period_end = _to_utc(payload.period_end)
     if period_end <= period_start:
-        raise HTTPException(400, "period_end должен быть больше period_start")
+        raise HTTPException(400, "Конец периода должен быть позже начала")
 
     total_seconds = db.query(func.coalesce(func.sum(TimeEntry.seconds), 0)).filter(
         TimeEntry.tenant_id == ctx.tenant.id,

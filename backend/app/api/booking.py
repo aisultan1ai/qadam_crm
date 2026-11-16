@@ -306,7 +306,7 @@ def cancel_booking(
 ):
     b = db.get(Booking, booking_id)
     if not b or b.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Booking не найден")
+        raise HTTPException(404, "Запись не найдена")
     if b.assignee_user_id != ctx.user.id and b.page.owner_user_id != ctx.user.id:
         raise HTTPException(403, "Только assignee или owner страницы")
     if b.status == BookingStatus.canceled:

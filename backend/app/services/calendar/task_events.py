@@ -19,6 +19,7 @@ def task_events_in_range(
     range_start: datetime,
     range_end: datetime,
     user_ids: Iterable[int] | None = None,
+    visible=None,
 ) -> list[dict]:
     """Возвращает список dict-событий из задач с deadline в диапазоне."""
     q = (
@@ -33,6 +34,9 @@ def task_events_in_range(
     )
     if user_ids is not None:
         q = q.filter(Task.assignee_id.in_(list(user_ids)))
+    if visible is not None:
+        # Без этого сотрудник с «только свои задачи» видел в календаре сроки всех задач компании.
+        q = q.filter(visible)
     rows = q.all()
     result = []
     for t in rows:

@@ -282,7 +282,7 @@ def list_directories(ctx: TenantContext = Depends(get_current_context), db: Sess
 @router.post("/api/directories", response_model=DirectoryOut, status_code=201)
 def create_directory(payload: DirectoryCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     if db.query(Directory).filter(Directory.tenant_id == ctx.tenant.id, Directory.code == payload.code).first():
-        raise HTTPException(409, f"Справочник {payload.code} уже существует")
+        raise HTTPException(409, "Справочник с таким кодом уже существует")
     row = Directory(
         tenant_id=ctx.tenant.id,
         code=payload.code,

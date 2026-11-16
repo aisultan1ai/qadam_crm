@@ -9,6 +9,7 @@ from ..database import get_db
 from ..models import Task, TaskLink, LINK_KINDS
 from ..schemas.common import Message
 from .deps import TenantContext, get_current_context, log_action
+from ..core.task_scope import apply_task_scope, can_view_task
 
 
 router = APIRouter(prefix="/api/tasks", tags=["task-links"])
@@ -54,7 +55,9 @@ def _assert_task_in_tenant(db: Session, tenant_id: int, task_id: int) -> Task:
 
 @router.get("/{task_id}/links", response_model=list[LinkOut])
 def list_links(task_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    _assert_task_in_tenant(db, ctx.tenant.id, task_id)
+    _t = _assert_task_in_tenant(db, ctx.tenant.id, task_id)
+    if not can_view_task(ctx.user, _t, db):
+        raise HTTPException(404, "Задача не найдена")
     # Показываем все связи, где задача — from или to.
     from sqlalchemy import or_
     rows = (
@@ -160,11 +163,9 @@ def delete_link(
 
 @router.get("/{task_id}/subtasks", response_model=list[TaskBrief])
 def list_subtasks(task_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    _assert_task_in_tenant(db, ctx.tenant.id, task_id)
-    rows = (
-        db.query(Task)
-        .filter(Task.tenant_id == ctx.tenant.id, Task.parent_task_id == task_id)
-        .order_by(Task.order_index.asc(), Task.id.asc())
-        .all()
-    )
+    parent = _assert_task_in_tenant(db, ctx.tenant.id, task_id)
+    if not can_view_task(ctx.user, parent, db):
+        raise HTTPException(404, "Задача не найдена")
+    q = db.query(Task).filter(Task.tenant_id == ctx.tenant.id, Task.parent_task_id == task_id)
+    rows = apply_task_scope(q, db, ctx.user, ctx.tenant.id).order_by(Task.order_index.asc(), Task.id.asc()).all()
     return [TaskBrief(id=t.id, title=t.title, status=t.status.value if t.status else None) for t in rows]

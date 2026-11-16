@@ -52,6 +52,17 @@ export function GanttView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen?: (
       bar_height: 22,
       padding: 16,
     });
+    // frappe-gantt не знает коротких русских месяцев и в недельном виде пишет «06 undefined».
+    // Полный месяц уже стоит строкой выше — просто убираем мусор (и при перерисовках при прокрутке).
+    const root = containerRef.current;
+    const clean = () =>
+      root.querySelectorAll(".lower-text, .upper-text, text").forEach((el) => {
+        if (el.textContent?.includes("undefined")) el.textContent = el.textContent.replace(/\s*undefined/g, "");
+      });
+    clean();
+    const mo = new MutationObserver(clean);
+    mo.observe(root, { childList: true, subtree: true });
+    return () => mo.disconnect();
   }, [tasks, view, navigate, onOpen]);
 
   if (tasks.length === 0) {

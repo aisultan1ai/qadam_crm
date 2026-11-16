@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import { useAuth } from "@/store/auth";
-import { LogoMark, Wordmark } from "@/components/Logo";
 import { passwordSchema } from "@/lib/validation";
-import { FormError } from "@/components/ui";
+import { FormError, Loader } from "@/components/ui";
 import { FormField } from "@/components/lib/FormField";
 import { Button } from "@/components/lib/Button";
+import { AuthLayout } from "@/components/AuthLayout";
 
 type InviteInfo = {
   token: string;
@@ -19,30 +19,35 @@ type InviteInfo = {
   requires_signup: boolean;
 };
 
-const schema = z.object({
+const signupSchema = z.object({
   full_name: z.string().trim().min(2, "Минимум 2 символа").max(200),
   password: passwordSchema,
 });
-type InviteForm = z.infer<typeof schema>;
+type SignupForm = z.infer<typeof signupSchema>;
 
+/**
+ * Приглашение в компанию.
+ * Новый человек: задаёт имя и пароль → сразу внутри компании.
+ * Уже есть аккаунт: если вошёл под ним — одна кнопка; иначе подтверждает своим паролем
+ * (одной ссылки мало — её видит и тот, кто приглашал).
+ */
 export default function Invite() {
   const { token = "" } = useParams();
   const nav = useNavigate();
-  const { fetchMe } = useAuth();
+  const { me, fetchMe } = useAuth();
 
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [existingPassword, setExistingPassword] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<InviteForm>({
-    resolver: zodResolver(schema),
-    defaultValues: { full_name: "", password: "" },
-  });
+  } = useForm<SignupForm>({ resolver: zodResolver(signupSchema), defaultValues: { full_name: "", password: "" } });
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +56,7 @@ export default function Invite() {
         const { data } = await api.get<InviteInfo>(`/api/invitations/${token}`);
         if (!cancelled) setInfo(data);
       } catch (e) {
-        if (!cancelled) setError(extractApiError(e).message || "Приглашение недействительно");
+        if (!cancelled) setError(extractApiError(e).message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -61,101 +66,119 @@ export default function Invite() {
     };
   }, [token]);
 
-  const acceptSimple = async () => {
-    if (!info) return;
+  const done = async () => {
+    await fetchMe();
+    nav("/", { replace: true });
+  };
+
+  const accept = async (body: Record<string, string>) => {
     setServerError(null);
+    setBusy(true);
     try {
-      await api.post(`/api/invitations/${token}/accept`, {});
-      await fetchMe();
-      nav("/", { replace: true });
+      await api.post(`/api/invitations/${token}/accept`, body);
+      await done();
     } catch (e) {
-      setServerError(extractApiError(e).message || "Не удалось принять приглашение");
+      setServerError(extractApiError(e).message);
+    } finally {
+      setBusy(false);
     }
   };
 
-  const acceptWithSignup = handleSubmit(async (data) => {
-    if (!info) return;
-    setServerError(null);
-    try {
-      await api.post(`/api/invitations/${token}/accept`, {
-        full_name: data.full_name,
-        password: data.password,
-      });
-      await fetchMe();
-      nav("/", { replace: true });
-    } catch (e) {
-      setServerError(extractApiError(e).message || "Не удалось принять приглашение");
-    }
-  });
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-neutral-500">Загрузка…</div>
-      </div>
-    );
-  }
+  if (loading) return <Loader />;
 
   if (error || !info) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="card max-w-sm p-6 text-center">
-          <div className="mb-2 text-lg font-semibold">Приглашение недействительно</div>
-          <div className="text-sm text-neutral-500">{error ?? "Ссылка просрочена или уже использована."}</div>
-        </div>
-      </div>
+      <AuthLayout
+        title="Приглашение недействительно"
+        subtitle={error ?? "Ссылка просрочена или уже использована."}
+        footer={
+          <>
+            Попросите администратора компании прислать новое приглашение или{" "}
+            <Link to="/login" className="link font-medium">войдите</Link>.
+          </>
+        }
+      >
+        <div />
+      </AuthLayout>
     );
   }
 
-  const onSubmit = info.requires_signup
-    ? acceptWithSignup
-    : (e: React.FormEvent) => {
-        e.preventDefault();
-        acceptSimple();
-      };
+  const signedInAsInvitee = !!me && me.email?.toLowerCase() === info.email.toLowerCase();
+  const subtitle = (
+    <>
+      Вас пригласили в компанию <b className="text-zinc-900 dark:text-white">{info.tenant.name}</b>
+      <br />
+      <span className="text-[13px]">{info.email}</span>
+    </>
+  );
 
+  // Новый пользователь: имя + пароль.
+  if (info.requires_signup) {
+    return (
+      <AuthLayout title="Присоединиться к команде" subtitle={subtitle}>
+        <form onSubmit={handleSubmit((d) => accept({ full_name: d.full_name, password: d.password }))} className="space-y-4" noValidate>
+          <FormField label="Ваше имя" htmlFor="inv-name" error={errors.full_name?.message}>
+            <input id="inv-name" className="input input-lg" type="text" autoComplete="name" autoFocus {...register("full_name")} />
+          </FormField>
+          <FormField label="Придумайте пароль" htmlFor="inv-pass" error={errors.password?.message}>
+            <input id="inv-pass" className="input input-lg" type="password" autoComplete="new-password" {...register("password")} />
+          </FormField>
+          {serverError && <FormError msg={serverError} />}
+          <Button type="submit" variant="contrast" size="xl" fullWidth isLoading={isSubmitting || busy}>
+            Принять приглашение
+          </Button>
+          <p className="text-xs text-zinc-500">Дальше вы будете входить с этим email и паролем.</p>
+        </form>
+      </AuthLayout>
+    );
+  }
+
+  // Аккаунт уже есть.
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F5F6F8] p-4 dark:bg-[#14161A]">
-      <form onSubmit={onSubmit} className="card w-full max-w-sm p-8" noValidate>
-        <div className="mb-4 flex flex-col items-center gap-2">
-          <LogoMark size={48} className="rounded-[12px]" />
-          <Wordmark />
-        </div>
-
-        <div className="mb-4 text-center">
-          <div className="text-sm text-neutral-500">Вас пригласили в компанию</div>
-          <div className="mt-1 text-lg font-semibold">{info.tenant.name}</div>
-          <div className="mt-1 text-xs text-neutral-500">{info.email}</div>
-        </div>
-
-        {info.requires_signup && (
-          <>
-            <FormField label="Ваше имя" error={errors.full_name?.message} className="mb-3">
-              <input className="input" type="text" autoComplete="name" {...register("full_name")} />
-            </FormField>
-            <FormField label="Пароль" error={errors.password?.message} className="mb-4">
-              <input
-                className="input"
-                type="password"
-                autoComplete="new-password"
-                {...register("password")}
-              />
-            </FormField>
-          </>
+    <AuthLayout title="Присоединиться к команде" subtitle={subtitle}>
+      <form
+        className="space-y-4"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          accept(signedInAsInvitee ? {} : { password: existingPassword });
+        }}
+      >
+        {signedInAsInvitee ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">Вы вошли как {info.email}. Компания появится в переключателе компаний.</p>
+        ) : (
+          <FormField
+            label={
+              <span className="flex items-center justify-between">
+                Пароль от вашего аккаунта Qadam
+                <Link to="/forgot-password" className="link text-[13px] font-normal">Забыли пароль?</Link>
+              </span>
+            }
+            htmlFor="inv-existing"
+          >
+            <input
+              id="inv-existing"
+              className="input input-lg"
+              type="password"
+              autoComplete="current-password"
+              autoFocus
+              value={existingPassword}
+              onChange={(e) => setExistingPassword(e.target.value)}
+            />
+          </FormField>
         )}
-
         {serverError && <FormError msg={serverError} />}
-
         <Button
           type="submit"
-          variant="primary"
+          variant="contrast"
+          size="xl"
           fullWidth
-          isLoading={isSubmitting}
-          className="mt-3 disabled:opacity-60"
+          isLoading={busy}
+          disabled={!signedInAsInvitee && existingPassword.length < 8}
         >
-          {isSubmitting ? "Принимаем…" : "Принять приглашение"}
+          Принять приглашение
         </Button>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

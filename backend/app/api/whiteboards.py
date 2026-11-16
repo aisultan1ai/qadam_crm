@@ -92,6 +92,9 @@ def delete_board(wid: int, ctx: TenantContext = Depends(get_current_context), db
     row = db.get(Whiteboard, wid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Доска не найдена")
+    # Доска общая: рисовать может вся команда, а удалить — только автор или владелец компании.
+    if row.created_by != ctx.user.id and not ctx.membership.is_owner and not ctx.user.is_platform_admin:
+        raise HTTPException(403, "Удалить доску может только её автор или владелец компании")
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="delete", entity="whiteboard", entity_id=row.id, detail=row.title)
     db.delete(row)
     db.commit()

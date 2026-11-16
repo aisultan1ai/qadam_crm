@@ -9,13 +9,13 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.plans import plan_to_dict, plan_catalog, plan_exists, tenant_usage
 from ..database import get_db
-from ..models import Plan, Project, Task, Tenant, TenantMembership, User
+from ..models import Invitation, Plan, Project, Role, Task, Tenant, TenantMembership, User
 from ..schemas.common import Message
 from .deps import get_current_user, log_action
 
@@ -108,6 +108,81 @@ def _serialize_tenant(t: Tenant) -> dict:
     }
 
 
+class TenantCreateAdmin(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+    plan: str = "free"
+    # Пусто — владельцем становится сам админ. Есть аккаунт — назначаем сразу. Нет — приглашение.
+    owner_email: Optional[EmailStr] = None
+
+
+@router.post("/tenants", status_code=201)
+def create_tenant(
+    payload: TenantCreateAdmin,
+    admin: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Новая компания от имени платформы: владелец — сам админ, существующий пользователь
+    или человек без аккаунта (тогда ему уходит приглашение, после принятия он владелец)."""
+    import secrets
+    from datetime import datetime, timedelta, timezone
+
+    from ..config import settings
+    from ..core.tenant_setup import (
+        _unique_slug, copy_system_roles_to_tenant, create_tenant_with_owner,
+    )
+
+    name = payload.name.strip()
+    if len(name) < 2:
+        raise HTTPException(400, "Название: минимум 2 символа")
+    if not plan_exists(db, payload.plan):
+        raise HTTPException(400, f"Неизвестный тариф: {payload.plan}")
+
+    email = (payload.owner_email or "").lower().strip() or None
+    owner = admin if not email else db.query(User).filter(User.email == email).first()
+    invite_url: Optional[str] = None
+    email_sent = False
+
+    if owner is not None:
+        tenant = create_tenant_with_owner(db, company_name=name, owner=owner, plan=payload.plan)
+    else:
+        # Владельца ещё нет в системе: компания без участников + приглашение с передачей владения.
+        tenant = Tenant(name=name, slug=_unique_slug(db, name), plan=payload.plan, is_active=True, owner_id=None)
+        db.add(tenant)
+        db.flush()
+        copy_system_roles_to_tenant(db, tenant.id)
+        admin_role = db.query(Role).filter(Role.tenant_id == tenant.id, Role.name == "Администратор").first()
+        token = secrets.token_urlsafe(32)
+        db.add(Invitation(
+            tenant_id=tenant.id,
+            email=email,
+            role_id=admin_role.id if admin_role else None,
+            token=token,
+            invited_by=admin.id,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            make_owner=True,
+        ))
+        invite_url = f"{settings.APP_BASE_URL.rstrip('/')}/invite/{token}"
+
+    _audit(db, admin, "create_tenant", tenant, detail=f"{name} · владелец: {email or admin.email}")
+    db.commit()
+    db.refresh(tenant)
+
+    if invite_url and settings.SMTP_HOST:
+        try:
+            from ..tasks.email import send_invitation_email
+            send_invitation_email.delay(to=email, tenant_name=tenant.name, invite_url=invite_url, inviter_name=admin.name)
+            email_sent = True
+        except Exception:  # Celery/SMTP недоступны — ссылку админ передаст вручную
+            email_sent = False
+
+    return {
+        **_serialize_tenant(tenant),
+        "owner": "admin" if owner is admin else ("existing_user" if owner else "invited"),
+        "invite_url": invite_url,
+        "email_sent": email_sent,
+    }
+
+
 @router.patch("/tenants/{tenant_id}")
 def patch_tenant(
     tenant_id: int,
@@ -141,7 +216,7 @@ def patch_tenant(
         if val != tenant.slug:
             exists = db.query(Tenant.id).filter(Tenant.slug == val, Tenant.id != tenant.id).first()
             if exists:
-                raise HTTPException(400, "Компания с таким slug уже существует")
+                raise HTTPException(400, "Компания с таким адресом уже существует")
             changes.append(f"slug: '{tenant.slug}' → '{val}'")
             tenant.slug = val
 
@@ -235,6 +310,19 @@ def list_users(
     limit: int = 200,
 ):
     rows = db.query(User).order_by(User.id).limit(min(limit, 1000)).all()
+    # Компании пользователя и его роль в каждой (роли — у каждой компании свои).
+    memberships: dict[int, list[dict]] = {}
+    q = (
+        db.query(TenantMembership.user_id, Tenant.id, Tenant.name, TenantMembership.is_owner, Role.name)
+        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+        .outerjoin(Role, Role.id == TenantMembership.role_id)
+        .filter(TenantMembership.user_id.in_([u.id for u in rows]))
+        .order_by(Tenant.name)
+    )
+    for uid, tid, tname, is_owner, role_name in q.all():
+        memberships.setdefault(uid, []).append(
+            {"tenant_id": tid, "tenant_name": tname, "is_owner": bool(is_owner), "role": role_name}
+        )
     return [
         {
             "id": u.id,
@@ -244,6 +332,7 @@ def list_users(
             "is_superuser": u.is_superuser,
             "is_platform_admin": u.is_platform_admin,
             "created_at": u.created_at.isoformat() if u.created_at else None,
+            "companies": memberships.get(u.id, []),
         }
         for u in rows
     ]

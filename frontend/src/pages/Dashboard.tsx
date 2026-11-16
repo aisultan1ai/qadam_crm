@@ -55,7 +55,7 @@ function greeting(): string {
 
 export default function DashboardPage() {
   const { me, can } = useAuth();
-  const canTasks = can(["tasks.view_all", "tasks.view_own"]);
+  const canTasks = can(["tasks.view_all", "tasks.view_department", "tasks.view_own"]);
   const canDeals = can("deals.view");
 
   const { data: stats, isPending } = useQuery({
@@ -342,7 +342,7 @@ function Onboarding() {
       text: "Kanban, таблица, список или календарь — один источник данных.",
       to: "/tasks",
       cta: "К задачам",
-      show: can(["tasks.view_all", "tasks.view_own"]),
+      show: can(["tasks.view_all", "tasks.view_department", "tasks.view_own"]),
     },
     {
       icon: Users,

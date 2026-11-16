@@ -607,7 +607,7 @@ def org_chart(
     db: Session = Depends(get_db),
 ):
     users = (
-        db.query(User)
+        db.query(User, TenantMembership.department_id, TenantMembership.manager_id)
         .join(TenantMembership, TenantMembership.user_id == User.id)
         .filter(TenantMembership.tenant_id == ctx.tenant.id, User.is_active == True)  # noqa: E712
         .order_by(User.name)
@@ -623,9 +623,9 @@ def org_chart(
         users=[
             OrgChartUser(
                 id=u.id, name=u.name, email=u.email, avatar_url=u.avatar_url,
-                position=u.position, department_id=u.department_id, manager_id=u.manager_id,
+                position=u.position, department_id=dep_id, manager_id=mgr_id,
             )
-            for u in users
+            for u, dep_id, mgr_id in users
         ],
         departments=[
             OrgChartDepartment(id=d.id, name=d.name, parent_id=d.parent_id, head_user_id=d.head_user_id)
@@ -650,7 +650,7 @@ def upcoming_birthdays(
     users = (
         db.query(User, Department.name.label("dep_name"))
         .join(TenantMembership, TenantMembership.user_id == User.id)
-        .outerjoin(Department, Department.id == User.department_id)
+        .outerjoin(Department, Department.id == TenantMembership.department_id)
         .filter(
             TenantMembership.tenant_id == ctx.tenant.id,
             User.is_active == True,  # noqa: E712

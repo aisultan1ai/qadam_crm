@@ -28,8 +28,10 @@ def _send_via_smtp(to: str, subject: str, html: str, text: str) -> None:
         logger.info("[email:dry-run] to=%s subj=%s", to, subject)
         return
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as smtp:
-        if settings.SMTP_USE_TLS:
+    # 465 — SSL с первого байта (Mail.ru, Yandex, Gmail это поддерживают); 587/25 — STARTTLS.
+    smtp_cls = smtplib.SMTP_SSL if settings.SMTP_PORT == 465 else smtplib.SMTP
+    with smtp_cls(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as smtp:
+        if settings.SMTP_USE_TLS and smtp_cls is smtplib.SMTP:
             smtp.starttls()
         if settings.SMTP_USER and settings.SMTP_PASSWORD:
             smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)

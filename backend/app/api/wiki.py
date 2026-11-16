@@ -446,7 +446,7 @@ def import_article_from_file(
             md_raw, images = docx_to_markdown(data)
     except Exception as e:
         log.exception("wiki import failed")
-        raise HTTPException(400, f"Не удалось разобрать файл: {e}")
+        raise HTTPException(400, "Не удалось прочитать файл. Проверьте формат")
 
     final_title = (title or Path(filename).stem).strip()[:300] or "Импорт"
     slug = _make_slug(db, ctx.tenant.id, final_title)

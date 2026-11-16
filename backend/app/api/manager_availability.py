@@ -222,4 +222,4 @@ def _apply_patch(av: ManagerAvailability, payload: AvailabilityBody) -> None:
         av.vacation_until = payload.vacation_until
     # Валидация периода отпуска (from ≤ until)
     if av.vacation_from and av.vacation_until and av.vacation_from > av.vacation_until:
-        raise HTTPException(400, "vacation_from должен быть ≤ vacation_until")
+        raise HTTPException(400, "Начало отпуска должно быть не позже окончания")

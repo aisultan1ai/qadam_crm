@@ -88,11 +88,11 @@ const MODULES: Module[] = [
     icon: CheckSquare,
     extra: "task-projects",
     items: [
-      { to: "/tasks", label: "Все задачи", icon: ListChecks, code: ["tasks.view_all", "tasks.view_own"] },
-      { to: "/tasks?scope=incoming", label: "Мне назначены", icon: UserCheck, code: ["tasks.view_all", "tasks.view_own"] },
-      { to: "/tasks?scope=outgoing", label: "Я поставил", icon: ArrowUpCircle, code: ["tasks.view_all", "tasks.view_own"] },
-      { to: "/tasks?scope=audited", label: "Наблюдаю", icon: Eye, code: ["tasks.view_all", "tasks.view_own"] },
-      { to: "/tasks?overdue=1", label: "Просроченные", icon: AlarmClock, code: ["tasks.view_all", "tasks.view_own"], badge: "overdue" },
+      { to: "/tasks", label: "Все задачи", icon: ListChecks, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
+      { to: "/tasks?scope=incoming", label: "Мне назначены", icon: UserCheck, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
+      { to: "/tasks?scope=outgoing", label: "Я поставил", icon: ArrowUpCircle, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
+      { to: "/tasks?scope=audited", label: "Наблюдаю", icon: Eye, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
+      { to: "/tasks?overdue=1", label: "Просроченные", icon: AlarmClock, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"], badge: "overdue" },
     ],
   },
   {
@@ -337,7 +337,7 @@ export default function Layout() {
             fullBleed ? "flex min-h-0 flex-col" : "mx-auto max-w-[1560px] px-4 py-4 sm:px-6 lg:py-5",
           )}
         >
-          <ErrorBoundary>
+          <ErrorBoundary key={pathname}>
             <Suspense fallback={<div className="min-h-[200px]" />}>
               <Outlet />
             </Suspense>
