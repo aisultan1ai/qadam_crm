@@ -53,7 +53,7 @@ export default function Privacy() {
       <p>
         Согласно закону РК «О персональных данных и их защите», вы вправе запросить
         копию, исправление или удаление своих данных, направив запрос на{" "}
-        <a href="mailto:hello@qadam.kz">hello@qadam.kz</a>.
+        <a href="mailto:support@qcrm.kz">support@qcrm.kz</a>.
       </p>
 
       <h2>6. Cookies</h2>
@@ -71,7 +71,7 @@ export default function Privacy() {
       <h2>Контакты</h2>
       <p>
         По вопросам, связанным с обработкой персональных данных — {" "}
-        <a href="mailto:hello@qadam.kz">hello@qadam.kz</a>.
+        <a href="mailto:support@qcrm.kz">support@qcrm.kz</a>.
       </p>
     </LegalPage>
   );

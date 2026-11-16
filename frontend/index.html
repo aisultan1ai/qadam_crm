@@ -2,13 +2,14 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath d='M256 90 a150 150 0 1 0 0.1 0 Z M256 130 a110 110 0 1 1 -0.1 0 Z' fill='%230D0F13' fill-rule='evenodd'/%3E%3Cpath d='M372 300 L409 399 L330 360 Z' fill='%230D0F13'/%3E%3Crect x='274' y='176' width='80' height='60' rx='12' fill='%23BFD0FA'/%3E%3Crect x='224' y='228' width='80' height='60' rx='12' fill='%236488EA'/%3E%3Cg fill='%232A52C4'%3E%3Crect x='184' y='278' width='70' height='50' rx='12'/%3E%3Cpath d='M249 296 L318 340 L199 328 Z'/%3E%3C/g%3E%3C/svg%3E" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#F6F7F9" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#12151B" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Qadam CRM — сделки, задачи, проекты, открытые линии, почта и HR в одной системе. Роли и права доступа для каждого сотрудника. Есть бесплатный тариф." />
-    <meta name="keywords" content="CRM, управление задачами, Kanban, проекты, тайм-менеджмент, Казахстан, SaaS" />
 
+    <link rel="canonical" href="https://qcrm.kz/" />
+    <meta property="og:url" content="https://qcrm.kz/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Qadam CRM" />
     <meta property="og:title" content="Qadam CRM — клиенты, задачи и команда в одной системе" />
@@ -26,6 +27,36 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Onest:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <!-- Структурированные данные: название, логотип и описание сервиса в выдаче Google -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "Qadam CRM",
+            "url": "https://qcrm.kz/",
+            "logo": "https://qcrm.kz/favicon.svg"
+          },
+          {
+            "@type": "WebSite",
+            "name": "Qadam CRM",
+            "url": "https://qcrm.kz/",
+            "inLanguage": "ru"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Qadam CRM",
+            "url": "https://qcrm.kz/",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "description": "CRM-система для компаний Казахстана: сделки, задачи, проекты, открытые линии, почта и HR в одной системе.",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Бесплатный тариф" }
+          }
+        ]
+      }
+    </script>
     <title>Qadam CRM — управление компанией в одной системе</title>
     <!-- Тема применяется до отрисовки (без вспышки). Вынесено в файл, чтобы CSP не требовал inline-скриптов. -->
     <script src="/theme-init.js"></script>

@@ -7,7 +7,12 @@ Allow: /privacy
 Allow: /terms
 Allow: /f/
 Allow: /book/
+# Файлы, без которых поисковик не отрисует лендинг (JS/CSS), иконка и картинка превью
+Allow: /assets/
 Allow: /landing/
+Allow: /theme-init.js
+Allow: /favicon.svg
+Allow: /og-image.png
 # Всё остальное — рабочие страницы за входом и служебные пути
 Disallow: /
 

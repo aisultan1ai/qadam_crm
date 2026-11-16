@@ -71,7 +71,7 @@ export default function Terms() {
 
       <h2>Контакты</h2>
       <p>
-        По вопросам — <a href="mailto:hello@qadam.kz">hello@qadam.kz</a>.
+        По вопросам — <a href="mailto:support@qcrm.kz">support@qcrm.kz</a>.
       </p>
     </LegalPage>
   );

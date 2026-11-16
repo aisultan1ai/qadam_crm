@@ -1011,7 +1011,7 @@ function BillingSettings() {
                   disabled={current || subscribe.isPending}
                   onClick={() => {
                     if (p.price_month === null) {
-                      window.location.href = "mailto:sales@qadam.kz?subject=Enterprise-тариф Qadam CRM";
+                      window.location.href = "mailto:support@qcrm.kz?subject=Enterprise-тариф Qadam CRM";
                       return;
                     }
                     setPendingPlan(p);

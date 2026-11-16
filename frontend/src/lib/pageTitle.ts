@@ -43,6 +43,29 @@ export function titleFor(pathname: string): string {
   return name ? `${name} — ${BASE}` : BASE;
 }
 
+// Публичные страницы (вне Layout). Лендинг, /privacy и /terms ставят заголовок сами.
+const PUBLIC_TITLES: Record<string, string> = {
+  login: "Вход",
+  register: "Регистрация",
+  "forgot-password": "Восстановление пароля",
+  "reset-password": "Новый пароль",
+  invite: "Приглашение в компанию",
+  "verify-email": "Подтверждение email",
+};
+
+/** Заголовок публичной страницы и canonical-адрес — чтобы в поиске каждая страница была отдельной. */
+export function usePublicPageMeta() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const seg = pathname.split("/").filter(Boolean)[0] ?? "";
+    const name = PUBLIC_TITLES[seg];
+    if (name) document.title = `${name} — ${BASE}`;
+    const url = `https://qcrm.kz${pathname === "/" ? "/" : pathname.replace(/\/+$/, "")}`;
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", url);
+    document.querySelector('meta[property="og:url"]')?.setAttribute("content", url);
+  }, [pathname]);
+}
+
 /** Название вкладки по текущему разделу (чтобы вкладки в браузере различались). */
 export function usePageTitle() {
   const { pathname } = useLocation();

@@ -12,6 +12,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import ConfirmEmailChange from "@/pages/ConfirmEmailChange";
 import { Loader } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { usePublicPageMeta } from "@/lib/pageTitle";
 
 const Landing = lazy(() => import("@/pages/Landing"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
@@ -75,6 +76,7 @@ function HomeGate() {
 export default function App() {
   const { fetchMe, ready } = useAuth();
   const location = useLocation();
+  usePublicPageMeta();
   useEffect(() => {
     fetchMe();
   }, []);

@@ -563,7 +563,7 @@ function Footer() {
         <nav className="flex flex-wrap gap-x-6 gap-y-2" aria-label="Нижнее меню">
           <Link to="/privacy" className="hover:text-white">Конфиденциальность</Link>
           <Link to="/terms" className="hover:text-white">Условия</Link>
-          <span className="select-all">hello@qadam.kz</span>
+          <span className="select-all">support@qcrm.kz</span>
         </nav>
       </div>
     </footer>

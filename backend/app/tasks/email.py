@@ -246,9 +246,10 @@ def send_report_email(saved_report_id: int) -> str:
         msg.add_alternative(html, subtype="html")
         msg.add_attachment(attach_bytes, maintype=maintype, subtype=subtype, filename=attach_name)
 
-        import smtplib
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as s:
-            if settings.SMTP_USE_TLS:
+        # Порт 465 — SSL с самого начала (как в основной отправке писем), иначе STARTTLS.
+        smtp_cls = smtplib.SMTP_SSL if settings.SMTP_PORT == 465 else smtplib.SMTP
+        with smtp_cls(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as s:
+            if settings.SMTP_USE_TLS and smtp_cls is smtplib.SMTP:
                 s.starttls()
             if settings.SMTP_USER and settings.SMTP_PASSWORD:
                 s.login(settings.SMTP_USER, settings.SMTP_PASSWORD)

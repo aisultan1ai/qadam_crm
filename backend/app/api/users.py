@@ -64,13 +64,27 @@ def _load_tenant_user(db: Session, tenant_id: int, user_id: int) -> User:
 def _user_out(db: Session, tenant_id: int, user: User) -> UserOut:
     """Пользователь глазами текущей компании: только её роли и её отдел
     (у человека в другой компании — свои роли и отдел, их здесь не показываем)."""
+    return _users_out(db, tenant_id, [user])[0]
+
+
+def _users_out(db: Session, tenant_id: int, users: list[User]) -> list[UserOut]:
+    """То же для списка — отделы и руководители одним запросом, а не по два на каждого."""
+    ids = [u.id for u in users]
+    members = {
+        uid: (dep_id, manager_id)
+        for uid, dep_id, manager_id in db.query(
+            TenantMembership.user_id, TenantMembership.department_id, TenantMembership.manager_id,
+        ).filter(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id.in_(ids))
+    } if ids else {}
+    dep_ids = {d for d, _ in members.values() if d}
+    deps = {d.id: d for d in db.query(Department).filter(Department.id.in_(dep_ids))} if dep_ids else {}
+    return [_member_view(user, tenant_id, *members.get(user.id, (None, None)), deps) for user in users]
+
+
+def _member_view(user: User, tenant_id: int, dep_id: Optional[int], manager_id: Optional[int], deps: dict) -> UserOut:
     out = UserOut.model_validate(user)
     roles = [r for r in out.roles if any(ur.id == r.id and ur.tenant_id == tenant_id for ur in user.roles)]
-    m = db.query(TenantMembership.department_id, TenantMembership.manager_id).filter(
-        TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user.id,
-    ).first()
-    dep_id, manager_id = (m.department_id, m.manager_id) if m else (None, None)
-    dep = db.get(Department, dep_id) if dep_id else None
+    dep = deps.get(dep_id) if dep_id else None
     return out.model_copy(update={
         "roles": roles,
         "manager_id": manager_id,
@@ -153,7 +167,7 @@ def list_users(
         query = query.join(User.roles).filter(Role.id == role_id)
     query = query.order_by(User.id)
     page = paginate(query, pagination)
-    page.items = [_user_out(db, ctx.tenant.id, u) for u in page.items]
+    page.items = _users_out(db, ctx.tenant.id, page.items)
     return page
 
 
