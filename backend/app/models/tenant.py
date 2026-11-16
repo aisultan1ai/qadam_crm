@@ -57,6 +57,8 @@ class TenantMembership(Base):
     manager_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
     )
+    # Должность в ЭТОЙ компании (задаёт компания, а не сам сотрудник).
+    position: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="memberships", lazy="joined")

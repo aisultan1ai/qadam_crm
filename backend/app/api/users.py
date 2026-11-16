@@ -71,23 +71,27 @@ def _users_out(db: Session, tenant_id: int, users: list[User]) -> list[UserOut]:
     """То же для списка — отделы и руководители одним запросом, а не по два на каждого."""
     ids = [u.id for u in users]
     members = {
-        uid: (dep_id, manager_id)
-        for uid, dep_id, manager_id in db.query(
+        uid: (dep_id, manager_id, position)
+        for uid, dep_id, manager_id, position in db.query(
             TenantMembership.user_id, TenantMembership.department_id, TenantMembership.manager_id,
+            TenantMembership.position,
         ).filter(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id.in_(ids))
     } if ids else {}
-    dep_ids = {d for d, _ in members.values() if d}
+    dep_ids = {d for d, _, _ in members.values() if d}
     deps = {d.id: d for d in db.query(Department).filter(Department.id.in_(dep_ids))} if dep_ids else {}
-    return [_member_view(user, tenant_id, *members.get(user.id, (None, None)), deps) for user in users]
+    return [_member_view(user, tenant_id, *members.get(user.id, (None, None, None)), deps) for user in users]
 
 
-def _member_view(user: User, tenant_id: int, dep_id: Optional[int], manager_id: Optional[int], deps: dict) -> UserOut:
+def _member_view(
+    user: User, tenant_id: int, dep_id: Optional[int], manager_id: Optional[int], position: Optional[str], deps: dict,
+) -> UserOut:
     out = UserOut.model_validate(user)
     roles = [r for r in out.roles if any(ur.id == r.id and ur.tenant_id == tenant_id for ur in user.roles)]
     dep = deps.get(dep_id) if dep_id else None
     return out.model_copy(update={
         "roles": roles,
         "manager_id": manager_id,
+        "position": position,
         "department_id": dep.id if dep else None,
         "department": DepartmentOut.model_validate(dep) if dep else None,
     })
@@ -215,6 +219,7 @@ def create_user(payload: UserCreate, ctx: TenantContext = Depends(require("users
     # Добавляем в текущий tenant.
     db.add(TenantMembership(
         tenant_id=ctx.tenant.id, user_id=user.id, is_owner=False, department_id=payload.department_id or None,
+        position=(getattr(payload, "position", None) or "").strip() or None,
     ))
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="create", entity="user", entity_id=user.id, detail=user.email)
     db.commit()
@@ -280,9 +285,7 @@ def update_me(
         set_auth_cookies(response, access, refresh)
 
     # M11 — свой HR-профиль
-    if payload.position is not None and payload.position != (user.position or ""):
-        user.position = payload.position or None
-        changes.append("должность")
+    # Должность задаёт компания (Пользователи → карточка сотрудника), не сам сотрудник — поле здесь игнорируем.
     if payload.phone is not None and payload.phone != (user.phone or ""):
         user.phone = payload.phone or None
         changes.append("телефон")
@@ -428,7 +431,11 @@ def update_user(user_id: int, payload: UserUpdate, ctx: TenantContext = Depends(
     if payload.manager_id is not None:
         _set_member_manager(db, ctx.tenant.id, user.id, payload.manager_id or None)
     if payload.position is not None:
-        user.position = payload.position or None
+        member = db.query(TenantMembership).filter(
+            TenantMembership.tenant_id == ctx.tenant.id, TenantMembership.user_id == user.id,
+        ).first()
+        if member:
+            member.position = payload.position.strip() or None
     if payload.phone is not None:
         user.phone = payload.phone or None
     if payload.bio is not None:

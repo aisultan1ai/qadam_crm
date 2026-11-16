@@ -447,7 +447,7 @@ function Rail({
           <PopoverItem onClick={() => { setMeOpen(false); nav("/profile"); }}>
             <UserIcon size={14} className="text-zinc-400" /> Мой профиль
           </PopoverItem>
-          <PopoverItem onClick={() => { setMeOpen(false); nav("/settings/team"); }}>
+          <PopoverItem onClick={() => { setMeOpen(false); nav("/users/invitations"); }}>
             <UserPlus size={14} className="text-zinc-400" /> Пригласить сотрудников
           </PopoverItem>
           <PopoverItem onClick={() => { setMeOpen(false); logout(); }}>

@@ -22,7 +22,7 @@ from ..core.limiter import limiter
 from ..core.plans import check_feature, check_user_limit
 from ..core.security import hash_password, verify_password
 from ..database import get_db
-from ..models import Invitation, Role, Tenant, TenantMembership, User
+from ..models import Department, Invitation, Role, Tenant, TenantMembership, User
 from ..schemas.auth import TokenResponse
 from ..schemas.common import Message
 from ..tasks.email import send_invitation_email
@@ -48,6 +48,8 @@ class InviteResponse(BaseModel):
 class InviteCreate(BaseModel):
     email: EmailStr
     role_id: Optional[int] = None
+    department_id: Optional[int] = None
+    position: Optional[str] = Field(default=None, max_length=150)
 
 
 class AcceptRequest(BaseModel):
@@ -97,6 +99,12 @@ def create_invite(
             raise HTTPException(400, "Пользователь уже в компании")
 
     role = _tenant_role_or_none(db, ctx.tenant.id, payload.role_id)
+    department_id = payload.department_id or None
+    if department_id:
+        dep = db.get(Department, department_id)
+        if not dep or dep.tenant_id != ctx.tenant.id:
+            raise HTTPException(400, "Отдел не найден в этой компании")
+    position = (payload.position or "").strip() or None
 
     # Идемпотентность: продлеваем существующее непринятое приглашение.
     invite = (
@@ -114,6 +122,8 @@ def create_invite(
     if invite:
         invite.token = token
         invite.role_id = role.id if role else None
+        invite.department_id = department_id
+        invite.position = position
         invite.expires_at = expires_at
         invite.invited_by = ctx.user.id
     else:
@@ -121,6 +131,8 @@ def create_invite(
             tenant_id=ctx.tenant.id,
             email=email,
             role_id=role.id if role else None,
+            department_id=department_id,
+            position=position,
             token=token,
             invited_by=ctx.user.id,
             expires_at=expires_at,
@@ -279,6 +291,8 @@ def accept_invitation(
             user_id=user.id,
             role_id=invite.role_id,
             is_owner=invite.make_owner,
+            department_id=invite.department_id,
+            position=invite.position,
         ))
         # Роль назначаем и на глобальном уровне (user.roles), т.к. permissions читаются оттуда.
         if invite.role_id:
@@ -318,6 +332,8 @@ def list_invites(
             "id": i.id,
             "email": i.email,
             "role_id": i.role_id,
+            "department_id": i.department_id,
+            "position": i.position,
             "expires_at": i.expires_at.isoformat(),
             "accepted_at": i.accepted_at.isoformat() if i.accepted_at else None,
             "created_at": i.created_at.isoformat() if i.created_at else None,

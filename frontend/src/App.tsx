@@ -12,6 +12,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import ConfirmEmailChange from "@/pages/ConfirmEmailChange";
 import { Loader } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import NoCompany from "@/components/NoCompany";
 import { usePublicPageMeta } from "@/lib/pageTitle";
 
 const Landing = lazy(() => import("@/pages/Landing"));
@@ -68,7 +69,11 @@ function HomeGate() {
         </Suspense>
       );
     }
-    return <Navigate to="/login" replace />;
+    return <Navigate to={`/login?next=${encodeURIComponent(pathname)}`} replace />;
+  }
+  // Без компании рабочие страницы недоступны (сервер отвечает 401) — объясняем, а не уходим в цикл перезагрузок.
+  if (!me.current_tenant && !(me.is_platform_admin && pathname.startsWith("/admin"))) {
+    return <NoCompany />;
   }
   return <Layout />;
 }

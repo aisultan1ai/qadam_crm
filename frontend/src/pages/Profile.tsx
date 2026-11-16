@@ -422,7 +422,6 @@ function EditProfileModal({
         if (emailChanged) body.email = form.email.trim();
         if (wantsPassword) body.new_password = form.new_password;
         if (requiresCurrent) body.current_password = form.current_password;
-        if (form.position !== (user.position ?? "")) body.position = form.position;
         if (form.phone !== (user.phone ?? "")) body.phone = form.phone;
         if (form.bio !== (user.bio ?? "")) body.bio = form.bio;
         if (form.birthday !== (user.birthday ?? "")) body.birthday = form.birthday || null;
@@ -467,7 +466,14 @@ function EditProfileModal({
           )}
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Должность</span>
-            <input className="input" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+            {isSelf ? (
+              // Должность и отдел задаёт компания: Команда → Пользователи → карточка сотрудника.
+              <div className="input flex items-center text-neutral-500" title="Должность задаёт администратор компании">
+                {user.position || "Не указана"} · задаёт администратор компании
+              </div>
+            ) : (
+              <input className="input" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+            )}
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Телефон</span>

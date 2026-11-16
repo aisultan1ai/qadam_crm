@@ -1,6 +1,6 @@
 /** Разделы настроек: общие для панели модуля в каркасе и для маршрутов страницы настроек. */
 import {
-  BookText, CalendarClock, Clock, CreditCard, Hash, Link2, Mail, MessageCircle, Palette, Puzzle, Save, Shield, UserPlus, Zap,
+  BookText, CalendarClock, Clock, CreditCard, Hash, Link2, Mail, MessageCircle, Palette, Puzzle, Save, Shield, Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -16,7 +16,6 @@ export type SettingsTab = {
 
 export const SETTINGS_TABS: SettingsTab[] = [
   { to: "roles", label: "Роли и права", icon: Save, perm: "roles.manage" },
-  { to: "team", label: "Команда", icon: UserPlus, perm: "users.create" },
   { to: "forms", label: "Формы захвата", icon: Zap, perm: "leads.manage_forms" },
   { to: "manager-availability", label: "Расписание менеджеров", icon: Clock, perm: "leads.view" },
   { to: "messengers", label: "Открытые линии", icon: MessageCircle, perm: "messengers.manage" },

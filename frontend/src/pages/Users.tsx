@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Route, Routes, Navigate } from "react-router-dom";
+import { NavLink, Route, Routes, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import clsx from "clsx";
 import { api, extractApiError } from "@/api/client";
-import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers } from "lucide-react";
+import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers, UserPlus } from "lucide-react";
 import type { User, Role, Department, Page } from "@/types";
 import { Avatar, Loader, Modal, FieldError, FormError, EmptyState } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
@@ -16,12 +16,17 @@ import { departmentSchema, type DepartmentForm, userCreateSchema, userUpdateSche
 import { useAuth } from "@/store/auth";
 
 import { SearchInput } from "@/components/page";
+import InvitationsPanel from "./users/Invitations";
 const TABS = [
   { to: "list", label: "Сотрудники", icon: UsersIcon },
+  { to: "invitations", label: "Приглашения", icon: UserPlus, invite: true },
   { to: "departments", label: "Отделы", icon: Layers },
 ];
 
 export default function Users() {
+  const { can, me } = useAuth();
+  // Приглашать может тот, кто создаёт пользователей, и владелец компании (как и было в настройках).
+  const canInvite = can("users.create") || !!me?.current_tenant?.is_owner;
   return (
     <div className="space-y-5">
       <div className="page-header">
@@ -30,7 +35,7 @@ export default function Users() {
           <h1 className="page-title">Пользователи</h1>
         </div>
         <nav className="flex gap-1 card p-1">
-          {TABS.map((t) => (
+          {TABS.filter((t) => !t.invite || canInvite).map((t) => (
             <NavLink
               key={t.to}
               to={t.to}
@@ -53,6 +58,7 @@ export default function Users() {
       <Routes>
         <Route index element={<Navigate to="list" replace />} />
         <Route path="list" element={<UsersList />} />
+        <Route path="invitations" element={canInvite ? <InvitationsPanel /> : <Navigate to="../list" replace />} />
         <Route path="departments" element={<DepartmentsView />} />
       </Routes>
     </div>
@@ -61,6 +67,7 @@ export default function Users() {
 
 function UsersList() {
   const { can } = useAuth();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const confirm = useConfirm();
   const toast = useToast();
@@ -99,9 +106,15 @@ function UsersList() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SearchInput value={qLocal} onChange={setQLocal} placeholder="Поиск по имени или email" />
         {can("users.create") && (
-          <Button variant="primary" onClick={() => setOpenForm({ mode: "create" })}>
-            <Plus size={16} /> Новый пользователь
-          </Button>
+          <div className="flex gap-2">
+            {/* Обычный путь — приглашение: человек сам задаёт пароль. Ручное создание — для тех, у кого нет почты. */}
+            <Button variant="secondary" onClick={() => setOpenForm({ mode: "create" })}>
+              <Plus size={16} /> Создать вручную
+            </Button>
+            <Button variant="primary" onClick={() => nav("../invitations")}>
+              <UserPlus size={16} /> Пригласить
+            </Button>
+          </div>
         )}
       </div>
 

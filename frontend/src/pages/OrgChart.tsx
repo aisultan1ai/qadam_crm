@@ -232,7 +232,7 @@ export default function OrgChart() {
       {error ? (
         <EmptyState icon={<Users2 size={20} />} title="Не удалось загрузить оргструктуру" description="Обновите страницу или попробуйте позже." />
       ) : !data || data.users.length === 0 ? (
-        <EmptyState icon={<Users2 size={20} />} title="Сотрудников пока нет" description="Пригласите команду в Настройки → Команда." />
+        <EmptyState icon={<Users2 size={20} />} title="Сотрудников пока нет" description="Пригласите команду: Команда → Пользователи → «Пригласить»." />
       ) : (
         <>
           {/* Подсказка: что это и как с этим работать */}

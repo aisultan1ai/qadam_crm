@@ -20,7 +20,8 @@ type InviteInfo = {
 };
 
 const signupSchema = z.object({
-  full_name: z.string().trim().min(2, "Минимум 2 символа").max(200),
+  first_name: z.string().trim().min(2, "Минимум 2 символа").max(100),
+  last_name: z.string().trim().min(2, "Минимум 2 символа").max(100),
   password: passwordSchema,
 });
 type SignupForm = z.infer<typeof signupSchema>;
@@ -47,7 +48,7 @@ export default function Invite() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<SignupForm>({ resolver: zodResolver(signupSchema), defaultValues: { full_name: "", password: "" } });
+  } = useForm<SignupForm>({ resolver: zodResolver(signupSchema), defaultValues: { first_name: "", last_name: "", password: "" } });
 
   useEffect(() => {
     let cancelled = false;
@@ -116,10 +117,19 @@ export default function Invite() {
   if (info.requires_signup) {
     return (
       <AuthLayout title="Присоединиться к команде" subtitle={subtitle}>
-        <form onSubmit={handleSubmit((d) => accept({ full_name: d.full_name, password: d.password }))} className="space-y-4" noValidate>
-          <FormField label="Ваше имя" htmlFor="inv-name" error={errors.full_name?.message}>
-            <input id="inv-name" className="input input-lg" type="text" autoComplete="name" autoFocus {...register("full_name")} />
-          </FormField>
+        <form
+          onSubmit={handleSubmit((d) => accept({ full_name: `${d.first_name.trim()} ${d.last_name.trim()}`, password: d.password }))}
+          className="space-y-4"
+          noValidate
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Имя" htmlFor="inv-first" error={errors.first_name?.message}>
+              <input id="inv-first" className="input input-lg" type="text" autoComplete="given-name" autoFocus {...register("first_name")} />
+            </FormField>
+            <FormField label="Фамилия" htmlFor="inv-last" error={errors.last_name?.message}>
+              <input id="inv-last" className="input input-lg" type="text" autoComplete="family-name" {...register("last_name")} />
+            </FormField>
+          </div>
           <FormField label="Придумайте пароль" htmlFor="inv-pass" error={errors.password?.message}>
             <input id="inv-pass" className="input input-lg" type="password" autoComplete="new-password" {...register("password")} />
           </FormField>
@@ -147,6 +157,12 @@ export default function Invite() {
         {signedInAsInvitee ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-300">Вы вошли как {info.email}. Компания появится в переключателе компаний.</p>
         ) : (
+          <>
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">
+            Этот email уже зарегистрирован в Qadam. Подтвердите, что это вы: введите пароль от аккаунта или{" "}
+            <Link to={`/login?next=${encodeURIComponent(`/invite/${token}`)}`} className="link font-medium">войдите</Link>{" "}
+            и вернитесь сюда — приглашение примется одной кнопкой.
+          </p>
           <FormField
             label={
               <span className="flex items-center justify-between">
@@ -166,6 +182,7 @@ export default function Invite() {
               onChange={(e) => setExistingPassword(e.target.value)}
             />
           </FormField>
+          </>
         )}
         {serverError && <FormError msg={serverError} />}
         <Button

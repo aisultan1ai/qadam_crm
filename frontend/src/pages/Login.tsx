@@ -1,4 +1,4 @@
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -12,6 +12,10 @@ import { AuthLayout } from "@/components/AuthLayout";
 export default function Login() {
   const { login, me, error } = useAuth();
   const nav = useNavigate();
+  const [sp] = useSearchParams();
+  // Куда вернуть после входа (например, обратно на приглашение). Только свои пути, без «//чужой-сайт».
+  const rawNext = sp.get("next") || "/";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
 
   const {
     register,
@@ -23,12 +27,12 @@ export default function Login() {
     mode: "onBlur",
   });
 
-  if (me) return <Navigate to="/" replace />;
+  if (me) return <Navigate to={next} replace />;
 
   const submit = async (data: LoginForm) => {
     try {
       await login(data.email, data.password);
-      nav("/", { replace: true });
+      nav(next, { replace: true });
     } catch {
       // текст ошибки приходит через useAuth().error
     }

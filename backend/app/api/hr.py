@@ -607,7 +607,7 @@ def org_chart(
     db: Session = Depends(get_db),
 ):
     users = (
-        db.query(User, TenantMembership.department_id, TenantMembership.manager_id)
+        db.query(User, TenantMembership.department_id, TenantMembership.manager_id, TenantMembership.position)
         .join(TenantMembership, TenantMembership.user_id == User.id)
         .filter(TenantMembership.tenant_id == ctx.tenant.id, User.is_active == True)  # noqa: E712
         .order_by(User.name)
@@ -623,9 +623,9 @@ def org_chart(
         users=[
             OrgChartUser(
                 id=u.id, name=u.name, email=u.email, avatar_url=u.avatar_url,
-                position=u.position, department_id=dep_id, manager_id=mgr_id,
+                position=pos, department_id=dep_id, manager_id=mgr_id,
             )
-            for u, dep_id, mgr_id in users
+            for u, dep_id, mgr_id, pos in users
         ],
         departments=[
             OrgChartDepartment(id=d.id, name=d.name, parent_id=d.parent_id, head_user_id=d.head_user_id)
@@ -648,7 +648,7 @@ def upcoming_birthdays(
     horizon = today + timedelta(days=days_ahead)
 
     users = (
-        db.query(User, Department.name.label("dep_name"))
+        db.query(User, Department.name.label("dep_name"), TenantMembership.position)
         .join(TenantMembership, TenantMembership.user_id == User.id)
         .outerjoin(Department, Department.id == TenantMembership.department_id)
         .filter(
@@ -660,7 +660,7 @@ def upcoming_birthdays(
     )
 
     result: list[BirthdayUser] = []
-    for u, dep_name in users:
+    for u, dep_name, pos in users:
         bday = u.birthday
         # Ближайший ДР в этом или следующем году.
         this_year = bday.replace(year=today.year)
@@ -672,7 +672,7 @@ def upcoming_birthdays(
         result.append(
             BirthdayUser(
                 id=u.id, name=u.name, avatar_url=u.avatar_url,
-                position=u.position, department=dep_name,
+                position=pos, department=dep_name,
                 birthday=bday, days_until=days,
             )
         )

@@ -607,6 +607,7 @@ def me(
 ):
     current_tenant = None
     current_tenant_id: int | None = None
+    member_position: str | None = None
     current_is_owner = False
     # Читаем tid из access-cookie/Bearer напрямую, чтобы не тащить get_current_context в /me
     tok = request.cookies.get(settings.AUTH_COOKIE_NAME)
@@ -633,6 +634,7 @@ def me(
                     t = membership.tenant
                     current_tenant_id = t.id
                     current_is_owner = membership.is_owner
+                    member_position = membership.position
                     current_tenant = {
                         "id": t.id,
                         "name": t.name,
@@ -664,6 +666,8 @@ def me(
     data = MeOut.model_validate(user).model_copy(update={
         "permissions": perms,
         "current_tenant": current_tenant,
+        # Должность — своя в каждой компании (tenant_members.position).
+        "position": member_position,
     })
     return data
 

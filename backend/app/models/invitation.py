@@ -24,6 +24,11 @@ class Invitation(Base):
     accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Приглашённый станет владельцем компании (компанию создал платформенный админ).
     make_owner: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Куда человек попадёт после принятия — задаёт приглашающий.
+    department_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL"), nullable=True,
+    )
+    position: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship("Tenant", lazy="joined")  # type: ignore  # noqa: F821
