@@ -266,6 +266,9 @@ def accept_invitation(
             name=payload.full_name.strip(),
             password_hash=hash_password(payload.password),
             is_active=True,
+            # Ссылка-приглашение пришла на этот адрес — переход по ней и есть подтверждение почты.
+            email_verified=True,
+            email_verification_token=None,
         )
         db.add(user)
         db.flush()
