@@ -159,9 +159,7 @@ def list_tasks(
 @router.get("/{task_id}", response_model=TaskOut)
 def get_task(task_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     user = ctx.user
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Задача не найдена")
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     if not _user_can_view_task(user, task):
         raise HTTPException(403, "Нет доступа")
     return task
@@ -240,9 +238,7 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
 @router.patch("/{task_id}", response_model=TaskOut)
 def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     user = ctx.user
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Задача не найдена")
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     if not user_has(user, ["tasks.update"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нет права редактировать")
     if not _user_can_view_task(user, task):
@@ -444,9 +440,7 @@ def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("t
 @router.delete("/{task_id}", response_model=Message)
 def delete_task(task_id: int, ctx: TenantContext = Depends(require("tasks.delete")), db: Session = Depends(get_db)):
     user = ctx.user
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Задача не найдена")
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     log_action(db, tenant_id=ctx.tenant.id, user_id=user.id, action="delete", entity="task", entity_id=task.id, detail=task.title)
     db.delete(task)
     db.commit()
@@ -458,9 +452,7 @@ def delete_task(task_id: int, ctx: TenantContext = Depends(require("tasks.delete
 
 @router.post("/{task_id}/checklist", response_model=ChecklistItemOut, status_code=201)
 def add_checklist(task_id: int, payload: ChecklistItemCreate, ctx: TenantContext = Depends(require("tasks.update")), db: Session = Depends(get_db)):
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Задача не найдена")
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     item = ChecklistItem(task_id=task.id, text=payload.text, done=payload.done)
     db.add(item)
     db.commit()
@@ -470,9 +462,7 @@ def add_checklist(task_id: int, payload: ChecklistItemCreate, ctx: TenantContext
 
 @router.patch("/{task_id}/checklist/{item_id}", response_model=ChecklistItemOut)
 def update_checklist(task_id: int, item_id: int, payload: ChecklistItemCreate, ctx: TenantContext = Depends(require("tasks.update")), db: Session = Depends(get_db)):
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Задача не найдена")
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     item = db.get(ChecklistItem, item_id)
     if not item or item.task_id != task_id:
         raise HTTPException(404, "Пункт не найден")
@@ -485,9 +475,7 @@ def update_checklist(task_id: int, item_id: int, payload: ChecklistItemCreate, c
 
 @router.delete("/{task_id}/checklist/{item_id}", response_model=Message)
 def delete_checklist(task_id: int, item_id: int, ctx: TenantContext = Depends(require("tasks.update")), db: Session = Depends(get_db)):
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Задача не найдена")
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     item = db.get(ChecklistItem, item_id)
     if not item or item.task_id != task_id:
         raise HTTPException(404, "Пункт не найден")
@@ -500,7 +488,11 @@ def delete_checklist(task_id: int, item_id: int, ctx: TenantContext = Depends(re
 # Planfix-роли: исполнители / аудиторы / участники (bulk replace)
 # ---------------------------------------------------------------------------
 
-def _get_task_or_404(db: Session, tenant_id: int, task_id: int) -> Task:
+def _get_task_or_404(db: Session, tenant_id: int, task_id: int, user: Optional[User] = None) -> Task:
+    """Задача компании; если передан user — ещё и видимая ему (иначе 404)."""
+    if user is not None:
+        from ..core.task_scope import require_visible_task
+        return require_visible_task(db, user, tenant_id, task_id)
     task = db.get(Task, task_id)
     if not task or task.tenant_id != tenant_id:
         raise HTTPException(404, "Задача не найдена")
@@ -526,7 +518,7 @@ def _replace_role(
     user = ctx.user
     if not user_has(user, ["tasks.assign"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нет права управлять ролями задачи")
-    task = _get_task_or_404(db, ctx.tenant.id, task_id)
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, user)
     users = _load_users_or_400(db, ctx.tenant.id, payload.user_ids)
 
     before = {u.id for u in getattr(task, role)}
@@ -599,7 +591,7 @@ def set_participants(task_id: int, payload: TaskUserRefs, ctx: TenantContext = D
 
 @router.get("/{task_id}/reminders", response_model=list[TaskReminderOut])
 def list_reminders(task_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    task = _get_task_or_404(db, ctx.tenant.id, task_id)
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     if not _user_can_view_task(ctx.user, task):
         raise HTTPException(403, "Нет доступа")
     return task.reminders
@@ -616,7 +608,7 @@ def add_reminder(
         raise HTTPException(400, "kind должен быть before_deadline или before_start")
     if payload.offset_minutes < 0 or payload.offset_minutes > 60 * 24 * 365:
         raise HTTPException(400, "offset_minutes должен быть 0..525600 (год)")
-    task = _get_task_or_404(db, ctx.tenant.id, task_id)
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     # Уникальность (task_id, kind, offset_minutes) обеспечивает индекс — обрабатываем IntegrityError.
     existing = next(
         (r for r in task.reminders if r.kind == payload.kind and r.offset_minutes == payload.offset_minutes),
@@ -638,7 +630,7 @@ def delete_reminder(
     ctx: TenantContext = Depends(require("tasks.update")),
     db: Session = Depends(get_db),
 ):
-    task = _get_task_or_404(db, ctx.tenant.id, task_id)
+    task = _get_task_or_404(db, ctx.tenant.id, task_id, ctx.user)
     r = db.get(TaskReminder, reminder_id)
     if not r or r.task_id != task.id:
         raise HTTPException(404, "Напоминание не найдено")

@@ -92,3 +92,13 @@ def can_view_task(user: User, task: Task, db: Optional[Session] = None) -> bool:
     if clause is None:
         return True
     return db.query(Task.id).filter(Task.id == task.id, clause).first() is not None
+
+
+def require_visible_task(db: Session, user: User, tenant_id: int, task_id: int) -> Task:
+    """Задача этой компании, которую пользователь видит. Иначе 404 (не раскрываем, что она существует).
+    Нужна везде, где к задаче обращаются по номеру: комментарии, файлы, чек-лист, роли, напоминания."""
+    from fastapi import HTTPException
+    task = db.get(Task, task_id)
+    if not task or task.tenant_id != tenant_id or not can_view_task(user, task, db):
+        raise HTTPException(404, "Задача не найдена")
+    return task

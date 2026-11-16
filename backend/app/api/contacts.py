@@ -5,6 +5,7 @@ from typing import Optional
 
 from ..database import get_db
 from ..models import Contact, Company
+from ..core.tenant_refs import ensure_member, ensure_owned
 from ..schemas.contact import (
     ContactOut, ContactCreate, ContactUpdate,
     CompanyOut, CompanyCreate, CompanyUpdate,
@@ -70,6 +71,7 @@ def create_company(
     ctx: TenantContext = Depends(require("contacts.create")),
     db: Session = Depends(get_db),
 ):
+    ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
     company = Company(
         tenant_id=ctx.tenant.id,
         name=payload.name,
@@ -108,6 +110,7 @@ def update_company(
     c = db.get(Company, company_id)
     if not c or c.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Компания не найдена")
+    ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
     for field in ("name", "industry", "website", "phone", "email", "tax_id", "address", "note", "owner_id"):
         v = getattr(payload, field)
         if v is not None:
@@ -187,6 +190,7 @@ def create_contact(
         if not cp or cp.tenant_id != ctx.tenant.id:
             raise HTTPException(400, "Компания не найдена")
 
+    ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
     contact = Contact(
         tenant_id=ctx.tenant.id,
         first_name=payload.first_name,
@@ -229,6 +233,7 @@ def update_contact(
         cp = db.get(Company, payload.company_id)
         if not cp or cp.tenant_id != ctx.tenant.id:
             raise HTTPException(400, "Компания не найдена")
+    ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
     for field in ("first_name", "last_name", "email", "phone", "position", "note", "source", "company_id", "owner_id"):
         v = getattr(payload, field)
         if v is not None:
@@ -275,6 +280,8 @@ def bulk_update_contacts(
 ):
     if not payload.ids:
         return Message(message="Нет контактов")
+    ensure_member(db, ctx.tenant.id, payload.patch.owner_id, "Ответственный")
+    ensure_owned(db, Company, payload.patch.company_id, ctx.tenant.id, "Компания")
     rows = db.query(Contact).filter(Contact.tenant_id == ctx.tenant.id, Contact.id.in_(payload.ids)).all()
     for r in rows:
         if payload.patch.owner_id is not None:
@@ -312,6 +319,7 @@ def bulk_update_companies(
     ctx: TenantContext = Depends(require("contacts.update")),
     db: Session = Depends(get_db),
 ):
+    ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
     rows = db.query(Company).filter(Company.tenant_id == ctx.tenant.id, Company.id.in_(payload.ids)).all()
     for r in rows:
         if payload.owner_id is not None:

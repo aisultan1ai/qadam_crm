@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict
 
 from ..database import get_db
-from ..models import Call, Contact
+from ..models import Call, Contact, Deal
+from ..core.tenant_refs import ensure_owned
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, get_current_context, log_action
 
@@ -79,6 +80,8 @@ def create_call(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
+    ensure_owned(db, Contact, payload.contact_id, ctx.tenant.id, "Контакт")
+    ensure_owned(db, Deal, payload.deal_id, ctx.tenant.id, "Сделка")
     row = Call(
         tenant_id=ctx.tenant.id,
         provider="manual",

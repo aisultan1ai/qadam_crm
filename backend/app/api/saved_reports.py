@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ..database import get_db
 from ..models import SavedReport, ReportGroup
+from ..core.tenant_refs import ensure_owned
 from ..schemas.common import Message
 from .deps import TenantContext, get_current_context
 
@@ -108,6 +109,7 @@ def list_saved(
 
 @router.post("/saved", response_model=SavedOut, status_code=201)
 def create_saved(payload: SavedCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    ensure_owned(db, ReportGroup, payload.group_id, ctx.tenant.id, "Группа отчётов")
     row = SavedReport(
         tenant_id=ctx.tenant.id,
         owner_id=ctx.user.id,
@@ -131,6 +133,7 @@ def update_saved(sid: int, payload: SavedUpdate, ctx: TenantContext = Depends(ge
         raise HTTPException(404, "Отчёт не найден")
     if row.owner_id != ctx.user.id:
         raise HTTPException(403, "Только владелец может редактировать")
+    ensure_owned(db, ReportGroup, payload.group_id, ctx.tenant.id, "Группа отчётов")
     for f in ("name", "config", "group_id", "schedule_cron", "email_to", "is_shared"):
         v = getattr(payload, f)
         if v is not None:

@@ -21,6 +21,7 @@ from ..models import (
     EventKind, EventParticipant, MeetingProvider, ParticipantStatus, Tenant, TenantMembership,
     User,
 )
+from ..core.tenant_refs import ensure_owned
 from ..schemas.common import Message
 from ..services.booking.slots import available_slots, pick_assignee
 from .deps import TenantContext, get_current_context, log_action, require
@@ -202,6 +203,7 @@ def create_page(
     except ValueError:
         provider = MeetingProvider.none
 
+    ensure_owned(db, BookingTeam, payload.team_id, ctx.tenant.id, "Команда")
     p = BookingPage(
         tenant_id=ctx.tenant.id,
         owner_user_id=ctx.user.id if not payload.team_id else None,
@@ -261,6 +263,13 @@ def patch_page(
         except ValueError:
             pass
         del data["meeting_provider"]
+    if data.get("calendar_id"):
+        # Как при создании: календарь этой компании и свой (иначе записи клиентов уходили бы в чужой).
+        cal = db.get(Calendar, data["calendar_id"])
+        if not cal or cal.tenant_id != ctx.tenant.id:
+            raise HTTPException(404, "Календарь не найден")
+        if cal.owner_id != ctx.user.id:
+            raise HTTPException(403, "Календарь чужой")
     for k, v in data.items():
         setattr(p, k, v)
     db.commit()

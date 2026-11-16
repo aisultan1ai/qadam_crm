@@ -47,9 +47,18 @@ def export_tasks_excel(
     status: Optional[str] = None,
     project_id: Optional[int] = None,
     assignee_id: Optional[int] = None,
+    user_id: Optional[int] = None,
 ) -> dict:
     with SessionLocal() as db:
         q = select(Task).where(Task.tenant_id == tenant_id)
+        if user_id is not None:
+            from ..core.task_scope import visible_tasks_clause
+            requester = db.get(User, user_id)
+            clause = visible_tasks_clause(db, requester, tenant_id) if requester else None
+            if requester is None:
+                q = q.where(Task.id == -1)
+            elif clause is not None:
+                q = q.where(clause)
         if status:
             q = q.where(Task.status == TaskStatus(status))
         if project_id:

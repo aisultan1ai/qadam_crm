@@ -109,17 +109,16 @@ def _validate_and_save(file: UploadFile, dest: Path, max_bytes: int) -> int:
     return written
 
 
-def _load_task_in_tenant(db: Session, task_id: int, tenant_id: int) -> Task:
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != tenant_id:
-        raise HTTPException(404, "Задача не найдена")
-    return task
+def _load_task_in_tenant(db: Session, task_id: int, tenant_id: int, user: User) -> Task:
+    """Задача этой компании, которую пользователь видит (свои / отдел / все)."""
+    from ..core.task_scope import require_visible_task
+    return require_visible_task(db, user, tenant_id, task_id)
 
 
 @router.post("", response_model=AttachmentOut, status_code=201)
 def upload(task_id: int, file: UploadFile = File(...), ctx: TenantContext = Depends(require("files.upload")), db: Session = Depends(get_db)):
     user = ctx.user
-    task = _load_task_in_tenant(db, task_id, ctx.tenant.id)
+    task = _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     # Грубая предварительная проверка (текущий usage без нового файла).
     # После записи ниже — ещё раз строгая проверка с реальным размером.
     check_storage_limit(db, ctx.tenant, additional_bytes=0)
@@ -180,6 +179,7 @@ def download(task_id: int, attachment_id: int, ctx: TenantContext = Depends(requ
     att = db.get(Attachment, attachment_id)
     if not att or att.tenant_id != ctx.tenant.id or att.task_id != task_id:
         raise HTTPException(404, "Файл не найден")
+    _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     path = _resolve_attachment_path(att)
     if not path.exists():
         raise HTTPException(404, "Файл отсутствует на диске")
@@ -192,6 +192,7 @@ def remove(task_id: int, attachment_id: int, ctx: TenantContext = Depends(requir
     att = db.get(Attachment, attachment_id)
     if not att or att.tenant_id != ctx.tenant.id or att.task_id != task_id:
         raise HTTPException(404, "Файл не найден")
+    _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     path = _resolve_attachment_path(att)
     if path.exists():
         try:

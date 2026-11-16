@@ -24,6 +24,7 @@ from ..services.lead_router import pick_assignee
 from ..database import get_db
 from ..models import LeadForm, TenantLead, Tenant, Task, User
 from ..models.task import TaskStatus, TaskPriority
+from ..core.tenant_refs import ensure_member
 from ..schemas.common import Message
 from ..tasks.email import send_notification_email
 from .deps import TenantContext, get_current_context, log_action, require
@@ -286,6 +287,7 @@ def create_form(
     check_feature(db, ctx.tenant, "lead_forms")
     slug = payload.slug.strip() if payload.slug else payload.name
     slug = _unique_form_slug(db, ctx.tenant.id, slug)
+    ensure_member(db, ctx.tenant.id, payload.default_assignee_id, "Ответственный по умолчанию")
     form = LeadForm(
         tenant_id=ctx.tenant.id,
         name=payload.name.strip(),
@@ -332,6 +334,7 @@ def update_form(
         raise HTTPException(404, "Форма не найдена")
 
     data = payload.model_dump(exclude_unset=True)
+    ensure_member(db, ctx.tenant.id, data.get("default_assignee_id"), "Ответственный по умолчанию")
     if "fields_config" in data and data["fields_config"] is not None:
         data["fields_config"] = [f if isinstance(f, dict) else f.model_dump() for f in data["fields_config"]]
     for k, v in data.items():

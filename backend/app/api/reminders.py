@@ -68,6 +68,9 @@ def create_reminder(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
+    if payload.target_type == "task" and payload.target_id:
+        from ..core.task_scope import require_visible_task
+        require_visible_task(db, ctx.user, ctx.tenant.id, payload.target_id)
     row = Reminder(
         tenant_id=ctx.tenant.id,
         user_id=ctx.user.id,

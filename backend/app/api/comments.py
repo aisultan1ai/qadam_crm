@@ -21,16 +21,15 @@ MAX_EMOJI_LEN = 8
 MENTION_RE = re.compile(r"@([A-Za-z0-9_.\-]+)")
 
 
-def _load_task_in_tenant(db: Session, task_id: int, tenant_id: int) -> Task:
-    task = db.get(Task, task_id)
-    if not task or task.tenant_id != tenant_id:
-        raise HTTPException(404, "Задача не найдена")
-    return task
+def _load_task_in_tenant(db: Session, task_id: int, tenant_id: int, user: User) -> Task:
+    """Задача этой компании, которую пользователь видит (свои / отдел / все)."""
+    from ..core.task_scope import require_visible_task
+    return require_visible_task(db, user, tenant_id, task_id)
 
 
 @router.get("", response_model=List[CommentOut])
 def list_comments(task_id: int, ctx: TenantContext = Depends(require("comments.view")), db: Session = Depends(get_db)):
-    task = _load_task_in_tenant(db, task_id, ctx.tenant.id)
+    task = _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     # comments уже загружены через relationship; фильтр по task достаточен,
     # т.к. tenant проверен на task.
     return task.comments
@@ -39,7 +38,7 @@ def list_comments(task_id: int, ctx: TenantContext = Depends(require("comments.v
 @router.post("", response_model=CommentOut, status_code=201)
 def create_comment(task_id: int, payload: CommentCreate, ctx: TenantContext = Depends(require("comments.create")), db: Session = Depends(get_db)):
     user = ctx.user
-    task = _load_task_in_tenant(db, task_id, ctx.tenant.id)
+    task = _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     comment = Comment(tenant_id=ctx.tenant.id, task_id=task.id, author_id=user.id, body=payload.body)
     db.add(comment)
 
@@ -112,6 +111,7 @@ def update_comment(task_id: int, comment_id: int, payload: CommentCreate, ctx: T
     comment = db.get(Comment, comment_id)
     if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
         raise HTTPException(404, "Комментарий не найден")
+    _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     is_own = comment.author_id == user.id
     can_edit_own = is_own and user_has(user, ["comments.update_own"], tenant_id=ctx.tenant.id)
     can_edit_any = user_has(user, ["comments.update_any"], tenant_id=ctx.tenant.id)
@@ -134,6 +134,7 @@ def delete_comment(task_id: int, comment_id: int, ctx: TenantContext = Depends(r
     comment = db.get(Comment, comment_id)
     if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
         raise HTTPException(404, "Комментарий не найден")
+    _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     db.delete(comment)
     db.commit()
     return Message(message="Комментарий удалён")
@@ -160,6 +161,7 @@ def toggle_reaction(
     comment = db.get(Comment, comment_id)
     if not comment or comment.tenant_id != ctx.tenant.id or comment.task_id != task_id:
         raise HTTPException(404, "Комментарий не найден")
+    _load_task_in_tenant(db, task_id, ctx.tenant.id, ctx.user)
     e = _validate_emoji(emoji)
 
     existing = db.query(CommentReaction).filter(

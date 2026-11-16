@@ -35,6 +35,8 @@ def start_tasks_export(
         status=status_filter,
         project_id=project_id,
         assignee_id=assignee_id,
+        # Выгружаем только задачи, которые видит сам пользователь (свои / отдел / все).
+        user_id=ctx.user.id,
     )
     return {"job_id": async_result.id, "state": async_result.state}
 

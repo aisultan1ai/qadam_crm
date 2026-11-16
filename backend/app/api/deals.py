@@ -6,8 +6,9 @@ from datetime import datetime, date, timezone
 from pydantic import BaseModel, ConfigDict
 
 from ..database import get_db
-from ..models import Deal, DealStage, DealStatus
+from ..models import Company, Contact, Deal, DealStage, DealStatus
 from ..models.deal import STAGE_PROBABILITY
+from ..core.tenant_refs import ensure_member, ensure_owned
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, require, log_action
 
@@ -155,6 +156,9 @@ def create_deal(
     elif payload.stage == DealStage.lost:
         status_v = DealStatus.lost.value
 
+    ensure_owned(db, Contact, payload.contact_id, ctx.tenant.id, "Контакт")
+    ensure_owned(db, Company, payload.company_id, ctx.tenant.id, "Компания")
+    ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
     row = Deal(
         tenant_id=ctx.tenant.id,
         title=payload.title,
@@ -189,6 +193,9 @@ def update_deal(
         raise HTTPException(404, "Сделка не найдена")
 
     changed_stage = payload.stage is not None and payload.stage.value != row.stage
+    ensure_owned(db, Contact, payload.contact_id, ctx.tenant.id, "Контакт")
+    ensure_owned(db, Company, payload.company_id, ctx.tenant.id, "Компания")
+    ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
 
     for f in ("title", "amount_cents", "currency", "close_date", "contact_id", "company_id", "owner_id", "note", "order_index"):
         v = getattr(payload, f)

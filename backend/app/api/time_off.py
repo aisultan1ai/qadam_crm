@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from ..database import get_db
 from ..models import TimeOff, TimeOffKind, TimeOffStatus
 from ..core.permissions import user_has
+from ..core.tenant_refs import ensure_member
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, get_current_context, log_action
 
@@ -89,6 +90,7 @@ def create_timeoff(
     target_user_id = payload.user_id or ctx.user.id
     if target_user_id != ctx.user.id and not user_has(ctx.user, ["hr.manage_goals", "users.view"], tenant_id=ctx.tenant.id):
         raise HTTPException(403, "Нельзя оформить отпуск за другого сотрудника")
+    ensure_member(db, ctx.tenant.id, target_user_id, "Сотрудник")
 
     row = TimeOff(
         tenant_id=ctx.tenant.id,
