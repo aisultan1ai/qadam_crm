@@ -15,6 +15,7 @@ import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
+import { fetchAllUsers } from "@/lib/users";
 
 const locales = { ru };
 const localizer = dateFnsLocalizer({
@@ -469,7 +470,7 @@ function EventEditor({
 
   const { data: users } = useQuery({
     queryKey: ["users-lite-for-calendar"],
-    queryFn: async () => (await api.get<{ items: { id: number; name: string; email: string }[] }>("/api/users", { params: { per_page: 200 } })).data.items,
+    queryFn: async () => fetchAllUsers<{ id: number; name: string; email: string }>(),
     staleTime: 60_000,
   });
 

@@ -9,7 +9,8 @@ from ..models.task import TaskStatus
 from ..core.cache import make_key, get_or_set_json
 from ..core.permissions import user_has
 from .deps import TenantContext, require, get_current_context
-from ..core.task_scope import member_department_id, task_scope, visible_tasks_clause
+from ..core.departments import member_department_ids, users_in_departments
+from ..core.task_scope import task_scope, visible_tasks_clause
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -24,7 +25,8 @@ def dashboard(ctx: TenantContext = Depends(get_current_context), db: Session = D
     scope = task_scope(db, ctx.user, tenant_id)
     visible = visible_tasks_clause(db, ctx.user, tenant_id)
     scope_uid = None if scope == "all" else ctx.user.id
-    dep = member_department_id(db, tenant_id, ctx.user.id) if scope == "department" else None
+    deps = member_department_ids(db, tenant_id, ctx.user.id) if scope == "department" else []
+    dep = "-".join(map(str, deps)) or None
     key = make_key(tenant_id, "dashboard", "all" if scope == "all" else f"{scope}-u{ctx.user.id}-d{dep}")
 
     def _base_task_query():
@@ -97,8 +99,9 @@ def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: 
     # статистику. Иначе аналитика могла бы утечь чужую производительность.
     # Все сотрудники — для «все задачи»; руководителю с «задачи отдела» — его отдел; иначе — только сам.
     scope = task_scope(db, ctx.user, tenant_id)
-    dep = member_department_id(db, tenant_id, ctx.user.id) if scope == "department" else None
-    scope_uid = None if scope == "all" or dep else ctx.user.id
+    deps = member_department_ids(db, tenant_id, ctx.user.id) if scope == "department" else []
+    dep = "-".join(map(str, deps)) or None
+    scope_uid = None if scope == "all" or deps else ctx.user.id
     key = make_key(tenant_id, "employees", "all" if scope == "all" else f"{scope}-u{ctx.user.id}-d{dep}")
 
     def _compute():
@@ -124,8 +127,8 @@ def employees(ctx: TenantContext = Depends(require("analytics.employees")), db: 
         )
         if scope_uid is not None:
             q = q.filter(User.id == scope_uid)
-        elif dep:
-            q = q.filter(TenantMembership.department_id == dep)
+        elif deps:
+            q = q.filter(User.id.in_(users_in_departments(tenant_id, deps)))
         rows = q.all()
 
         result = []

@@ -19,6 +19,7 @@ import IntegrationsPage from "./Integrations";
 import Directories from "./Directories";
 import TaskStatuses from "./TaskStatuses";
 import { SETTINGS_TABS, settingsTabVisible } from "./settings/nav";
+import { fetchAllUsers } from "@/lib/users";
 
 export default function Settings() {
   const { can, me } = useAuth();
@@ -1032,8 +1033,7 @@ function LeadFormEditor({
   const { data: tenantUsers } = useQuery({
     queryKey: ["tenant-users-for-forms"],
     queryFn: async () =>
-      (await api.get<{ items: TenantUser[] }>("/api/users", { params: { per_page: 200 } }))
-        .data.items,
+      fetchAllUsers<TenantUser>(),
     staleTime: 60_000,
   });
 

@@ -37,6 +37,12 @@ class DepartmentCreate(BaseModel):
     name: str
     parent_id: Optional[int] = None
     head_user_id: Optional[int] = None
+    # Сразу добавить сотрудников в отдел (можно и потом — «Участники»).
+    member_ids: List[int] = []
+
+
+class DepartmentMembersIn(BaseModel):
+    user_ids: List[int]
 
 
 class DepartmentUpdate(BaseModel):
@@ -120,7 +126,8 @@ class UserOut(UserBase):
     is_platform_admin: bool = False
     email_verified: bool = True
     roles: List[RoleOut] = []
-    department: Optional[DepartmentOut] = None
+    department: Optional[DepartmentOut] = None  # основной отдел
+    departments: List[DepartmentOut] = []  # все отделы в текущей компании
     last_login_at: Optional[datetime] = None
     created_at: datetime
 

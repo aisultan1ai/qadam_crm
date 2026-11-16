@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..models import User, Role, Department, TenantMembership
+from ..models import User, Role, Department, DepartmentMember, TenantMembership
+from ..core.departments import add_to_department, remove_member_everywhere, set_department_members, set_primary_department, sync_primary
 from ..core.security import hash_password, verify_password
 from ..core.plans import check_user_limit
-from ..schemas.user import UserOut, UserCreate, UserUpdate, MeUpdate, DepartmentOut, DepartmentCreate, DepartmentUpdate
+from ..schemas.user import UserOut, UserCreate, UserUpdate, MeUpdate, DepartmentOut, DepartmentCreate, DepartmentUpdate, DepartmentMembersIn
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, require, get_current_user, get_current_context, log_action
 
@@ -77,9 +78,20 @@ def _users_out(db: Session, tenant_id: int, users: list[User]) -> list[UserOut]:
             TenantMembership.position,
         ).filter(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id.in_(ids))
     } if ids else {}
-    dep_ids = {d for d, _, _ in members.values() if d}
+    all_deps: dict[int, list[int]] = {}
+    if ids:
+        for uid, did in db.query(DepartmentMember.user_id, DepartmentMember.department_id).filter(
+            DepartmentMember.tenant_id == tenant_id, DepartmentMember.user_id.in_(ids),
+        ):
+            all_deps.setdefault(uid, []).append(did)
+    dep_ids = {d for d, _, _ in members.values() if d} | {d for ds in all_deps.values() for d in ds}
     deps = {d.id: d for d in db.query(Department).filter(Department.id.in_(dep_ids))} if dep_ids else {}
-    return [_member_view(user, tenant_id, *members.get(user.id, (None, None, None)), deps) for user in users]
+    out = []
+    for user in users:
+        view = _member_view(user, tenant_id, *members.get(user.id, (None, None, None)), deps)
+        mine = sorted((deps[d] for d in all_deps.get(user.id, []) if d in deps), key=lambda d: d.name.lower())
+        out.append(view.model_copy(update={"departments": [DepartmentOut.model_validate(d) for d in mine]}))
+    return out
 
 
 def _member_view(
@@ -98,15 +110,8 @@ def _member_view(
 
 
 def _set_member_department(db: Session, tenant_id: int, user_id: int, department_id: Optional[int]) -> None:
-    if department_id:
-        dep = db.get(Department, department_id)
-        if not dep or dep.tenant_id != tenant_id:
-            raise HTTPException(400, "Отдел не найден в этой компании")
-    m = db.query(TenantMembership).filter(
-        TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id,
-    ).first()
-    if m:
-        m.department_id = department_id or None
+    """Основной отдел из карточки сотрудника (он же попадает в список отделов человека)."""
+    set_primary_department(db, tenant_id, user_id, department_id or None)
 
 
 def _set_member_manager(db: Session, tenant_id: int, user_id: int, manager_id: Optional[int]) -> None:
@@ -221,6 +226,8 @@ def create_user(payload: UserCreate, ctx: TenantContext = Depends(require("users
         tenant_id=ctx.tenant.id, user_id=user.id, is_owner=False, department_id=payload.department_id or None,
         position=(getattr(payload, "position", None) or "").strip() or None,
     ))
+    db.flush()
+    add_to_department(db, ctx.tenant.id, user.id, payload.department_id or None)
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="create", entity="user", entity_id=user.id, detail=user.email)
     db.commit()
     db.refresh(user)
@@ -463,6 +470,7 @@ def delete_user(user_id: int, ctx: TenantContext = Depends(require("users.delete
         TenantMembership.tenant_id == ctx.tenant.id,
         TenantMembership.user_id == user.id,
     ).delete(synchronize_session=False)
+    remove_member_everywhere(db, ctx.tenant.id, user.id)
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="delete", entity="user", entity_id=user.id, detail=user.email)
     db.commit()
     return Message(message="Пользователь удалён из компании")
@@ -510,9 +518,27 @@ def create_department(payload: DepartmentCreate, ctx: TenantContext = Depends(re
         head_user_id=payload.head_user_id,
     )
     db.add(dep)
+    db.flush()
+    if payload.member_ids:
+        set_department_members(db, ctx.tenant.id, dep.id, payload.member_ids)
     db.commit()
     db.refresh(dep)
     return dep
+
+
+@router.put("/departments/{department_id}/members", response_model=Message)
+def put_department_members(
+    department_id: int,
+    payload: DepartmentMembersIn,
+    ctx: TenantContext = Depends(require("settings.dictionaries", "users.update")),
+    db: Session = Depends(get_db),
+):
+    """Состав отдела целиком: отмеченные — в отделе, остальные — нет. Человек может быть в нескольких отделах."""
+    set_department_members(db, ctx.tenant.id, department_id, payload.user_ids)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="department",
+               entity_id=department_id, detail=f"участники: {len(set(payload.user_ids))}")
+    db.commit()
+    return Message(message="Состав отдела сохранён")
 
 
 @router.patch("/departments/{department_id}", response_model=DepartmentOut)
@@ -553,6 +579,15 @@ def delete_department(department_id: int, ctx: TenantContext = Depends(require("
     dep = db.get(Department, department_id)
     if not dep or dep.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Отдел не найден")
+    affected = [uid for (uid,) in db.query(DepartmentMember.user_id).filter(DepartmentMember.department_id == dep.id)]
+    db.query(DepartmentMember).filter(DepartmentMember.department_id == dep.id).delete(synchronize_session=False)
+    # Основной отдел у затронутых — на другой их отдел (FK сам обнулил бы его, даже если у человека есть ещё отделы).
+    for m in db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == ctx.tenant.id, TenantMembership.department_id == dep.id,
+    ):
+        m.department_id = None
+    db.flush()
+    sync_primary(db, ctx.tenant.id, affected)
     db.delete(dep)
     db.commit()
     return Message(message="Отдел удалён")

@@ -17,6 +17,7 @@ import { projectSchema, type ProjectForm } from "@/lib/validation";
 
 import { SearchInput } from "@/components/page";
 import { useNewParam } from "@/hooks/useNewParam";
+import { fetchAllUsers } from "@/lib/users";
 type ProjectScope = "all" | "participating" | "made_by_me" | "audited_by_me";
 
 // Область задаёт панель модуля (?scope=…); заголовок страницы — по ней.
@@ -253,7 +254,7 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
 
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
-    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
+    queryFn: async () => fetchAllUsers(),
   });
 
   const create = useMutation({

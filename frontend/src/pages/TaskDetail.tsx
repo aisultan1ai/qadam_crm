@@ -57,6 +57,7 @@ import { UserMultiSelect } from "@/components/lib/UserMultiSelect";
 import type { TaskReminder, TaskStatusDef, UserBrief } from "@/types";
 import { statusKeyOf, statusOptions } from "./tasks/grouping";
 import { FavoriteButton } from "@/hooks/useFavorites";
+import { fetchAllUsers } from "@/lib/users";
 
 type RoleName = "assignees" | "auditors" | "participants";
 
@@ -146,7 +147,7 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
   });
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
-    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
+    queryFn: async () => fetchAllUsers(),
   });
 
   const { data: statusDefs = [] } = useQuery({

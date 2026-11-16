@@ -297,6 +297,10 @@ def accept_invitation(
             department_id=invite.department_id,
             position=invite.position,
         ))
+        if invite.department_id:
+            from ..core.departments import add_to_department
+            db.flush()
+            add_to_department(db, invite.tenant_id, user.id, invite.department_id)
         # Роль назначаем и на глобальном уровне (user.roles), т.к. permissions читаются оттуда.
         if invite.role_id:
             role = db.get(Role, invite.role_id)

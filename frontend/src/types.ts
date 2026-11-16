@@ -24,6 +24,8 @@ export type User = {
   avatar_url?: string | null;
   department?: Department | null;
   department_id?: number | null;
+  /** Все отделы в текущей компании (человек может быть в нескольких); department — основной. */
+  departments?: Department[];
   roles: Role[];
   last_login_at?: string | null;
   created_at: string;

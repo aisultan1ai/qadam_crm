@@ -31,6 +31,7 @@ import { useNewParam } from "@/hooks/useNewParam";
 import { GroupByButton, GroupedListView, GROUP_PILL, type ListPerms } from "./tasks/GroupedListView";
 import { GROUP_BY_OPTIONS, type GroupBy } from "./tasks/grouping";
 import { TaskDrawer } from "./tasks/TaskDrawer";
+import { fetchAllUsers } from "@/lib/users";
 
 // Открыть задачу в боковой панели (null — вне страницы задач: обычный переход).
 const OpenTaskContext = createContext<((id: number) => void) | null>(null);
@@ -167,7 +168,7 @@ export default function Tasks() {
   };
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
-    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
+    queryFn: async () => fetchAllUsers(),
   });
 
 

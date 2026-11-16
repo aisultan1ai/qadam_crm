@@ -17,6 +17,7 @@ import { Pagination } from "@/components/lib/Pagination";
 import { fromNow } from "@/lib/date";
 
 import { SearchInput } from "@/components/page";
+import { fetchAllUsers } from "@/lib/users";
 type LeadStatus = "new" | "contacted" | "qualified" | "converted" | "rejected";
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
@@ -696,7 +697,7 @@ function NewLeadModal({ onClose }: { onClose: () => void }) {
   const { data: users } = useQuery({
     queryKey: ["users-brief-leads"],
     queryFn: async () =>
-      (await api.get<{ items: TenantUser[] }>("/api/users", { params: { per_page: 200 } })).data.items,
+      fetchAllUsers<TenantUser>(),
   });
 
   const create = useMutation({

@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import String, Integer, ForeignKey, Boolean, Date, DateTime, Text, UniqueConstraint, func
+from sqlalchemy import String, Integer, ForeignKey, Boolean, Date, DateTime, Index, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import List, Optional
 
@@ -25,6 +25,22 @@ class Department(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
 
+
+
+class DepartmentMember(Base):
+    """Сотрудник ↔ отдел (в компании человек может быть в нескольких отделах).
+    Основной отдел — TenantMembership.department_id (оргструктура, подписи)."""
+    __tablename__ = "department_members"
+    __table_args__ = (
+        UniqueConstraint("department_id", "user_id", name="uq_department_members_dep_user"),
+        Index("ix_department_members_tenant_user", "tenant_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    department_id: Mapped[int] = mapped_column(ForeignKey("departments.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 class User(Base):
     __tablename__ = "users"

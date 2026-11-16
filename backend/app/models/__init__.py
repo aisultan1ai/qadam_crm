@@ -1,5 +1,5 @@
 from .tenant import Tenant, TenantMembership
-from .user import User, Department
+from .user import User, Department, DepartmentMember
 from .role import Role, Permission, user_roles, role_permissions
 from .project import Project, project_members
 from .task import (
@@ -78,6 +78,7 @@ __all__ = [
     "TenantMembership",
     "User",
     "Department",
+    "DepartmentMember",
     "Role",
     "Permission",
     "user_roles",

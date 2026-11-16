@@ -9,6 +9,7 @@ import { Button } from "@/components/lib/Button";
 import { useToast } from "@/components/Toast";
 
 import { FilterSelect, SearchInput, Toolbar } from "@/components/page";
+import { fetchAllUsers } from "@/lib/users";
 type Department = { id: number; name: string };
 type User = {
   id: number;
@@ -43,7 +44,7 @@ export default function People() {
   const usersQ = useQuery({
     queryKey: ["hr", "people", { q }],
     queryFn: async () =>
-      (await api.get<{ items: User[] }>("/api/users", { params: { q: q || undefined, per_page: 100 } })).data.items,
+      fetchAllUsers({ q: q || undefined }),
     staleTime: 30_000,
   });
 

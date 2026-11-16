@@ -5,7 +5,7 @@
   department  — tasks.view_department: свои + задачи, где исполнитель/автор из моего отдела;
   own         — tasks.view_own: где я исполнитель, автор, соисполнитель, наблюдатель или участник;
   none        — ничего.
-Отдел — свой в каждой компании (TenantMembership.department_id).
+Отделы — свои в каждой компании; человек может быть в нескольких (DepartmentMember).
 """
 from __future__ import annotations
 
@@ -67,13 +67,12 @@ def visible_tasks_clause(db: Session, user: User, tenant_id: int):
     own = _own_clause(user.id)
     if scope == "own":
         return own
-    dep_id = member_department_id(db, tenant_id, user.id)
-    if not dep_id:
+    from .departments import member_department_ids, users_in_departments
+    dep_ids = member_department_ids(db, tenant_id, user.id)
+    if not dep_ids:
         # Не прикреплён к отделу — видит только своё (а не «отдел без отдела» = всех без отдела).
         return own
-    dept_users = select(TenantMembership.user_id).where(
-        TenantMembership.tenant_id == tenant_id, TenantMembership.department_id == dep_id,
-    )
+    dept_users = users_in_departments(tenant_id, dep_ids)
     return or_(
         own,
         Task.assignee_id.in_(dept_users),

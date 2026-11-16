@@ -17,6 +17,7 @@ import { useAuth } from "@/store/auth";
 
 import { SearchInput } from "@/components/page";
 import InvitationsPanel from "./users/Invitations";
+import { fetchAllUsers } from "@/lib/users";
 const TABS = [
   { to: "list", label: "Сотрудники", icon: UsersIcon },
   { to: "invitations", label: "Приглашения", icon: UserPlus, invite: true },
@@ -83,7 +84,7 @@ function UsersList() {
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["users", q],
-    queryFn: async () => (await api.get<Page<User>>("/api/users", { params: { q: q || undefined } })).data.items,
+    queryFn: async () => fetchAllUsers({ q: q || undefined }),
   });
   const { data: roles } = useQuery({
     queryKey: ["roles"],
@@ -177,7 +178,7 @@ function UsersGrid({
         <div>Имя</div>
         <div>Email</div>
         <div>Роли</div>
-        <div>Отдел</div>
+        <div>Отделы</div>
         <div>Статус</div>
         <div>Последний вход</div>
         <div />
@@ -217,7 +218,9 @@ function UsersGrid({
                 <span className="text-xs text-neutral-500">+{u.roles.length - 3}</span>
               )}
             </div>
-            <div className="truncate text-neutral-600">{u.department?.name || "—"}</div>
+            <div className="truncate text-neutral-600" title={deptsOf(u).map((d) => d.name).join(", ")}>
+              {deptsOf(u).map((d) => d.name).join(", ") || "—"}
+            </div>
             <div>
               <span
                 className={`chip ${
@@ -265,6 +268,8 @@ function DepartmentsView() {
   const toast = useToast();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openNew, setOpenNew] = useState(false);
+  const [editMembers, setEditMembers] = useState(false);
+  const canManageMembers = can("settings.dictionaries") || can("users.update");
 
   const { data: departments } = useQuery({
     queryKey: ["departments"],
@@ -272,7 +277,7 @@ function DepartmentsView() {
   });
   const { data: users } = useQuery({
     queryKey: ["users"],
-    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
+    queryFn: async () => fetchAllUsers(),
   });
 
   const del = useMutation({
@@ -289,8 +294,9 @@ function DepartmentsView() {
     const m = new Map<number, number>();
     let noDept = 0;
     for (const u of users ?? []) {
-      if (u.department?.id) m.set(u.department.id, (m.get(u.department.id) ?? 0) + 1);
-      else noDept += 1;
+      const ds = deptsOf(u);
+      if (ds.length === 0) noDept += 1;
+      for (const d of ds) m.set(d.id, (m.get(d.id) ?? 0) + 1);
     }
     return { byDept: m, noDept };
   }, [users]);
@@ -302,8 +308,8 @@ function DepartmentsView() {
 
   const employees = useMemo(() => {
     if (!users) return [];
-    if (selected?.id === -1) return users.filter((u) => !u.department);
-    if (selected) return users.filter((u) => u.department?.id === selected.id);
+    if (selected?.id === -1) return users.filter((u) => deptsOf(u).length === 0);
+    if (selected) return users.filter((u) => deptsOf(u).some((d) => d.id === selected.id));
     return [];
   }, [users, selected]);
 
@@ -398,12 +404,17 @@ function DepartmentsView() {
                 <h2 className="text-lg font-semibold">{selected.name}</h2>
                 <p className="text-xs text-neutral-500">Сотрудников: {employees.length}</p>
               </div>
+              {selected.id !== -1 && canManageMembers && (
+                <Button variant="secondary" onClick={() => setEditMembers(true)}>
+                  <UsersIcon size={15} /> Участники
+                </Button>
+              )}
             </div>
             {employees.length === 0 ? (
               <EmptyState
                 icon={<UsersIcon size={26} />}
                 title="Здесь пока никого нет"
-                description="Добавьте сотрудников или измените фильтры."
+                description={selected.id === -1 ? "Все сотрудники распределены по отделам." : "Нажмите «Участники», чтобы добавить сотрудников в отдел."}
               />
             ) : (
               <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -419,7 +430,14 @@ function DepartmentsView() {
                           </span>
                         )}
                       </div>
-                      <div className="truncate text-xs text-neutral-500">{u.email}</div>
+                      <div className="truncate text-xs text-neutral-500">
+                        {u.email}
+                        {selected.id !== -1 && deptsOf(u).length > 1 && (
+                          <span className="ml-1.5">
+                            · {u.department?.id === selected.id ? "основной отдел" : `основной: ${u.department?.name ?? "—"}`}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {u.roles.map((r) => (
@@ -437,20 +455,33 @@ function DepartmentsView() {
       </div>
       </div>
 
-      {openNew && <NewDepartmentModal onClose={() => setOpenNew(false)} onCreated={(id) => setSelectedId(id)} />}
+      {openNew && (
+        <NewDepartmentModal users={users ?? []} onClose={() => setOpenNew(false)} onCreated={(id) => setSelectedId(id)} />
+      )}
+      {editMembers && selected && selected.id !== -1 && (
+        <DepartmentMembersModal
+          department={selected as Department}
+          users={users ?? []}
+          initial={employees.map((u) => u.id)}
+          onClose={() => setEditMembers(false)}
+        />
+      )}
     </div>
   );
 }
 
 function NewDepartmentModal({
+  users,
   onClose,
   onCreated,
 }: {
+  users: User[];
   onClose: () => void;
   onCreated: (id: number) => void;
 }) {
   const qc = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
+  const [memberIds, setMemberIds] = useState<number[]>([]);
 
   const {
     register,
@@ -463,9 +494,11 @@ function NewDepartmentModal({
   });
 
   const create = useMutation({
-    mutationFn: async (data: DepartmentForm) => (await api.post<Department>("/api/departments", { name: data.name })).data,
+    mutationFn: async (data: DepartmentForm) =>
+      (await api.post<Department>("/api/departments", { name: data.name, member_ids: memberIds })).data,
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["departments"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
       onCreated(d.id);
       onClose();
     },
@@ -473,13 +506,19 @@ function NewDepartmentModal({
   });
 
   return (
-    <Modal open onClose={onClose} title="Новый отдел" size="sm">
+    <Modal open onClose={onClose} title="Новый отдел" size="md">
       <form onSubmit={handleSubmit((d) => create.mutate(d))} className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Название</span>
           <input className="input" autoFocus placeholder="Например, Маркетинг" {...register("name")} />
           <FieldError msg={errors.name?.message} />
         </label>
+        <div>
+          <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+            Участники {memberIds.length > 0 && `· ${memberIds.length}`}
+          </span>
+          <MemberPicker users={users} value={memberIds} onChange={setMemberIds} />
+        </div>
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>Отмена</Button>
@@ -579,7 +618,9 @@ function UserFormModal({
             <FieldError msg={errors.password?.message as string} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Отдел</span>
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+              Основной отдел <span className="font-normal text-neutral-400">· доп. отделы — в разделе «Отделы»</span>
+            </span>
             <select className="input" {...register("department_id", { setValueAs: (v) => (v ? Number(v) : "") })}>
               <option value="">—</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -621,6 +662,83 @@ function UserFormModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** Отделы сотрудника в текущей компании: все (если сервер прислал) или хотя бы основной. */
+function deptsOf(u: User): Department[] {
+  if (u.departments && u.departments.length > 0) return u.departments;
+  return u.department ? [u.department] : [];
+}
+
+/** Список сотрудников с галочками и поиском. */
+function MemberPicker({ users, value, onChange }: { users: User[]; value: number[]; onChange: (ids: number[]) => void }) {
+  const [q, setQ] = useState("");
+  const selected = new Set(value);
+  const shown = users.filter((u) => {
+    const t = q.trim().toLowerCase();
+    return !t || u.name.toLowerCase().includes(t) || u.email.toLowerCase().includes(t);
+  });
+  const toggle = (id: number) => onChange(selected.has(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+      <div className="border-b border-neutral-200 p-2 dark:border-neutral-800">
+        <input className="input !h-8 text-[13px]" placeholder="Поиск по имени или email" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <div className="max-h-64 overflow-y-auto p-1">
+        {shown.length === 0 && <div className="px-2 py-3 text-center text-xs text-neutral-500">Никого не найдено</div>}
+        {shown.map((u) => (
+          <label key={u.id} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/60">
+            <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
+            <Avatar name={u.name} url={u.avatar_url} size={22} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">{u.name}</span>
+              {deptsOf(u).length > 0 && (
+                <span className="block truncate text-[11px] text-neutral-500">{deptsOf(u).map((d) => d.name).join(", ")}</span>
+              )}
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Состав отдела: отметить / снять сотрудников. Человек может быть сразу в нескольких отделах. */
+function DepartmentMembersModal({
+  department, users, initial, onClose,
+}: {
+  department: Department; users: User[]; initial: number[]; onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [ids, setIds] = useState<number[]>(initial);
+  const save = useMutation({
+    mutationFn: () => api.put(`/api/departments/${department.id}/members`, { user_ids: ids }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["departments"] });
+      toast.success("Состав отдела сохранён");
+      onClose();
+    },
+    onError: (e) => toast.error("Не удалось сохранить", extractApiError(e).message),
+  });
+  return (
+    <Modal open onClose={onClose} title={`Участники: ${department.name}`} size="md">
+      <div className="space-y-3">
+        <p className="text-xs text-neutral-500">
+          Отметьте, кто работает в отделе. Сотрудник может состоять в нескольких отделах — снимать его из других не нужно.
+        </p>
+        <MemberPicker users={users} value={ids} onChange={setIds} />
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-neutral-500">Выбрано: {ids.length}</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Отмена</Button>
+            <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>Сохранить</Button>
+          </div>
+        </div>
+      </div>
     </Modal>
   );
 }

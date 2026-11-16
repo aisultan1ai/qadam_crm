@@ -21,6 +21,7 @@ import { CalendarView, KanbanBoard, TaskFormModal } from "./Tasks";
 import { GroupByButton, GroupedListView, type ListPerms } from "./tasks/GroupedListView";
 import { GROUP_BY_OPTIONS, type GroupBy } from "./tasks/grouping";
 import { TaskDrawer } from "./tasks/TaskDrawer";
+import { fetchAllUsers } from "@/lib/users";
 
 const GanttView = lazy(() => import("./ProjectGantt").then((m) => ({ default: m.GanttView })));
 
@@ -99,7 +100,7 @@ export default function ProjectDetail() {
   });
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
-    queryFn: async () => (await api.get<Page<User>>("/api/users")).data.items,
+    queryFn: async () => fetchAllUsers(),
   });
   const { data: statusDefs } = useQuery({
     queryKey: ["task-statuses"],
