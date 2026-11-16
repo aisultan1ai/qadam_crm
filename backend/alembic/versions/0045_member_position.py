@@ -3,7 +3,7 @@
 Как отдел (0043) и руководитель (0044): users.position был одним полем на все компании
 человека. Переносим в членство. Должность и отдел задаёт компания, а не сам сотрудник.
 
-Revision ID: 0045_member_position_invite_profile
+Revision ID: 0045_member_position
 Revises: 0044_member_manager
 Create Date: 2026-11-18
 """
@@ -13,7 +13,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "0045_member_position_invite_profile"
+revision: str = "0045_member_position"
 down_revision: Union[str, None] = "0044_member_manager"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
