@@ -164,7 +164,7 @@ def get_current_context(
         )
 
     # P5.2/P5.3: password rotation + session timeout enforcement
-    _enforce_security_policies(db, request, user, tenant.id, payload)
+    _enforce_security_policies(db, request, user, tenant.id, payload, membership)
 
     return TenantContext(user=user, tenant=tenant, membership=membership)
 
@@ -183,15 +183,17 @@ _SECURITY_BYPASS_PATHS = (
 )
 
 
-def _enforce_security_policies(db: Session, request: Request, user: "User", tenant_id: int, payload: dict) -> None:
-    """P5.2: если password_rotation_days задан и password_changed_at устарел → 403 password_expired.
-    P5.3: если session_timeout_minutes задан и последняя активность старше → 401 session_timeout.
-    Fail-open при отсутствии policy или ошибке БД/Redis.
+def _enforce_security_policies(
+    db: Session, request: Request, user: "User", tenant_id: int, payload: dict,
+    membership: Optional[TenantMembership] = None,
+) -> None:
+    """Политика безопасности компании — на каждом запросе к её данным:
+    IP-ограничение → обязательная 2FA → срок пароля → таймаут неактивности.
+    Fail-open при отсутствии policy или ошибке БД/Redis (кроме самих отказов).
     """
+    import ipaddress
     from datetime import datetime, timezone
     path = request.url.path or ""
-    if any(path.startswith(p) for p in _SECURITY_BYPASS_PATHS):
-        return
 
     try:
         from ..models import TenantSecurityPolicy
@@ -203,8 +205,42 @@ def _enforce_security_policies(db: Session, request: Request, user: "User", tena
         if not policy:
             return
 
+        # 1) IP-ограничение — для любого адреса сайта, а не только поддоменов (раньше на qcrm.kz не работало).
+        #    Выйти из системы можно всегда.
+        allow = [e for e in (policy.ip_allowlist or []) if (e or "").strip()]
+        if allow and not path.startswith("/api/auth/logout"):
+            ip = request.client.host if request.client else None
+            ok = False
+            try:
+                addr = ipaddress.ip_address(ip) if ip else None
+                ok = bool(addr) and any(addr in ipaddress.ip_network(e.strip(), strict=False) for e in allow)
+            except ValueError:
+                ok = False
+            if not ok:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail={"error": "ip_not_allowed",
+                            "message": "Доступ к компании разрешён только из сети компании. Обратитесь к администратору."},
+                )
+
+        if any(path.startswith(p) for p in _SECURITY_BYPASS_PATHS):
+            return
+
         now = datetime.now(timezone.utc)
 
+        # 2) Обязательная 2FA: пока не включит — доступны только профиль и настройка 2FA.
+        if not user.totp_enabled and (policy.require_2fa or policy.require_2fa_for_admins):
+            is_admin = bool(membership and membership.is_owner) or user_has(
+                user, ["settings.system", "roles.manage", "users.update"], tenant_id=tenant_id,
+            )
+            if policy.require_2fa or is_admin:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail={"error": "2fa_required",
+                            "message": "В компании обязательна двухфакторная аутентификация. Включите её в настройках профиля."},
+                )
+
+        # 3) Срок действия пароля.
         if policy.password_rotation_days:
             changed = user.password_changed_at or user.created_at
             if changed:
@@ -212,28 +248,38 @@ def _enforce_security_policies(db: Session, request: Request, user: "User", tena
                 if age >= policy.password_rotation_days:
                     raise HTTPException(
                         status.HTTP_403_FORBIDDEN,
-                        detail={"error": "password_expired", "message": f"Пароль устарел ({age} дн.). Смените в профиле."},
+                        detail={"error": "password_expired", "message": f"Пароль устарел ({age} дн.). Смените его в профиле."},
                     )
 
+        # 4) Таймаут неактивности. Считаем по сессии (sid), а не по access-токену: иначе фоновое обновление
+        #    токена каждые 30 минут давало новый jti и таймаут не срабатывал. По таймауту сессия завершается —
+        #    обновить токен уже нельзя, человек выходит на страницу входа.
         if policy.session_timeout_minutes:
-            jti = payload.get("jti")
-            if jti:
+            sid = payload.get("sid")
+            key_id = f"s{sid}" if sid is not None else payload.get("jti")
+            if key_id:
                 from ..core.redis_client import get_redis
                 try:
                     r = get_redis()
-                    key = f"session:last_seen:{user.id}:{jti}"
+                    key = f"session:last_seen:{user.id}:{key_id}"
                     prev = r.get(key)
                     if prev:
                         prev_iso = prev.decode() if isinstance(prev, bytes) else prev
-                        prev_dt = datetime.fromisoformat(prev_iso)
-                        idle_min = (now - prev_dt).total_seconds() / 60
+                        idle_min = (now - datetime.fromisoformat(prev_iso)).total_seconds() / 60
                         if idle_min >= policy.session_timeout_minutes:
+                            r.delete(key)
+                            if sid is not None:
+                                from ..models import UserSession
+                                s = db.get(UserSession, int(sid))
+                                if s and s.revoked_at is None:
+                                    s.revoked_at = now
+                                    db.commit()
                             raise HTTPException(
                                 status.HTTP_401_UNAUTHORIZED,
-                                detail={"error": "session_timeout", "message": f"Сессия истекла из-за неактивности ({int(idle_min)} мин)"},
+                                detail={"error": "session_timeout",
+                                        "message": f"Сессия завершена из-за неактивности ({int(idle_min)} мин). Войдите снова."},
                             )
-                    ttl = int(policy.session_timeout_minutes * 60 + 3600)
-                    r.set(key, now.isoformat(), ex=ttl)
+                    r.set(key, now.isoformat(), ex=int(policy.session_timeout_minutes * 60 + 3600))
                 except HTTPException:
                     raise
                 except Exception:

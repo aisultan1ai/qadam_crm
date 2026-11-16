@@ -141,9 +141,15 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def http_exc(_: Request, exc: StarletteHTTPException):
         code = STATUS_TO_CODE.get(exc.status_code, "http_error")
+        detail = exc.detail
+        # Отказы политики безопасности приходят как {"error": код, "message": текст} — код нужен фронту
+        # (перевести на смену пароля / настройку 2FA), текст — человеку.
+        if isinstance(detail, dict) and "message" in detail:
+            code = str(detail.get("error") or code)
+            detail = detail["message"]
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": {"code": code, "message": humanize(_detail_to_message(exc.detail), exc.status_code)}},
+            content={"error": {"code": code, "message": humanize(_detail_to_message(detail), exc.status_code)}},
             headers=getattr(exc, "headers", None),
         )
 

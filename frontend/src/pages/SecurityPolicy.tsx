@@ -15,6 +15,7 @@ type Policy = {
   ip_allowlist: string[];
   require_2fa: boolean;
   require_2fa_for_admins: boolean;
+  your_ip?: string | null;
 };
 
 export default function SecurityPolicyPage() {
@@ -96,7 +97,18 @@ export default function SecurityPolicyPage() {
         <h2 className="text-lg font-semibold">IP-ограничения</h2>
         <p className="text-xs text-neutral-500">Список CIDR/IP, с которых разрешён доступ (по одному в строку). Пусто = без ограничений.</p>
         <textarea className="input min-h-[120px] font-mono text-xs" value={ipInput} onChange={(e) => setIpInput(e.target.value)} placeholder="192.168.0.0/24&#10;10.0.0.5" />
-        <div className="text-xs text-amber-600">⚠️ Осторожно: неверный CIDR может заблокировать вас же. Проверьте свой IP.</div>
+        <div className="text-xs text-amber-600">
+          ⚠️ Ограничение действует на всех сотрудников сразу после сохранения.
+          {form.your_ip && (
+            <>
+              {" "}Ваш текущий IP: <b className="font-mono">{form.your_ip}</b>
+              {" "}— он должен входить в список, иначе сохранить не получится.
+              <button type="button" className="link ml-1" onClick={() => setIpInput((v) => (v.trim() ? `${v.trim()}\n${form.your_ip}` : form.your_ip!))}>
+                Добавить мой IP
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="card p-4 space-y-3">

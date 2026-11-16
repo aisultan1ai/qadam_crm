@@ -351,7 +351,10 @@ def reset_password(
 
     from ..core.security import validate_password, PasswordPolicyError
     try:
-        validate_password(payload.new_password, tenant_id=None)
+        # Через «Забыли пароль» нельзя обойти парольную политику: проверяем по всем компаниям человека.
+        tenant_ids = [tid for (tid,) in db.query(TenantMembership.tenant_id).filter(TenantMembership.user_id == user.id)]
+        for tid in tenant_ids or [None]:
+            validate_password(payload.new_password, tenant_id=tid)
     except PasswordPolicyError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
@@ -542,7 +545,9 @@ def refresh(
         if session and session.user_id == user.id and session.revoked_at is None:
             session.last_seen_at = datetime.now(timezone.utc)
         else:
-            session = None
+            # Сессию завершили (выход на других устройствах, таймаут неактивности) — продлевать нельзя.
+            # Раньше здесь молча создавалась новая сессия, и завершение не действовало.
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия завершена — войдите снова")
     if session is None:
         session = _create_session(db, request=request, user_id=user.id, tenant_id=tenant_id)
 

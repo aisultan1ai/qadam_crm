@@ -25,7 +25,7 @@ import base64
 from datetime import date, datetime, timezone
 from typing import Optional, Any
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, and_
@@ -610,6 +610,8 @@ def delete_holiday(hid: int, ctx: TenantContext = Depends(get_current_context), 
 
 class SecPolicyOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    # IP, с которого открыта страница — чтобы не заблокировать себя IP-ограничением.
+    your_ip: Optional[str] = None
     password_min_length: int
     password_require_upper: bool
     password_require_number: bool
@@ -643,21 +645,82 @@ def _get_or_create_policy(db: Session, tenant_id: int) -> TenantSecurityPolicy:
     return p
 
 
+def _require_security_admin(ctx: TenantContext) -> None:
+    """Политику безопасности и хранение журналов меняет только владелец или админ с settings.system."""
+    from ..core.permissions import user_has
+    if ctx.membership.is_owner or ctx.user.is_platform_admin:
+        return
+    if not user_has(ctx.user, ["settings.system"], tenant_id=ctx.tenant.id):
+        raise HTTPException(403, "Настройки безопасности меняет владелец компании или администратор")
+
+
+def _client_ip(request: Request) -> Optional[str]:
+    return request.client.host if request.client else None
+
+
+def _policy_out(p: TenantSecurityPolicy, request: Request) -> SecPolicyOut:
+    return SecPolicyOut.model_validate(p).model_copy(update={"your_ip": _client_ip(request)})
+
+
 @router.get("/api/security-policy", response_model=SecPolicyOut)
-def get_security_policy(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    return _get_or_create_policy(db, ctx.tenant.id)
+def get_security_policy(request: Request, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    return _policy_out(_get_or_create_policy(db, ctx.tenant.id), request)
 
 
 @router.patch("/api/security-policy", response_model=SecPolicyOut)
-def update_security_policy(payload: SecPolicyUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def update_security_policy(
+    payload: SecPolicyUpdate,
+    request: Request,
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    import ipaddress
+    _require_security_admin(ctx)
     p = _get_or_create_policy(db, ctx.tenant.id)
-    for f in payload.model_fields:
+    sent = payload.model_fields_set
+
+    if payload.password_min_length is not None and not 6 <= payload.password_min_length <= 128:
+        raise HTTPException(400, "Минимальная длина пароля: от 6 до 128 символов")
+    if "password_rotation_days" in sent and payload.password_rotation_days is not None and payload.password_rotation_days < 1:
+        raise HTTPException(400, "Срок смены пароля — от 1 дня (или пусто, чтобы не требовать)")
+    if "session_timeout_minutes" in sent and payload.session_timeout_minutes is not None and payload.session_timeout_minutes < 5:
+        raise HTTPException(400, "Таймаут неактивности — от 5 минут (или пусто, чтобы не ограничивать)")
+
+    if payload.ip_allowlist is not None:
+        cleaned: list[str] = []
+        for raw in payload.ip_allowlist:
+            entry = (raw or "").strip()
+            if not entry:
+                continue
+            try:
+                ipaddress.ip_network(entry, strict=False)
+            except ValueError:
+                raise HTTPException(400, f"Неверный IP или подсеть: {entry}")
+            cleaned.append(entry)
+        # Не даём заблокировать самого себя: текущий адрес должен входить в список.
+        ip = _client_ip(request)
+        if cleaned and ip:
+            addr = ipaddress.ip_address(ip)
+            if not any(addr in ipaddress.ip_network(e, strict=False) for e in cleaned):
+                raise HTTPException(
+                    400,
+                    f"Ваш текущий IP {ip} не входит в список — после сохранения вы потеряете доступ. Добавьте его в список.",
+                )
+        payload.ip_allowlist = cleaned
+
+    if (payload.require_2fa or payload.require_2fa_for_admins) and not ctx.user.totp_enabled:
+        raise HTTPException(400, "Сначала включите двухфакторную аутентификацию себе (Профиль → Настройки), иначе потеряете доступ")
+
+    # Поля «пусто = выключено» (ротация, таймаут) можно сбросить явным null.
+    nullable = {"password_rotation_days", "session_timeout_minutes"}
+    for f in sent:
         v = getattr(payload, f)
-        if v is not None:
+        if v is not None or f in nullable:
             setattr(p, f, v)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="security_policy", detail=", ".join(sorted(sent)))
     db.commit()
     db.refresh(p)
-    return p
+    return _policy_out(p, request)
 
 
 # =============================================================================
@@ -683,6 +746,7 @@ def list_retention(ctx: TenantContext = Depends(get_current_context), db: Sessio
 
 @router.post("/api/log-retention", response_model=RetentionOut)
 def set_retention(payload: RetentionSet, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    _require_security_admin(ctx)
     row = (
         db.query(TenantLogRetention)
         .filter(TenantLogRetention.tenant_id == ctx.tenant.id, TenantLogRetention.entity_type == payload.entity_type)
@@ -714,12 +778,25 @@ class ProviderOut(BaseModel):
 
 @router.get("/api/integrations", response_model=list[ProviderOut])
 def list_integrations(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    return (
+    """Каталог платформы + «включено ли» у этой компании. Одна карточка на интеграцию:
+    раньше отдавались и общая запись, и копия компании (после «Вкл.») — карточки дублировались."""
+    rows = (
         db.query(IntegrationProvider)
         .filter(or_(IntegrationProvider.tenant_id == ctx.tenant.id, IntegrationProvider.tenant_id.is_(None)))
-        .order_by(IntegrationProvider.category, IntegrationProvider.label)
         .all()
     )
+    catalog = {r.code: r for r in rows if r.tenant_id is None}
+    own = {r.code: r for r in rows if r.tenant_id is not None}
+    out = []
+    for code, base in catalog.items():
+        mine = own.get(code)
+        # Название, категория и статус — из каталога (актуальные), включённость — своя у компании.
+        out.append(ProviderOut(
+            id=(mine or base).id, code=code, label=base.label, category=base.category,
+            status=base.status, is_enabled=bool(mine and mine.is_enabled),
+        ))
+    out.sort(key=lambda p: (p.category, p.label))
+    return out
 
 
 @router.post("/api/integrations/{code}/toggle", response_model=ProviderOut)
@@ -729,8 +806,10 @@ def toggle_integration(code: str, ctx: TenantContext = Depends(get_current_conte
         .filter(IntegrationProvider.tenant_id == ctx.tenant.id, IntegrationProvider.code == code)
         .first()
     )
+    template = db.query(IntegrationProvider).filter(IntegrationProvider.tenant_id.is_(None), IntegrationProvider.code == code).first()
+    if template and template.status == "coming_soon":
+        raise HTTPException(400, "Эта интеграция ещё в разработке")
     if not row:
-        template = db.query(IntegrationProvider).filter(IntegrationProvider.tenant_id.is_(None), IntegrationProvider.code == code).first()
         if not template:
             raise HTTPException(404, f"Провайдер {code} не найден")
         row = IntegrationProvider(
@@ -1148,6 +1227,11 @@ def convert_to_employee(cid: int, payload: ConvertToEmployeeIn, ctx: TenantConte
         raise HTTPException(404, "Контакт не найден")
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(409, "Пользователь с таким email уже существует")
+    from ..core.security import validate_password, PasswordPolicyError
+    try:
+        validate_password(payload.password, tenant_id=ctx.tenant.id)
+    except PasswordPolicyError as e:
+        raise HTTPException(400, str(e))
     u = User(
         email=payload.email,
         name=f"{c.first_name} {c.last_name or ''}".strip(),

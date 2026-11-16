@@ -160,6 +160,10 @@ api.interceptors.response.use(
     // на эту операцию у него нет прав; пусть остаётся где был.
     if (status === 403) {
       emit("forbidden", err);
+      // Политика безопасности компании: ведём туда, где это исправляется (сообщение покажет тост).
+      const code = (err.response?.data as ErrorBody | undefined)?.error?.code;
+      const target = code === "password_expired" ? "/profile" : code === "2fa_required" ? "/profile/settings" : null;
+      if (target && location.pathname !== target) location.assign(target);
     }
 
     // Сетевая ошибка (нет соединения, DNS, таймаут) — показываем баннер.

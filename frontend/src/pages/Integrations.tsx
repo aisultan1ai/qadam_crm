@@ -89,8 +89,11 @@ export default function IntegrationsPage() {
     onError: (e) => toast.error("OAuth не настроен", extractApiError(e).message),
   });
 
+  // «Скоро» — то, что ещё не сделано. Не показываем стеной заглушек: прячем под отдельную кнопку.
+  const [showPlanned, setShowPlanned] = useState(false);
+  const planned = (data || []).filter((p) => p.status === "coming_soon");
   const grouped = new Map<string, Provider[]>();
-  (data || []).forEach((p) => {
+  (data || []).filter((p) => p.status !== "coming_soon").forEach((p) => {
     if (!grouped.has(p.category)) grouped.set(p.category, []);
     grouped.get(p.category)!.push(p);
   });
@@ -121,6 +124,27 @@ export default function IntegrationsPage() {
           </div>
         </div>
       ))}
+
+      {planned.length > 0 && (
+        <div className="border-t border-neutral-200 pt-4 dark:border-neutral-800">
+          <button
+            type="button"
+            onClick={() => setShowPlanned((v) => !v)}
+            className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+          >
+            {showPlanned ? "Скрыть" : "Показать"} интеграции в разработке ({planned.length})
+          </button>
+          {showPlanned && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {planned.map((p) => (
+                <span key={p.code} className="chip bg-neutral-100 text-neutral-600 dark:bg-white/5 dark:text-neutral-400">
+                  {p.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {browsing && (
         <StorageBrowser
