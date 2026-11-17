@@ -30,6 +30,9 @@ class Tenant(Base):
     dropbox_app_secret_enc: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     dropbox_redirect_uri: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
+    # Мастер первого запуска: отрасль и когда мастер пройден (NULL — показать мастер владельцу)
+    industry: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     memberships: Mapped[List["TenantMembership"]] = relationship(
@@ -59,6 +62,8 @@ class TenantMembership(Base):
     )
     # Должность в ЭТОЙ компании (задаёт компания, а не сам сотрудник).
     position: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    # Руководитель ещё не в компании (приглашён) — свяжем, когда примет приглашение.
+    pending_manager_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="memberships", lazy="joined")

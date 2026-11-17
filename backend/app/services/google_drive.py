@@ -19,6 +19,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from sqlalchemy.orm import Session
 
+from ..core import google_oauth
 from ..core.secrets import decrypt, encrypt
 from ..models import StorageAccount, Tenant
 
@@ -49,21 +50,12 @@ GOOGLE_DOC_EXPORTS = {
 
 
 def _client_config(tenant: Tenant) -> dict:
-    secret = decrypt(tenant.google_client_secret_enc)
-    return {
-        "web": {
-            "client_id": tenant.google_client_id,
-            "client_secret": secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [tenant.google_redirect_uri],
-        }
-    }
+    return google_oauth.client_config(tenant, "google_drive")
 
 
 def build_auth_url(tenant: Tenant, state: str) -> str:
     flow = Flow.from_client_config(_client_config(tenant), scopes=SCOPES, state=state)
-    flow.redirect_uri = tenant.google_redirect_uri
+    flow.redirect_uri = google_oauth.redirect_uri("google_drive")
     url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -74,7 +66,7 @@ def build_auth_url(tenant: Tenant, state: str) -> str:
 
 def exchange_code(tenant: Tenant, code: str, state: str) -> Tuple[Credentials, str]:
     flow = Flow.from_client_config(_client_config(tenant), scopes=SCOPES, state=state)
-    flow.redirect_uri = tenant.google_redirect_uri
+    flow.redirect_uri = google_oauth.redirect_uri("google_drive")
     flow.fetch_token(code=code)
     creds: Credentials = flow.credentials  # type: ignore[assignment]
 
@@ -115,13 +107,15 @@ def _creds_from_account(tenant: Tenant, acc: StorageAccount) -> Optional[Credent
     access_token = decrypt(acc.access_token_enc)
     if not refresh_token:
         return None
-    client_secret = decrypt(tenant.google_client_secret_enc)
+    client = google_oauth.client_for(tenant)
+    if not client:
+        return None
     creds = Credentials(
         token=access_token,
         refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=tenant.google_client_id,
-        client_secret=client_secret,
+        client_id=client.client_id,
+        client_secret=client.client_secret,
         scopes=SCOPES,
     )
     if acc.access_token_expires_at:

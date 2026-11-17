@@ -44,7 +44,7 @@ export default function ReportsPage() {
   });
 
   if (!can("analytics.reports")) {
-    return <EmptyState icon={<PieChart size={32} />} title="Нет доступа к отчётам" description="Требуется право analytics.reports" />;
+    return <EmptyState icon={<PieChart size={32} />} title="Нет доступа к отчётам" description="В вашей роли нет права на отчёты. Его может выдать администратор компании." />;
   }
 
   const maxValue = result ? Math.max(1, ...result.rows.map((r) => r.value)) : 1;
@@ -131,7 +131,7 @@ export default function ReportsPage() {
           ) : isFetching ? (
             <div className="h-64 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
           ) : !result || result.rows.length === 0 ? (
-            <EmptyState icon={<BarChart3 size={32} />} title="Нет данных" description="Попробуй другой период или метрику" />
+            <EmptyState icon={<BarChart3 size={32} />} title="Нет данных" description="Попробуйте другой период или показатель." />
           ) : (
             <>
               <div className="mb-3 flex items-baseline justify-between">

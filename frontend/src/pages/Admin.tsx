@@ -6,7 +6,7 @@ import { Navigate } from "react-router-dom";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
-import { Pencil, Trash2, Search, Building2, Power, ChevronRight, Users as UsersIcon, HardDrive, Loader2, CreditCard, Plus, Check } from "lucide-react";
+import { Pencil, Trash2, Search, Building2, Power, ChevronRight, Users as UsersIcon, HardDrive, Loader2, CreditCard, Plus, Check, ThumbsUp } from "lucide-react";
 import clsx from "clsx";
 
 import { SearchInput, Tabs, Toolbar } from "@/components/page";
@@ -41,7 +41,7 @@ type GlobalUser = {
   companies?: { tenant_id: number; tenant_name: string; is_owner: boolean; role: string | null }[];
 };
 
-type Tab = "tenants" | "users" | "plans";
+type Tab = "tenants" | "users" | "plans" | "demand";
 
 type PlanFeatureFlags = {
   export: boolean;
@@ -181,9 +181,10 @@ export default function Admin() {
           { key: "tenants", label: "Компании", icon: Building2 },
           { key: "users", label: "Пользователи", icon: UsersIcon },
           { key: "plans", label: "Тарифы", icon: CreditCard },
+          { key: "demand", label: "Спрос на интеграции", icon: ThumbsUp },
         ]}
       />
-      {tab !== "plans" && (
+      {(tab === "tenants" || tab === "users") && (
         <Toolbar>
           <SearchInput
             value={q}
@@ -197,6 +198,8 @@ export default function Admin() {
         <GlobalUsersTab query={q} />
       ) : tab === "plans" ? (
         <PlansTab />
+      ) : tab === "demand" ? (
+        <IntegrationDemandTab />
       ) : (
         <>
       {stats && (
@@ -1344,5 +1347,67 @@ function CreateTenantModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+
+type Demand = {
+  code: string;
+  label: string;
+  companies: number;
+  votes: number;
+  last_at: string | null;
+  comments: { tenant: string; comment: string }[];
+};
+
+/** «Хочу эту интеграцию»: какие интеграции просят компании — для приоритизации разработки. */
+function IntegrationDemandTab() {
+  const { data, isPending } = useQuery({
+    queryKey: ["admin", "integration-demand"],
+    queryFn: async () => (await api.get<Demand[]>("/api/admin/integration-requests")).data,
+  });
+  if (isPending) return <div className="h-32 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />;
+  if (!data?.length) {
+    return (
+      <div className="card p-8 text-center text-sm text-neutral-500">
+        Заявок пока нет. Компании отмечают нужные интеграции в Настройки → Сервисы.
+      </div>
+    );
+  }
+  return (
+    <div className="table-container">
+      <table className="w-full">
+        <thead className="table-head">
+          <tr>
+            <th className="table-head-cell">Интеграция</th>
+            <th className="table-head-cell text-right">Компаний</th>
+            <th className="table-head-cell text-right">Голосов</th>
+            <th className="table-head-cell">Последняя заявка</th>
+            <th className="table-head-cell">Комментарии</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d) => (
+            <tr key={d.code} className="table-row">
+              <td className="table-cell font-medium">{d.label}</td>
+              <td className="table-cell text-right tabular-nums">{d.companies}</td>
+              <td className="table-cell text-right tabular-nums">{d.votes}</td>
+              <td className="table-cell text-xs text-neutral-500">
+                {d.last_at ? new Date(d.last_at).toLocaleDateString("ru-RU") : "—"}
+              </td>
+              <td className="table-cell text-xs text-neutral-500">
+                {d.comments.length
+                  ? d.comments.map((c, i) => (
+                      <div key={i}>
+                        <b className="font-medium text-neutral-700 dark:text-neutral-300">{c.tenant}:</b> {c.comment}
+                      </div>
+                    ))
+                  : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

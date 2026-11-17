@@ -517,3 +517,46 @@ def admin_delete_plan(
     db.delete(plan)
     db.commit()
     return Message(message=f"Тариф '{key}' удалён")
+
+
+# =============================================================================
+# Спрос на интеграции («Хочу эту интеграцию»)
+# =============================================================================
+
+@router.get("/integration-requests")
+def integration_demand(_: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
+    """Сколько компаний и людей просят каждую планируемую интеграцию — для приоритизации."""
+    from sqlalchemy import func as _f
+    from ..models import IntegrationProvider, IntegrationRequest
+    labels = {
+        p.code: p.label
+        for p in db.query(IntegrationProvider).filter(IntegrationProvider.tenant_id.is_(None))
+    }
+    rows = (
+        db.query(
+            IntegrationRequest.code,
+            _f.count(_f.distinct(IntegrationRequest.tenant_id)),
+            _f.count(IntegrationRequest.id),
+            _f.max(IntegrationRequest.created_at),
+        )
+        .group_by(IntegrationRequest.code)
+        .all()
+    )
+    comments = {}
+    for r in (
+        db.query(IntegrationRequest.code, IntegrationRequest.comment, Tenant.name)
+        .join(Tenant, Tenant.id == IntegrationRequest.tenant_id)
+        .filter(IntegrationRequest.comment.isnot(None))
+        .order_by(IntegrationRequest.created_at.desc())
+        .limit(200)
+    ):
+        comments.setdefault(r[0], []).append({"tenant": r[2], "comment": r[1]})
+    out = [
+        {
+            "code": code, "label": labels.get(code, code), "companies": companies, "votes": votes,
+            "last_at": last_at.isoformat() if last_at else None, "comments": comments.get(code, [])[:10],
+        }
+        for code, companies, votes, last_at in rows
+    ]
+    out.sort(key=lambda x: (-x["companies"], -x["votes"]))
+    return out

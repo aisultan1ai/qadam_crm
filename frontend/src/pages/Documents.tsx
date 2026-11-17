@@ -288,7 +288,8 @@ export default function DocumentsPage() {
         <EmptyState
           icon={<FileText size={32} />}
           title="В этой папке пусто"
-          description="Загрузите файл или создайте вложенную папку"
+          description="Файлы компании с версиями: загрузите файл или создайте вложенную папку."
+          help="documents"
         />
       ) : (
         <DataTable

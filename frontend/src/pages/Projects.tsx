@@ -97,7 +97,8 @@ export default function Projects() {
         <EmptyState
           icon={<FolderKanban size={32} />}
           title={q ? "По запросу ничего не найдено" : "Проектов пока нет"}
-          description={q ? "Попробуйте другой запрос или сбросьте поиск" : "Создайте первый проект, чтобы начать работу"}
+          description={q ? "Попробуйте другой запрос или сбросьте поиск" : "Проект объединяет задачи, команду и чат: объект, внедрение, клиентская работа."}
+          help={q ? undefined : "projects"}
           action={q ? (
             <Button variant="secondary" onClick={() => setQ("")}>
               Сбросить поиск

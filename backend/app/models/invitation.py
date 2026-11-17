@@ -29,6 +29,9 @@ class Invitation(Base):
         ForeignKey("departments.id", ondelete="SET NULL"), nullable=True,
     )
     position: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    # Из импорта сотрудников: ФИО (подставляется в форму принятия) и руководитель (по email).
+    full_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    manager_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship("Tenant", lazy="joined")  # type: ignore  # noqa: F821

@@ -64,7 +64,7 @@ function BoardList({ onOpen }: { onOpen: (id: number) => void }) {
           ))}
         </div>
       ) : !data || data.length === 0 ? (
-        <EmptyState icon={<PenSquare size={32} />} title="Досок пока нет" description="Создайте первую — рисуйте схемы, карты идей и макеты вместе с командой" />
+        <EmptyState icon={<PenSquare size={32} />} title="Досок пока нет" description="Создайте первую — рисуйте схемы, карты идей и макеты вместе с командой" help="start" />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {data.map((b) => (

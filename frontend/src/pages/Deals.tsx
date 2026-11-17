@@ -16,6 +16,7 @@ import type { Page } from "@/types";
 
 import { FilterSelect, PageHeader, SearchInput, Segmented, Tabs, Toolbar } from "@/components/page";
 import { useNewParam } from "@/hooks/useNewParam";
+import { useOpenParam } from "@/hooks/useOpenParam";
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
 
 type DealStage = "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
@@ -99,6 +100,7 @@ export default function DealsPage() {
   const canView = can("deals.view");
   const canCreate = can("deals.create");
   useNewParam(() => setOpenDeal("new"), canCreate);
+  useOpenParam<Deal>("deal", (id) => `/api/deals/${id}`, setOpenDeal, canView);
   const canUpdate = can("deals.update");
   const canDelete = can("deals.delete");
 
@@ -193,7 +195,7 @@ export default function DealsPage() {
     });
 
   if (!canView) {
-    return <EmptyState icon={<Coins size={32} />} title="Нет доступа к сделкам" description="Обратитесь к администратору за правом deals.view" />;
+    return <EmptyState icon={<Coins size={32} />} title="Нет доступа к сделкам" description="В вашей роли нет права на просмотр сделок. Его может выдать администратор компании." />;
   }
 
   const currency = forecast?.currency || "KZT";
@@ -279,7 +281,8 @@ export default function DealsPage() {
           <EmptyState
             icon={<Coins size={20} />}
             title={deals && deals.length > 0 ? "По фильтру ничего не найдено" : "Сделок пока нет"}
-            description={deals && deals.length > 0 ? "Измените поиск или сбросьте фильтры." : "Создайте первую сделку — она появится в воронке."}
+            description={deals && deals.length > 0 ? "Измените поиск или сбросьте фильтры." : "Воронка продаж: от новой заявки до выигранной сделки, с суммой и прогнозом."}
+            help={deals && deals.length > 0 ? undefined : "deals"}
             action={
               canCreate && !(deals && deals.length > 0) ? (
                 <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>

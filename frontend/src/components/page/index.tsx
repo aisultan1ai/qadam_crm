@@ -8,6 +8,13 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { ChevronLeft, Search, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useT } from "@/lib/i18n";
+
+/** Строковые подписи переводятся, разметка (ReactNode) — как есть. */
+function useLabel() {
+  const tr = useT();
+  return (v: ReactNode) => (typeof v === "string" ? tr(v) : v);
+}
 
 // ---------------------------------------------------------------------------
 // Page: вертикальный ритм страницы
@@ -90,6 +97,7 @@ export function Tabs<K extends string>({
   className?: string;
   size?: "sm" | "md";
 }) {
+  const tl = useLabel();
   return (
     <div
       role="tablist"
@@ -121,7 +129,7 @@ export function Tabs<K extends string>({
               )}
             >
               {Icon && <Icon size={15} />}
-              {t.label}
+              {tl(t.label)}
               {t.count != null && (
                 <span
                   className={clsx(
@@ -155,6 +163,7 @@ export function Segmented<K extends string>({
   label: string;
   className?: string;
 }) {
+  const tl = useLabel();
   return (
     <div
       role="group"
@@ -185,7 +194,7 @@ export function Segmented<K extends string>({
               )}
             >
               {Icon && <Icon size={14} />}
-              {i.label}
+              {tl(i.label)}
             </button>
           );
         })}
@@ -372,11 +381,12 @@ export function SettingsLayout<K extends string>({
   onChange: (k: K) => void;
   children: ReactNode;
 }) {
+  const tl = useLabel();
   const visible = items.filter((i) => !i.hidden);
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
       <nav aria-label="Разделы настроек" className="lg:sticky lg:top-[4.5rem]">
-        <div className="mb-3 px-2.5 text-lg font-semibold tracking-tight">{title}</div>
+        <div className="mb-3 px-2.5 text-lg font-semibold tracking-tight">{tl(title)}</div>
         {/* Мобилка: select, десктоп: вертикальное меню */}
         <select
           aria-label="Раздел настроек"
@@ -386,7 +396,7 @@ export function SettingsLayout<K extends string>({
         >
           {visible.map((i) => (
             <option key={i.key} value={i.key}>
-              {i.label}
+              {tl(i.label)}
             </option>
           ))}
         </select>
@@ -408,7 +418,7 @@ export function SettingsLayout<K extends string>({
                   )}
                 >
                   {Icon && <Icon size={16} className="shrink-0" />}
-                  <span className="truncate">{i.label}</span>
+                  <span className="truncate">{tl(i.label)}</span>
                 </button>
               </li>
             );
@@ -432,6 +442,7 @@ export function SettingsRouteLayout({
   items: { to: string; label: string; icon?: LucideIcon; hidden?: boolean }[];
   children: ReactNode;
 }) {
+  const tr = useT();
   const visible = items.filter((i) => !i.hidden);
   const { pathname } = useLocation();
   // Разделы показываются в панели модуля каркаса; здесь — шапка текущего раздела и его содержимое.
@@ -440,9 +451,9 @@ export function SettingsRouteLayout({
     <div className="space-y-4">
       <div className="page-header">
         <div className="min-w-0">
-          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">{title}</div>
-          <h1 className="page-title">{current?.label ?? title}</h1>
-          {!current && subtitle && <p className="page-subtitle">{subtitle}</p>}
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">{tr(title)}</div>
+          <h1 className="page-title">{tr(current?.label ?? title)}</h1>
+          {!current && subtitle && <p className="page-subtitle">{tr(subtitle)}</p>}
         </div>
       </div>
       <div className="min-w-0">{children}</div>

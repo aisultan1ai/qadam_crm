@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useLang } from "@/lib/i18n";
 import { api, extractApiError } from "@/api/client";
 import type { Me } from "@/types";
 
@@ -45,6 +46,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
   async fetchMe() {
     try {
       const { data } = await api.get<Me>("/api/auth/me");
+      if (data.language && data.language !== useLang.getState().lang) useLang.getState().setLang(data.language);
       set({ me: data, ready: true });
     } catch {
       set({ me: null, ready: true });

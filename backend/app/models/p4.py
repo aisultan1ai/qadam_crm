@@ -218,3 +218,16 @@ class IntegrationProvider(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IntegrationRequest(Base):
+    """«Хочу эту интеграцию»: голос сотрудника компании за интеграцию из списка «Скоро»."""
+    __tablename__ = "integration_requests"
+    __table_args__ = (UniqueConstraint("tenant_id", "user_id", "code", name="uq_integration_request"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    code: Mapped[str] = mapped_column(String(50), index=True)
+    comment: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

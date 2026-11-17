@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict
 
 from ..database import get_db
-from ..models import Call, Contact, Deal
+from ..models import Call, Contact, Deal, IntegrationProvider
 from ..core.tenant_refs import ensure_owned
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, get_current_context, log_action
@@ -125,9 +125,19 @@ async def twilio_webhook(request: Request, db: Session = Depends(get_db)):
     Минимальный маппинг Twilio VoiceStatusCallback → Call.
     Требует явного tenant_id (?tenant_id=N) — Twilio не знает про наши тенанты.
     """
-    tenant_id = request.query_params.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(400, "tenant_id required in query")
+    # Адрес webhook содержит секрет компании (Настройки → Сервисы → Twilio → Подключить).
+    # Без него любой мог бы записать фальшивые звонки в журнал чужой компании.
+    import hmac
+    tenant_id = request.query_params.get("tenant_id") or ""
+    key = request.query_params.get("key") or ""
+    if not tenant_id.isdigit() or not key:
+        raise HTTPException(403, "Неверный адрес webhook")
+    prov = db.query(IntegrationProvider).filter(
+        IntegrationProvider.tenant_id == int(tenant_id), IntegrationProvider.code == "twilio",
+    ).first()
+    secret = ((prov.config or {}).get("webhook_secret") if prov else None) or ""
+    if not prov or not prov.is_enabled or not secret or not hmac.compare_digest(secret, key):
+        raise HTTPException(403, "Неверный адрес webhook")
 
     try:
         form = await request.form()

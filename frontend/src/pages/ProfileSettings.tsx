@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, extractApiError } from "@/api/client";
 import clsx from "clsx";
-import { Bell, Shield, Monitor, Link as LinkIcon, ArrowLeft, LogOut, ShieldCheck, Trash2, KeyRound, Copy, RefreshCw, Check } from "lucide-react";
+import { Bell, Globe, Shield, Monitor, Link as LinkIcon, ArrowLeft, LogOut, ShieldCheck, Trash2, KeyRound, Copy, RefreshCw, Check } from "lucide-react";
 import { EmptyState, Modal } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/store/auth";
@@ -12,31 +12,76 @@ import { Button } from "@/components/lib/Button";
 import { FormField } from "@/components/lib/FormField";
 
 import { SettingsLayout } from "@/components/page";
-type Tab = "notifications" | "security" | "sessions" | "linked";
+import { LANGS, useLang, useT, type Lang } from "@/lib/i18n";
+type Tab = "notifications" | "language" | "security" | "sessions" | "linked";
 
 const TABS: { key: Tab; label: string; icon: typeof Bell }[] = [
   { key: "notifications", label: "Уведомления", icon: Bell },
+  { key: "language", label: "Язык интерфейса", icon: Globe },
   { key: "security", label: "Безопасность", icon: Shield },
   { key: "sessions", label: "Сессии", icon: Monitor },
   { key: "linked", label: "Привязанные аккаунты", icon: LinkIcon },
 ];
 
 export default function ProfileSettings() {
+  const tr = useT();
   const [tab, setTab] = useState<Tab>("notifications");
   return (
     <div className="space-y-5">
       <Link to="/profile" className="inline-flex items-center gap-1 text-[13px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
-        <ArrowLeft size={14} /> К профилю
+        <ArrowLeft size={14} /> {tr("К профилю")}
       </Link>
       <SettingsLayout title="Настройки профиля" items={TABS} value={tab} onChange={setTab}>
         <section className="card p-5 sm:p-6">
-          <h2 className="mb-4 text-base font-semibold">{TABS.find((t) => t.key === tab)?.label}</h2>
+          <h2 className="mb-4 text-base font-semibold">{tr(TABS.find((t) => t.key === tab)?.label ?? "")}</h2>
           {tab === "notifications" && <NotificationsTab />}
+          {tab === "language" && <LanguageTab />}
           {tab === "security" && <SecurityTab />}
           {tab === "sessions" && <SessionsTab />}
           {tab === "linked" && <LinkedTab />}
         </section>
       </SettingsLayout>
+    </div>
+  );
+}
+
+// ============================================================================
+// Язык интерфейса
+// ============================================================================
+
+function LanguageTab() {
+  const toast = useToast();
+  const tr = useT();
+  const { lang, setLang } = useLang();
+  const fetchMe = useAuth((s) => s.fetchMe);
+  const save = useMutation({
+    mutationFn: (l: Lang) => api.patch("/api/users/me", { language: l }),
+    onMutate: (l) => setLang(l),
+    onSuccess: () => fetchMe(),
+    onError: (e) => toast.error("Не удалось сохранить язык", extractApiError(e).message),
+  });
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {LANGS.map((l) => (
+          <button
+            key={l.key}
+            type="button"
+            onClick={() => save.mutate(l.key)}
+            className={clsx(
+              "rounded-lg border px-4 py-2 text-[14px] font-medium transition-colors",
+              lang === l.key
+                ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200"
+                : "border-zinc-200 hover:border-brand-300 dark:border-zinc-700",
+            )}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-[13px] text-zinc-500">
+        {tr("Перевод появляется постепенно: разделы без перевода пока показываются на русском.")}
+      </p>
     </div>
   );
 }

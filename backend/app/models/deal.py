@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, date
 from typing import Any, Optional
 
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Date, Text, Index, func
+from sqlalchemy import BigInteger, String, Integer, ForeignKey, DateTime, Date, Text, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -47,7 +47,7 @@ class Deal(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
 
     title: Mapped[str] = mapped_column(String(200))
-    amount_cents: Mapped[int] = mapped_column(Integer, default=0)  # хранение в центах/тиынах
+    amount_cents: Mapped[int] = mapped_column(BigInteger, default=0)  # тиыны; BIGINT — крупные сделки (сотни млн ₸)
     currency: Mapped[str] = mapped_column(String(3), default="KZT")
 
     stage: Mapped[str] = mapped_column(String(20), default=DealStage.new.value, server_default="new", index=True)

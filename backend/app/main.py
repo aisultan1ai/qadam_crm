@@ -49,6 +49,9 @@ from .api import (
     task_inbox as task_inbox_api,
     p4 as p4_api,
     favorites as favorites_api,
+    api_tokens as api_tokens_api,
+    people_import as people_import_api,
+    onboarding as onboarding_api,
 )
 
 
@@ -85,7 +88,7 @@ SECURITY_HEADERS = {
     "Cross-Origin-Resource-Policy": "same-site",
 }
 
-DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
+DOCS_PATHS = ("/docs", "/redoc", "/openapi.json", "/api/docs")
 
 # Строгий CSP для API (JSON) и медиа. Без 'unsafe-inline'.
 API_CSP_STRICT = (
@@ -102,9 +105,10 @@ API_CSP_STRICT = (
 DOCS_CSP = (
     "default-src 'self'; "
     "img-src 'self' data: blob: https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
-    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-    "font-src 'self' data: https://cdn.jsdelivr.net; "
+    "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; "
+    "worker-src 'self' blob:; "
     "connect-src 'self'; "
     "frame-ancestors 'none'; "
     "base-uri 'self'; "
@@ -233,6 +237,9 @@ def create_app() -> FastAPI:
         p4_api.router,
         p4_api.public_router,
         favorites_api.router,
+        api_tokens_api.router,
+        people_import_api.router,
+        onboarding_api.router,
     ):
         app.include_router(r)
 

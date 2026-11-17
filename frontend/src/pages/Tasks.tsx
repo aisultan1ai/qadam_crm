@@ -407,7 +407,8 @@ export default function Tasks() {
         ) : (
           <EmptyState
             title="Задач пока нет"
-            description="Создайте первую задачу — она появится на канбан-доске"
+            description="Всё, что нужно сделать: с исполнителем, сроком и обсуждением. Создайте первую задачу — кнопка «Создать» или клавиша T."
+            help="tasks"
             action={canCreate && (
               <Button variant="primary" onClick={() => setOpenNew(true)}>
                 <Plus size={16} /> Новая задача

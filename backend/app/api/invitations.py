@@ -203,7 +203,58 @@ def get_invitation(request: Request, token: str, db: Session = Depends(get_db)):
         },
         "expires_at": invite.expires_at.isoformat(),
         "requires_signup": not user_exists,
+        "full_name": invite.full_name,
     }
+
+
+def link_pending_managers(db: Session, tenant_id: int, user: User) -> None:
+    """Руководитель из импорта задан email-ом. Когда человек вошёл в компанию:
+    1) его руководитель уже в компании — проставляем;
+    2) он сам руководитель тех, кто вошёл раньше, — проставляем им."""
+    def member(uid: int) -> Optional[TenantMembership]:
+        return db.query(TenantMembership).filter(
+            TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == uid,
+        ).first()
+
+    chain = dict(db.query(TenantMembership.user_id, TenantMembership.manager_id).filter(
+        TenantMembership.tenant_id == tenant_id))
+
+    def cycle(uid: int, boss_id: int) -> bool:
+        cur, seen = boss_id, set()
+        while cur and cur not in seen:
+            if cur == uid:
+                return True
+            seen.add(cur)
+            cur = chain.get(cur)
+        return False
+
+    me = member(user.id)
+    mine = (
+        db.query(Invitation)
+        .filter(Invitation.tenant_id == tenant_id, Invitation.email == user.email, Invitation.manager_email.isnot(None))
+        .order_by(Invitation.created_at.desc())
+        .first()
+    )
+    if me and me.manager_id is None and mine:
+        boss = db.query(User).filter(User.email == mine.manager_email).first()
+        if boss and boss.id != user.id and member(boss.id) and not cycle(user.id, boss.id):
+            me.manager_id = boss.id
+            chain[user.id] = boss.id
+    for inv in db.query(Invitation).filter(
+        Invitation.tenant_id == tenant_id, Invitation.manager_email == user.email, Invitation.accepted_at.isnot(None),
+    ):
+        report = db.query(User).filter(User.email == inv.email).first()
+        m = member(report.id) if report and report.id != user.id else None
+        if m and m.manager_id is None and not cycle(report.id, user.id):
+            m.manager_id = user.id
+            chain[report.id] = user.id
+    for m in db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == tenant_id, TenantMembership.pending_manager_email == user.email,
+    ):
+        if m.user_id != user.id and not cycle(m.user_id, user.id):
+            m.manager_id = user.id
+            chain[m.user_id] = user.id
+        m.pending_manager_email = None
 
 
 def _is_logged_in_as(request: Request, db: Session, user: User) -> bool:
@@ -308,6 +359,8 @@ def accept_invitation(
                 user.roles.append(role)
 
     invite.accepted_at = _now()
+    db.flush()
+    link_pending_managers(db, invite.tenant_id, user)
 
     log_action(
         db, tenant_id=invite.tenant_id, user_id=user.id,
@@ -341,6 +394,7 @@ def list_invites(
             "role_id": i.role_id,
             "department_id": i.department_id,
             "position": i.position,
+            "full_name": i.full_name,
             "expires_at": i.expires_at.isoformat(),
             "accepted_at": i.accepted_at.isoformat() if i.accepted_at else None,
             "created_at": i.created_at.isoformat() if i.created_at else None,

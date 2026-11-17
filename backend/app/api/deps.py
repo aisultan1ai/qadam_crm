@@ -121,7 +121,14 @@ def get_current_context(
     Валидирует, что tenant активен и пользователь состоит в нём.
     Использовать во всех защищённых endpoint'ах вместо get_current_user,
     когда нужна изоляция данных по tenant'у.
+
+    API-токен компании (Bearer qd_…) — отдельная ветка: права токена, лимит тарифа.
     """
+    from ..core import api_tokens
+    if api_tokens.is_api_token(token):
+        user, tenant, membership = api_tokens.authenticate(db, request, token)
+        _enforce_ip_allowlist(db, request, tenant.id)
+        return TenantContext(user=user, tenant=tenant, membership=membership)  # type: ignore[arg-type]
     tok = _extract_token(request, token)
     if not tok:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
@@ -181,6 +188,27 @@ _SECURITY_BYPASS_PATHS = (
     "/api/me/2fa",
     "/health",
 )
+
+
+def _enforce_ip_allowlist(db: Session, request: Request, tenant_id: int) -> None:
+    """Ограничение по IP из политики безопасности — и для API-токенов тоже."""
+    import ipaddress
+    from ..models import TenantSecurityPolicy
+    policy = db.query(TenantSecurityPolicy).filter(TenantSecurityPolicy.tenant_id == tenant_id).first()
+    allow = [e for e in ((policy.ip_allowlist if policy else None) or []) if (e or "").strip()]
+    if not allow:
+        return
+    ip = request.client.host if request.client else None
+    try:
+        addr = ipaddress.ip_address(ip) if ip else None
+        ok = bool(addr) and any(addr in ipaddress.ip_network(e.strip(), strict=False) for e in allow)
+    except ValueError:
+        ok = False
+    if not ok:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"error": "ip_not_allowed", "message": "Доступ к компании разрешён только из сети компании."},
+        )
 
 
 def _enforce_security_policies(

@@ -50,6 +50,13 @@ class Settings(BaseSettings):
 
     APP_BASE_URL: str = "http://localhost"
 
+    # Общее Google-приложение Qadam: «Подключить Google» без ключей у клиента.
+    # В Google Cloud Console добавить адреса возврата:
+    #   {APP_BASE_URL}/api/integrations/google/callback
+    #   {APP_BASE_URL}/api/integrations/storage/google_drive/callback
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+
     EXPORT_DIR: str = "/app/exports"
 
     # Fernet-ключ для шифрования секретов в БД (IMAP/SMTP пароли и т.п.).

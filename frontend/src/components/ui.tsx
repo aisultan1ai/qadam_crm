@@ -1,5 +1,7 @@
 import { ReactNode, useEffect, useId, useRef, useState } from "react";
 import clsx from "clsx";
+import { Link } from "react-router-dom";
+import { useT } from "@/lib/i18n";
 import { X, Circle, Loader2, CheckCircle2, XCircle, Eye, ArrowUp, ArrowDown, Flame, Minus } from "lucide-react";
 import type { TaskPriority, TaskStatus } from "@/types";
 import { PRIORITY_LABEL, STATUS_LABEL } from "@/types";
@@ -280,12 +282,16 @@ export function EmptyState({
   description,
   icon,
   action,
+  help,
 }: {
   title: string;
   description?: string;
   icon?: ReactNode;
   action?: ReactNode;
+  /** Ключ темы центра помощи (lib/help.ts) — покажет ссылку «Как это работает». */
+  help?: string;
 }) {
+  const tr = useT();
   return (
     <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
       {icon && (
@@ -296,6 +302,11 @@ export function EmptyState({
       <div className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">{title}</div>
       {description && <div className="mt-1 max-w-md text-sm text-zinc-500 dark:text-zinc-400">{description}</div>}
       {action && <div className="mt-4">{action}</div>}
+      {help && (
+        <Link to={`/help#${help}`} className="mt-3 text-[12.5px] font-medium text-brand-700 hover:underline dark:text-brand-300">
+          {tr("Как это работает →")}
+        </Link>
+      )}
     </div>
   );
 }

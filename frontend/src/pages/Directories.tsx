@@ -50,7 +50,7 @@ export default function DirectoriesPage() {
       {isPending ? (
         <div className="h-40 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
       ) : !dirs || dirs.length === 0 ? (
-        <EmptyState icon={<BookText size={32} />} title="Справочников нет" description="Создайте свой первый справочник — набор полей + записи" />
+        <EmptyState icon={<BookText size={32} />} title="Справочников нет" description="Списки, которые используются в разных местах: объекты, виды работ, склады. Задайте поля и заполните записи." />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
           <div className="space-y-1">

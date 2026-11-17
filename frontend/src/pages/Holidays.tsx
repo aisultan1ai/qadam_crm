@@ -119,7 +119,7 @@ export default function HolidaysPage() {
       </div>
 
       {!isPending && (!data || data.length === 0) ? (
-        <EmptyState icon={<Palmtree size={32} />} title={`За ${year} год пусто`} description="Добавьте праздники и переносы" />
+        <EmptyState icon={<Palmtree size={32} />} title={`За ${year} год пусто`} description="Праздники и переносы рабочих дней — учитываются в сроках и календаре." />
       ) : (
         <DataTable
           columns={columns}

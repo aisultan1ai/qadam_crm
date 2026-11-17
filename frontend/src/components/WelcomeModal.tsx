@@ -23,7 +23,8 @@ export default function WelcomeModal() {
 
   // Проектов нет — новый tenant. Не грузим для гостей и пока email не подтверждён
   // (тогда сверху уже висит другой баннер, не спамим модалкой).
-  const enabled = !!me && !!tenantId && me.email_verified !== false;
+  // Владельцу новой компании вместо приветствия показывается мастер первого запуска.
+  const enabled = !!me && !!tenantId && me.email_verified !== false && !me.current_tenant?.onboarding_pending;
 
   const { data: projectsMeta, isSuccess } = useQuery({
     enabled,

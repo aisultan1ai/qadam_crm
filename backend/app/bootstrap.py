@@ -406,7 +406,7 @@ def seed_plans(db) -> None:
     plans_data = [
         {
             "key": "free", "title": "Free", "tagline": "Бесплатно навсегда для небольших команд",
-            "price_month": 0, "currency": "USD", "max_users": 5, "max_projects": 10, "sort_order": 1,
+            "price_month": 0, "currency": "USD", "max_users": 5, "max_projects": 10, "sort_order": 1, "api_rate_per_min": 60,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": False, "feature_analytics_cache": False,
             "feature_branding": False, "feature_custom_subdomain": False, "feature_priority_support": False,
@@ -419,7 +419,7 @@ def seed_plans(db) -> None:
         },
         {
             "key": "plan_a", "title": "Plan A", "tagline": "Управление задачами и проектами",
-            "price_month": 4, "currency": "USD", "max_users": 99, "max_projects": None, "sort_order": 2,
+            "price_month": 4, "currency": "USD", "max_users": 99, "max_projects": None, "sort_order": 2, "api_rate_per_min": 120,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": True, "feature_analytics_cache": True,
             "feature_branding": False, "feature_custom_subdomain": False, "feature_priority_support": False,
@@ -434,7 +434,7 @@ def seed_plans(db) -> None:
         },
         {
             "key": "plan_b", "title": "Plan B", "tagline": "CRM и управление всей компанией",
-            "price_month": 6, "currency": "USD", "max_users": 250, "max_projects": None, "sort_order": 3,
+            "price_month": 6, "currency": "USD", "max_users": 250, "max_projects": None, "sort_order": 3, "api_rate_per_min": 300,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": True, "feature_analytics_cache": True,
             "feature_branding": True, "feature_custom_subdomain": False, "feature_priority_support": True,
@@ -449,7 +449,7 @@ def seed_plans(db) -> None:
         },
         {
             "key": "plan_x", "title": "Plan X", "tagline": "Безопасность и контроль для крупных команд",
-            "price_month": 8, "currency": "USD", "max_users": None, "max_projects": None, "sort_order": 4,
+            "price_month": 8, "currency": "USD", "max_users": None, "max_projects": None, "sort_order": 4, "api_rate_per_min": 600,
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": True, "feature_analytics_cache": True,
             "feature_branding": True, "feature_custom_subdomain": True, "feature_priority_support": True,

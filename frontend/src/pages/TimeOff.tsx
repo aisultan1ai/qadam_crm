@@ -243,7 +243,8 @@ export default function TimeOffPage() {
         <EmptyState
           icon={<Palmtree size={32} />}
           title="Заявок пока нет"
-          description="Оформи первую — команда увидит календарь"
+          description="Отпуска, больничные и командировки: оформите заявку — после согласования команда увидит, кого нет на месте."
+          help="timeoff"
         />
       ) : (
         <DataTable

@@ -15,6 +15,7 @@ import { SkeletonCard } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import type { Page } from "@/types";
+import { useOpenParam } from "@/hooks/useOpenParam";
 
 import { SearchInput, Tabs } from "@/components/page";
 // ============================================================================
@@ -74,13 +75,16 @@ export default function Contacts() {
 
   const canCreate = can("contacts.create");
   const canRead = can("contacts.view");
+  // Ссылки из связей Объектов: /contacts?contact=12, /contacts?company=5
+  useOpenParam<Contact>("contact", (id) => `/api/contacts/${id}`, setOpenContact, canRead);
+  useOpenParam<Company>("company", (id) => `/api/companies/${id}`, (c) => { setTab("companies"); setOpenCompany(c); }, canRead);
 
   if (!canRead) {
     return (
       <EmptyState
         icon={<BookUser size={32} />}
         title="Нет доступа к контактам"
-        description="Обратитесь к администратору для получения права contacts.view"
+        description="В вашей роли нет права на просмотр контактов. Его может выдать администратор компании."
       />
     );
   }
@@ -191,7 +195,8 @@ function ContactsList({
       <EmptyState
         icon={<UserIcon size={32} />}
         title={q ? "По запросу ничего не найдено" : "Контактов пока нет"}
-        description={q ? "Попробуйте другой запрос" : "Добавьте первый контакт — начните собирать базу"}
+        description={q ? "Попробуйте другой запрос" : "Люди у клиентов, поставщиков и подрядчиков: должность, телефон, почта и компания."}
+        help={q ? undefined : "contacts"}
       />
     );
   }
@@ -320,7 +325,8 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
       <EmptyState
         icon={<Building2 size={32} />}
         title={q ? "По запросу ничего не найдено" : "Компаний пока нет"}
-        description={q ? "Попробуйте другой запрос" : "Добавьте первую компанию — организации-клиенты"}
+        description={q ? "Попробуйте другой запрос" : "Клиенты, поставщики и подрядчики с БИН. Список можно загрузить из Excel или выгрузки 1С."}
+        help={q ? undefined : "contacts"}
       />
     );
   }

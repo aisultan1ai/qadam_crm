@@ -66,8 +66,9 @@ from .p4 import (
     Directory, DirectoryEntry,
     DocumentFolder, Document, DocumentVersion,
     TenantLogRetention, TenantHoliday, TenantSecurityPolicy,
-    IntegrationProvider,
+    IntegrationProvider, IntegrationRequest,
 )
+from .api_token import ApiToken
 from .channel import (
     Channel, ChannelMember, Message, MessageAttachment, MessageReaction,
     Poll, PollOption, PollVote,
@@ -213,6 +214,8 @@ __all__ = [
     "TenantHoliday",
     "TenantSecurityPolicy",
     "IntegrationProvider",
+    "IntegrationRequest",
+    "ApiToken",
     "Channel",
     "ChannelMember",
     "Message",

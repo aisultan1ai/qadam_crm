@@ -7,7 +7,7 @@ import type { Role, PermissionGroup } from "@/types";
 import { Loader, Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 import {
-  AlignLeft, BookText, CalendarClock, Check, ChevronDown, Clock, Copy, CreditCard, ExternalLink, Eye, GripVertical, HardDrive, Hash, Link2, Loader2, LogOut, Mail, MessageCircle, Palette, Phone, Plus, Puzzle, RefreshCw, Save, Shield, Sparkles, Trash2, UserPlus, Users, XCircle, Zap,
+  AlignLeft, BookText, CalendarClock, Check, ChevronDown, ChevronRight, Clock, Copy, CreditCard, ExternalLink, Eye, GripVertical, HardDrive, Hash, Link2, Loader2, LogOut, Mail, MessageCircle, Palette, Phone, Plus, Puzzle, RefreshCw, Save, Shield, Sparkles, Trash2, UserPlus, Users, XCircle, Zap,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
@@ -16,6 +16,7 @@ import { useConfirm } from "@/components/Confirm";
 import { SettingsRouteLayout } from "@/components/page";
 import SecurityPolicy from "./SecurityPolicy";
 import IntegrationsPage from "./Integrations";
+import ApiTokens from "./ApiTokens";
 import Directories from "./Directories";
 import TaskStatuses from "./TaskStatuses";
 import { SETTINGS_TABS, settingsTabVisible } from "./settings/nav";
@@ -67,6 +68,7 @@ export default function Settings() {
         <Route path="billing" element={isOwner ? <BillingSettings /> : <Forbid />} />
         <Route path="security" element={can("settings.system") || isOwner ? <SecurityPolicy /> : <Forbid />} />
         <Route path="services" element={<IntegrationsPage />} />
+        <Route path="api" element={can("settings.system") || isOwner ? <ApiTokens /> : <Forbid />} />
         <Route path="task-statuses" element={can("settings.dictionaries") || isOwner ? <TaskStatuses /> : <Forbid />} />
         <Route path="directories" element={<Directories />} />
       </Routes>
@@ -3655,7 +3657,14 @@ function IntegrationsSettings() {
       toast.success("Google Calendar подключён");
       window.history.replaceState({}, "", window.location.pathname);
     } else if (params.get("google_error")) {
-      toast.error("Не удалось подключить Google", params.get("google_error") || "");
+      const code = params.get("google_error") || "";
+      const text: Record<string, string> = {
+        access_denied: "Вы не дали доступ в окне Google",
+        state: "Ссылка подключения устарела — нажмите «Подключить Google» ещё раз",
+        exchange_failed: "Google не подтвердил подключение — попробуйте ещё раз",
+        tenant_not_configured: "Подключение Google в компании не настроено",
+      };
+      toast.error("Не удалось подключить Google", text[code] ?? "Попробуйте ещё раз");
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -3698,8 +3707,6 @@ function IntegrationsSettings() {
         <p className="text-sm text-neutral-500">Подключение внешних сервисов к вашему аккаунту</p>
       </div>
 
-      {isOwner && <GoogleTenantConfig onSaved={() => qc.invalidateQueries({ queryKey: ["integrations", "google", "status"] })} />}
-
       <div className="card p-5">
         <div className="flex items-start gap-4">
           <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#4285F4]/10 text-[#4285F4]">
@@ -3722,8 +3729,8 @@ function IntegrationsSettings() {
             {s && !s.configured && (
               <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
                 {isOwner
-                  ? "Сначала заполните данные Google OAuth в блоке выше — свой client_id/secret и redirect_uri для вашей компании."
-                  : "Интеграция ещё не настроена в вашей компании. Обратитесь к владельцу — он должен ввести данные Google OAuth в /settings/integrations."}
+                  ? "Подключение Google пока недоступно: общее приложение Qadam не включено на сервере. Можно указать ключи своей компании ниже."
+                  : "Подключение Google пока недоступно в вашей компании. Обратитесь к владельцу компании."}
               </div>
             )}
 
@@ -3782,14 +3789,18 @@ function IntegrationsSettings() {
           </div>
         </div>
       </div>
+
+      {isOwner && <GoogleTenantConfig onSaved={() => qc.invalidateQueries({ queryKey: ["integrations", "google", "status"] })} />}
     </div>
   );
 }
 
 type TenantConfig = {
   client_id: string | null;
-  redirect_uri: string | null;
   has_secret: boolean;
+  platform_available: boolean;
+  using: "tenant" | "platform" | null;
+  redirect_uris: string[];
 };
 
 function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
@@ -3804,28 +3815,26 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
 
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [redirectUri, setRedirectUri] = useState("");
   const [initialized, setInitialized] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (cfgQ.data && !initialized) {
       setClientId(cfgQ.data.client_id ?? "");
-      setRedirectUri(cfgQ.data.redirect_uri ?? "");
+      // Нет общего приложения Qadam или уже свои ключи — показываем форму сразу.
+      setOpen(!cfgQ.data.platform_available || cfgQ.data.using === "tenant");
       setInitialized(true);
     }
   }, [cfgQ.data, initialized]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const body: Record<string, string> = {
-        client_id: clientId.trim(),
-        redirect_uri: redirectUri.trim(),
-      };
+      const body: Record<string, string> = { client_id: clientId.trim() };
       if (clientSecret.trim()) body.client_secret = clientSecret.trim();
       return (await api.put<TenantConfig>("/api/integrations/google/tenant-config", body)).data;
     },
     onSuccess: () => {
-      toast.success("Настройки Google сохранены");
+      toast.success("Ключи Google сохранены");
       setClientSecret("");
       qc.invalidateQueries({ queryKey: ["integrations", "google", "tenant-config"] });
       onSaved();
@@ -3836,49 +3845,64 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
   const clear = useMutation({
     mutationFn: async () => api.delete("/api/integrations/google/tenant-config"),
     onSuccess: () => {
-      toast.success("Настройки Google очищены");
-      setClientId(""); setClientSecret(""); setRedirectUri("");
+      toast.success("Свои ключи Google удалены");
+      setClientId("");
+      setClientSecret("");
       setInitialized(false);
       qc.invalidateQueries({ queryKey: ["integrations", "google", "tenant-config"] });
       onSaved();
     },
-    onError: (e) => toast.error("Не удалось очистить", extractApiError(e).message),
+    onError: (e) => toast.error("Не удалось удалить", extractApiError(e).message),
   });
 
-  const hasSecret = cfgQ.data?.has_secret ?? false;
-  const secretRequired = !hasSecret;
-  const canSubmit =
-    clientId.trim().length >= 10 &&
-    redirectUri.trim().length >= 10 &&
-    (!secretRequired || clientSecret.trim().length >= 10);
+  const cfg = cfgQ.data;
+  if (!cfg) return null;
+  const hasSecret = cfg.has_secret;
+  const canSubmit = clientId.trim().length >= 10 && (hasSecret || clientSecret.trim().length >= 10);
 
   return (
     <div className="card p-5">
-      <div className="flex items-start gap-4">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600">
-          <Shield size={22} />
+      <button type="button" className="flex w-full items-start gap-4 text-left" onClick={() => setOpen((v) => !v)}>
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600">
+          <Shield size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold">Настройки Google OAuth для компании</h3>
+          <h3 className="text-[15px] font-semibold">
+            Свои ключи Google {cfg.platform_available && <span className="font-normal text-neutral-500">— необязательно</span>}
+          </h3>
           <p className="mt-0.5 text-sm text-neutral-500">
-            Владелец задаёт client_id / secret / redirect_uri из Google Cloud Console. После этого все сотрудники смогут подключить свои Google-календари.
+            {cfg.using === "tenant"
+              ? "Сейчас используется Google-приложение вашей компании."
+              : cfg.platform_available
+                ? "Сотрудники подключают Google одной кнопкой через приложение Qadam. Свои ключи нужны, только если этого требует политика безопасности компании."
+                : "Общее приложение Qadam на этом сервере не включено — укажите ключи своего Google-приложения."}
           </p>
+        </div>
+        <ChevronRight size={16} className={clsx("mt-1 shrink-0 text-neutral-400 transition-transform", open && "rotate-90")} />
+      </button>
 
-          <details className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 open:pb-3 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
-            <summary className="cursor-pointer font-medium">Как получить credentials</summary>
+      {open && (
+        <div className="mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+          <details className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
+            <summary className="cursor-pointer font-medium">Как создать своё Google-приложение</summary>
             <ol className="mt-2 list-decimal space-y-1 pl-4">
-              <li>Открыть <a className="link" href="https://console.cloud.google.com" target="_blank" rel="noreferrer">Google Cloud Console</a></li>
-              <li>Создать проект (например, «Qadam CRM — MyCompany»)</li>
-              <li>APIs &amp; Services → Library → включить <b>Google Calendar API</b></li>
-              <li>OAuth consent screen → External → добавить email owner в Test users</li>
+              <li>Открыть <a className="link" href="https://console.cloud.google.com" target="_blank" rel="noreferrer">Google Cloud Console</a> и создать проект</li>
+              <li>APIs &amp; Services → Library → включить <b>Google Calendar API</b> и <b>Google Drive API</b></li>
+              <li>OAuth consent screen → заполнить название и почту поддержки</li>
               <li>Credentials → Create OAuth client ID → тип <b>Web application</b></li>
-              <li>В Authorized redirect URIs указать URL из поля ниже, например:<br /><code>https://ваш-домен/api/integrations/google/callback</code></li>
+              <li>В Authorized redirect URIs добавить оба адреса ниже</li>
               <li>Скопировать <b>Client ID</b> и <b>Client secret</b> в поля ниже</li>
             </ol>
           </details>
+          <div className="mt-3 rounded-lg bg-neutral-50 p-3 text-xs dark:bg-white/[0.03]">
+            <div className="mb-1 font-medium text-neutral-600 dark:text-neutral-300">Адреса возврата (Authorized redirect URIs)</div>
+            {cfg.redirect_uris.map((u) => (
+              <code key={u} className="block break-all">{u}</code>
+            ))}
+          </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
+          <div className="mt-4 grid gap-3">
+            <label className="block">
               <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Client ID</span>
               <input
                 className="input font-mono text-xs"
@@ -3887,8 +3911,7 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
                 placeholder="123456789-abc.apps.googleusercontent.com"
               />
             </label>
-
-            <label className="block sm:col-span-2">
+            <label className="block">
               <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
                 Client Secret {hasSecret && <span className="text-emerald-600">· сохранён</span>}
               </span>
@@ -3901,51 +3924,36 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
                 autoComplete="new-password"
               />
             </label>
-
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Redirect URI</span>
-              <input
-                className="input font-mono text-xs"
-                value={redirectUri}
-                onChange={(e) => setRedirectUri(e.target.value)}
-                placeholder={`${window.location.origin}/api/integrations/google/callback`}
-              />
-              <span className="mt-1 block text-[11px] text-neutral-500">
-                Точное совпадение с Authorized redirect URIs в Google Cloud. Обычно: <code>{window.location.origin}/api/integrations/google/callback</code>
-              </span>
-            </label>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              variant="primary"
-              onClick={() => save.mutate()}
-              disabled={!canSubmit || save.isPending}
-            >
+            <Button variant="primary" onClick={() => save.mutate()} disabled={!canSubmit || save.isPending}>
               {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               Сохранить
             </Button>
-            {(cfgQ.data?.client_id || cfgQ.data?.has_secret) && (
+            {(cfg.client_id || cfg.has_secret) && (
               <Button
                 variant="ghost"
                 className="text-rose-500"
                 disabled={clear.isPending}
                 onClick={async () => {
                   const ok = await confirm({
-                    title: "Очистить настройки Google?",
-                    message: "Все подключения сотрудников перестанут синхронизироваться, пока настройки не будут введены заново.",
-                    confirmLabel: "Очистить",
+                    title: "Удалить свои ключи Google?",
+                    message: cfg.platform_available
+                      ? "Компания перейдёт на общее приложение Qadam. Сотрудникам нужно будет переподключить Google."
+                      : "Подключения сотрудников перестанут синхронизироваться, пока ключи не будут введены заново.",
+                    confirmLabel: "Удалить",
                     danger: true,
                   });
                   if (ok) clear.mutate();
                 }}
               >
-                <Trash2 size={14} /> Очистить
+                <Trash2 size={14} /> Удалить свои ключи
               </Button>
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

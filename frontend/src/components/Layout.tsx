@@ -7,7 +7,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "reac
 import {
   Activity as ActivityIcon, AlarmClock, ArrowUpCircle, BarChart3, Bell, BookOpen, BookUser, Boxes, Calendar as CalendarIcon,
   CalendarClock, CheckSquare, ChevronDown, Coins, Contact2, Eye, FileText, FolderKanban, Home, Inbox as InboxIcon,
-  LayoutGrid, ListChecks, LogOut, Mail as MailIcon, Menu, MessageSquare, MessagesSquare, Moon, Network,
+  LayoutGrid, LifeBuoy, ListChecks, LogOut, Mail as MailIcon, Menu, MessageSquare, MessagesSquare, Moon, Network,
   Palmtree, PanelLeftClose, PanelLeftOpen, PenSquare, Phone, PieChart, Plus, Search, Settings, Shield, Star, Sun,
   Timer as TimerIcon, User as UserIcon, UserCheck, UserPlus, Users, Workflow, X, Zap, CircleDot,
 } from "lucide-react";
@@ -32,6 +32,8 @@ import GlobalSearch from "./GlobalSearch";
 import { ShortcutsDialog, useGlobalShortcuts } from "./Shortcuts";
 import TenantSwitcher from "./TenantSwitcher";
 import WelcomeModal from "./WelcomeModal";
+import { useT } from "@/lib/i18n";
+import OnboardingWizard from "./OnboardingWizard";
 import { TimerWidget } from "./TimerWidget";
 import { LogoMark } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -348,6 +350,7 @@ export default function Layout() {
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} onShowShortcuts={openShortcuts} />
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <WelcomeModal />
+      <OnboardingWizard />
     </div>
   );
 }
@@ -365,6 +368,7 @@ function Rail({
   me: ReturnType<typeof useAuth.getState>["me"];
   logout: () => void;
 }) {
+  const tr = useT();
   const visible = useVisible(me, useAuth((s) => s.can));
   const nav = useNavigate();
   const meRef = useRef<HTMLButtonElement>(null);
@@ -389,7 +393,7 @@ function Rail({
             <NavLink
               key={m.key}
               to={first?.to ?? "/"}
-              title={m.label}
+              title={tr(m.label)}
               aria-current={on ? "page" : undefined}
               className={clsx(
                 "relative flex w-full flex-col items-center gap-[3px] rounded-[10px] py-[7px] text-[9.5px] font-medium leading-none tracking-[-0.01em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
@@ -400,7 +404,7 @@ function Rail({
               )}
             >
               <Icon size={18} strokeWidth={on ? 2.1 : 1.8} className={on ? "text-brand-400" : undefined} />
-              <span className="max-w-full truncate">{m.label}</span>
+              <span className="max-w-full truncate">{tr(m.label)}</span>
               {m.key === "home" && notifCount > 0 && (
                 <span className="absolute right-1.5 top-1 min-w-[15px] rounded-full bg-rose-500 px-1 text-center text-[9px] font-semibold leading-[15px] text-white">
                   {notifCount > 99 ? "99+" : notifCount}
@@ -417,8 +421,8 @@ function Rail({
           <NavLink
             key={m.key}
             to={m.items.find(visible)?.to ?? "/"}
-            title={m.label}
-            aria-label={m.label}
+            title={tr(m.label)}
+            aria-label={tr(m.label)}
             aria-current={on ? "page" : undefined}
             className={clsx(
               "mt-1 grid h-9 w-9 place-items-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
@@ -433,7 +437,7 @@ function Rail({
         ref={meRef}
         type="button"
         onClick={() => setMeOpen((v) => !v)}
-        aria-label="Профиль и выход"
+        aria-label={tr("Профиль и выход")}
         className="mt-2 rounded-full ring-2 ring-rail transition-shadow hover:ring-brand-400/60 focus-visible:outline-none focus-visible:ring-brand-400"
       >
         <Avatar name={me?.name} url={me?.avatar_url} size={30} />
@@ -445,13 +449,16 @@ function Rail({
         </div>
         <div className="pt-1">
           <PopoverItem onClick={() => { setMeOpen(false); nav("/profile"); }}>
-            <UserIcon size={14} className="text-zinc-400" /> Мой профиль
+            <UserIcon size={14} className="text-zinc-400" /> {tr("Мой профиль")}
           </PopoverItem>
           <PopoverItem onClick={() => { setMeOpen(false); nav("/users/invitations"); }}>
-            <UserPlus size={14} className="text-zinc-400" /> Пригласить сотрудников
+            <UserPlus size={14} className="text-zinc-400" /> {tr("Пригласить сотрудников")}
+          </PopoverItem>
+          <PopoverItem onClick={() => { setMeOpen(false); nav("/help"); }}>
+            <LifeBuoy size={14} className="text-zinc-400" /> {tr("Центр помощи")}
           </PopoverItem>
           <PopoverItem onClick={() => { setMeOpen(false); logout(); }}>
-            <LogOut size={14} className="text-zinc-400" /> Выйти
+            <LogOut size={14} className="text-zinc-400" /> {tr("Выйти")}
           </PopoverItem>
         </div>
       </Popover>
@@ -474,6 +481,7 @@ function ModulePanel({
   can: Can;
   mobile?: boolean;
 }) {
+  const tr = useT();
   const { pathname } = useLocation();
   const [sp] = useSearchParams();
   const items = m.items.filter(visible);
@@ -502,15 +510,15 @@ function ModulePanel({
         "flex h-full w-[228px] shrink-0 flex-col border-r border-zinc-200 bg-[#F5F6F8] dark:border-zinc-800 dark:bg-[#1C1F25]",
         mobile && "w-[240px]",
       )}
-      aria-label={`Раздел «${m.label}»`}
+      aria-label={`${tr("Раздел")} «${tr(m.label)}»`}
     >
       <div className="flex h-12 shrink-0 items-center justify-between px-4">
-        <span className="text-[14px] font-semibold text-zinc-900 dark:text-white">{m.label}</span>
+        <span className="text-[14px] font-semibold text-zinc-900 dark:text-white">{tr(m.label)}</span>
         <button
           type="button"
           onClick={onCollapse}
-          aria-label={mobile ? "Закрыть меню" : "Свернуть панель"}
-          title={mobile ? "Закрыть" : "Свернуть панель"}
+          aria-label={mobile ? tr("Закрыть меню") : tr("Свернуть панель")}
+          title={mobile ? tr("Закрыть") : tr("Свернуть панель")}
           className="grid h-7 w-7 place-items-center rounded-md text-zinc-400 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-white/5 dark:hover:text-zinc-200"
         >
           {mobile ? <X size={16} /> : <PanelLeftClose size={16} />}
@@ -522,11 +530,11 @@ function ModulePanel({
         ))}
         {m.extra === "favorites" && <FavoritesBlock />}
         {m.extra === "task-projects" && can("projects.view") && (
-          <ProjectsBlock title="Проекты" hrefOf={(p) => `/tasks?project=${p.id}`} activeId={pathname === "/tasks" ? Number(sp.get("project")) || null : null} canCreate={can("projects.create")} />
+          <ProjectsBlock title={tr("Проекты")} hrefOf={(p) => `/tasks?project=${p.id}`} activeId={pathname === "/tasks" ? Number(sp.get("project")) || null : null} canCreate={can("projects.create")} />
         )}
         {m.extra === "spaces" && (
           <ProjectsBlock
-            title="Пространства"
+            title={tr("Пространства")}
             hrefOf={(p) => `/projects/${p.id}`}
             activeId={pathname.startsWith("/projects/") ? Number(pathname.split("/")[2]) || null : null}
             canCreate={can("projects.create")}
@@ -538,6 +546,7 @@ function ModulePanel({
 }
 
 function PanelLink({ item: i, active }: { item: PanelItem; active: boolean }) {
+  const tr = useT();
   const Icon = i.icon;
   return (
     <NavLink
@@ -552,7 +561,7 @@ function PanelLink({ item: i, active }: { item: PanelItem; active: boolean }) {
       )}
     >
       <Icon size={15} className={active ? "text-brand-600 dark:text-brand-300" : "text-zinc-400 group-hover:text-zinc-600 dark:text-zinc-500 dark:group-hover:text-zinc-300"} />
-      <span className="min-w-0 flex-1 truncate">{i.label}</span>
+      <span className="min-w-0 flex-1 truncate">{tr(i.label)}</span>
       {i.badge && <PanelBadge kind={i.badge} active={active} />}
     </NavLink>
   );
@@ -587,12 +596,13 @@ function SectionTitle({ children, action }: { children: ReactNode; action?: Reac
 }
 
 function FavoritesBlock() {
+  const tr = useT();
   const { favorites, toggle } = useFavorites();
   return (
     <>
-      <SectionTitle>Избранное</SectionTitle>
+      <SectionTitle>{tr("Избранное")}</SectionTitle>
       {favorites.length === 0 ? (
-        <p className="px-2.5 py-1 text-[12px] leading-snug text-zinc-400">Отмечайте задачи, проекты и статьи звёздочкой — они появятся здесь.</p>
+        <p className="px-2.5 py-1 text-[12px] leading-snug text-zinc-400">{tr("Отмечайте задачи, проекты и статьи звёздочкой — они появятся здесь.")}</p>
       ) : (
         favorites.map((f) => (
           <div key={`${f.entity}:${f.entity_id}`} className="group/fav relative">
@@ -620,7 +630,7 @@ function FavoritesBlock() {
               type="button"
               onClick={() => toggle(f.entity, f.entity_id)}
               aria-label={`Убрать «${f.title}» из избранного`}
-              title="Убрать из избранного"
+              title={tr("Убрать из избранного")}
               className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-amber-500 opacity-0 hover:bg-zinc-200/70 group-hover/fav:opacity-100 focus:opacity-100 dark:hover:bg-white/10"
             >
               <Star size={12} className="fill-current" />
@@ -643,6 +653,7 @@ function ProjectsBlock({
   activeId: number | null;
   canCreate: boolean;
 }) {
+  const tr = useT();
   const LIMIT = 12;
   const [all, setAll] = useState(false);
   const { data: projects = [] } = useQuery({
@@ -658,8 +669,8 @@ function ProjectsBlock({
           canCreate && (
             <NavLink
               to="/projects?new=1"
-              title="Новый проект"
-              aria-label="Новый проект"
+              title={tr("Новый проект")}
+              aria-label={tr("Новый проект")}
               className="grid h-5 w-5 place-items-center rounded text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-white/10 dark:hover:text-zinc-200"
             >
               <Plus size={13} />
@@ -669,7 +680,7 @@ function ProjectsBlock({
       >
         {title}
       </SectionTitle>
-      {list.length === 0 && <p className="px-2.5 py-1 text-[12px] text-zinc-400">Проектов пока нет</p>}
+      {list.length === 0 && <p className="px-2.5 py-1 text-[12px] text-zinc-400">{tr("Проектов пока нет")}</p>}
       {(all ? list : list.slice(0, LIMIT)).map((p) => {
         const on = activeId === p.id;
         return (
@@ -698,7 +709,7 @@ function ProjectsBlock({
       {list.length > LIMIT && (
         <button type="button" onClick={() => setAll((v) => !v)} className="flex h-7 items-center gap-1 px-2.5 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
           <ChevronDown size={13} className={clsx("transition-transform", all && "rotate-180")} />
-          {all ? "Свернуть" : `Ещё ${list.length - LIMIT}`}
+          {all ? tr("Свернуть") : tr("Ещё {n}", { n: list.length - LIMIT })}
         </button>
       )}
     </>
@@ -726,17 +737,18 @@ function TopBar({
   onExpandPanel: () => void;
   online: boolean;
 }) {
+  const tr = useT();
   return (
     <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-zinc-200 bg-white px-3 text-zinc-900 sm:px-4 dark:border-zinc-800 dark:bg-[#1C1F25] dark:text-zinc-100">
-      <button type="button" onClick={onOpenMenu} aria-label="Открыть меню" className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 md:hidden dark:hover:bg-white/5">
+      <button type="button" onClick={onOpenMenu} aria-label={tr("Открыть меню")} className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 md:hidden dark:hover:bg-white/5">
         <Menu size={18} />
       </button>
       {panelCollapsed && (
         <button
           type="button"
           onClick={onExpandPanel}
-          aria-label="Показать панель раздела"
-          title="Показать панель раздела"
+          aria-label={tr("Показать панель раздела")}
+          title={tr("Показать панель раздела")}
           className="hidden h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 md:grid dark:hover:bg-white/5"
         >
           <PanelLeftOpen size={17} />
@@ -751,8 +763,8 @@ function TopBar({
       >
         <Search size={14} />
         <span className="truncate">
-          <span className="hidden sm:inline">Поиск задач, людей, проектов…</span>
-          <span className="sm:hidden">Поиск…</span>
+          <span className="hidden sm:inline">{tr("Поиск задач, людей, проектов…")}</span>
+          <span className="sm:hidden">{tr("Поиск…")}</span>
         </span>
         <span className="ml-auto hidden items-center gap-1 sm:flex">
           <span className="kbd">{modKey}</span>
@@ -767,8 +779,8 @@ function TopBar({
         <button
           type="button"
           onClick={toggleTheme}
-          aria-label="Переключить тему"
-          title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+          aria-label={tr("Переключить тему")}
+          title={theme === "dark" ? tr("Светлая тема") : tr("Тёмная тема")}
           className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
         >
           {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
@@ -779,6 +791,7 @@ function TopBar({
 }
 
 function NotificationsButton({ online }: { online: boolean }) {
+  const tr = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
@@ -810,7 +823,7 @@ function NotificationsButton({ online }: { online: boolean }) {
         ref={ref}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Уведомления"
+        aria-label={tr("Уведомления")}
         aria-expanded={open}
         className="relative grid h-8 w-8 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
       >
@@ -825,13 +838,13 @@ function NotificationsButton({ online }: { online: boolean }) {
       </button>
       <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={340} align="end">
         <div className="flex items-center justify-between px-2 pb-1.5 pt-1">
-          <span className="text-[13px] font-semibold">Уведомления</span>
+          <span className="text-[13px] font-semibold">{tr("Уведомления")}</span>
           <button className="link text-xs disabled:opacity-50" disabled={readAll.isPending || unread === 0} onClick={() => readAll.mutate()}>
             Прочитать все
           </button>
         </div>
         <div className="max-h-80 overflow-y-auto">
-          {notifs.length === 0 && <div className="py-8 text-center text-[13px] text-zinc-500">Пусто</div>}
+          {notifs.length === 0 && <div className="py-8 text-center text-[13px] text-zinc-500">{tr("Пусто")}</div>}
           {notifs.map((n) => (
             <button
               key={n.id}
@@ -873,6 +886,7 @@ function NotificationsButton({ online }: { online: boolean }) {
 
 // «+ Создать»: быстрый вход в создание задачи / проекта / сделки из любого экрана.
 function CreateMenu({ can }: { can: Can }) {
+  const tr = useT();
   const navigate = useNavigate();
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -886,7 +900,7 @@ function CreateMenu({ can }: { can: Can }) {
     <>
       <button ref={ref} type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu" className="btn-primary shrink-0 !px-2.5 sm:!px-3">
         <Plus size={15} strokeWidth={2.4} />
-        <span className="hidden sm:inline">Создать</span>
+        <span className="hidden sm:inline">{tr("Создать")}</span>
       </button>
       <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={236}>
         {items.map((i) => {
@@ -906,8 +920,8 @@ function CreateMenu({ can }: { can: Can }) {
                 <Icon size={16} />
               </span>
               <span className="min-w-0">
-                <span className="block text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{i.label}</span>
-                <span className="block text-xs text-zinc-500">{i.hint}</span>
+                <span className="block text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{tr(i.label)}</span>
+                <span className="block text-xs text-zinc-500">{tr(i.hint)}</span>
               </span>
             </button>
           );
@@ -965,6 +979,7 @@ function useOverdueCount(enabled: boolean) {
 /* ============================== Баннер email ============================== */
 
 function EmailVerificationBanner() {
+  const tr = useT();
   const { me } = useAuth();
   const toast = useToast();
   const [sending, setSending] = useState(false);
@@ -989,9 +1004,9 @@ function EmailVerificationBanner() {
     <div role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-[13px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span>
-          Подтвердите email <b>{me.email}</b> — мы отправили ссылку. Не пришло?{" "}
+          {tr("Подтвердите email")} <b>{me.email}</b> {tr("— мы отправили ссылку. Не пришло?")}{" "}
           <button type="button" onClick={resend} disabled={sending} className="underline underline-offset-2 disabled:opacity-60">
-            {sending ? "Отправляем…" : "Отправить ещё раз"}
+            {sending ? tr("Отправляем…") : tr("Отправить ещё раз")}
           </button>
         </span>
         <button

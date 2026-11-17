@@ -8,7 +8,8 @@ import { api, extractApiError } from "@/api/client";
 import type { Role } from "@/types";
 import { Loader } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
-import { Check, Clock, Copy, Mail, RefreshCw, UserPlus, XCircle } from "lucide-react";
+import { Check, Clock, Copy, FileSpreadsheet, Mail, RefreshCw, UserPlus, XCircle } from "lucide-react";
+import { EmployeeImport } from "@/components/EmployeeImport";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
@@ -243,6 +244,15 @@ export default function InvitationsPanel() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="card p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <FileSpreadsheet size={18} className="text-brand-500" />
+          <h2 className="text-base font-semibold">Импорт из Excel</h2>
+        </div>
+        <p className="mb-3 text-sm text-neutral-500">Пригласить сразу всю команду — с должностями, отделами, ролями и руководителями.</p>
+        <EmployeeImport />
       </div>
 
       <div className="card p-5">

@@ -41,6 +41,7 @@ const BookingPublic = lazy(() => import("@/pages/BookingPublic"));
 const TimeTracking = lazy(() => import("@/pages/TimeTracking"));
 const People = lazy(() => import("@/pages/People"));
 const OrgChart = lazy(() => import("@/pages/OrgChart"));
+const Help = lazy(() => import("@/pages/Help"));
 const Planner = lazy(() => import("@/pages/Planner"));
 const Contacts = lazy(() => import("@/pages/Contacts"));
 const ProfileSettings = lazy(() => import("@/pages/ProfileSettings"));
@@ -182,6 +183,7 @@ export default function App() {
         <Route path="people" element={<People />} />
         <Route path="people/:id" element={<Profile />} />
         <Route path="org-chart" element={<OrgChart />} />
+        <Route path="help" element={<Help />} />
         <Route path="planner" element={<Planner />} />
         <Route path="contacts" element={<Contacts />} />
         <Route path="activity" element={<Activity />} />

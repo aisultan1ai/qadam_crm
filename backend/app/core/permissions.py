@@ -135,6 +135,10 @@ def user_has(user, codes: Iterable[str], tenant_id: Optional[int] = None) -> boo
     делается вне tenant-контекста; в таком случае выводится warning в лог,
     т.к. это потенциальный cross-tenant leak.
     """
+    # Запрос по API-токену: только права, выбранные при выпуске токена (уже ∩ права сотрудника).
+    token_scopes = getattr(user, "__dict__", {}).get("_token_scopes")
+    if token_scopes is not None:
+        return any(c in token_scopes for c in codes)
     if getattr(user, "is_platform_admin", False) or getattr(user, "is_superuser", False):
         return True
     if tenant_id is None:

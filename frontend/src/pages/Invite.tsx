@@ -17,6 +17,7 @@ type InviteInfo = {
   tenant: { id: number; name: string; slug: string; logo_url: string | null };
   expires_at: string;
   requires_signup: boolean;
+  full_name?: string | null;
 };
 
 const signupSchema = z.object({
@@ -47,6 +48,7 @@ export default function Invite() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<SignupForm>({ resolver: zodResolver(signupSchema), defaultValues: { first_name: "", last_name: "", password: "" } });
 
@@ -55,7 +57,17 @@ export default function Invite() {
     (async () => {
       try {
         const { data } = await api.get<InviteInfo>(`/api/invitations/${token}`);
-        if (!cancelled) setInfo(data);
+        if (!cancelled) {
+          setInfo(data);
+          // ФИО из импорта сотрудников: «Фамилия Имя Отчество» → подставляем, человек может поправить.
+          const parts = (data.full_name ?? "").trim().split(/\s+/).filter(Boolean);
+          if (parts.length >= 2) {
+            setValue("last_name", parts[0]);
+            setValue("first_name", parts.slice(1).join(" "));
+          } else if (parts.length === 1) {
+            setValue("first_name", parts[0]);
+          }
+        }
       } catch (e) {
         if (!cancelled) setError(extractApiError(e).message);
       } finally {

@@ -32,6 +32,7 @@ from ..database import get_db
 from ..models import Document, DocumentVersion, StorageAccount, Tenant
 from ..schemas.common import Message
 from ..services import dropbox_service as dbx_svc
+from ..core import google_oauth
 from ..services import google_drive as gdrive
 from ..services import google_calendar as gcal  # только для tenant_configured (Google client_id/secret)
 from .deps import TenantContext, get_current_context, log_action, require
@@ -138,8 +139,7 @@ def auth_url(
             "Подключение к этому хранилищу ещё не настроено в вашей компании. "
             "Владелец компании может включить его в Настройки → Сервисы и хранилища.",
         )
-    nonce = pysecrets.token_urlsafe(16)
-    state = _encode_state(ctx.tenant.id, ctx.user.id, provider, nonce)
+    state = google_oauth.issue_state(ctx.tenant.id, ctx.user.id, provider)
     if provider == "google_drive":
         url = gdrive.build_auth_url(ctx.tenant, state)
     else:
@@ -163,11 +163,9 @@ def callback(
     if not code or not state:
         raise HTTPException(400, "Не удалось завершить подключение — попробуйте ещё раз")
     try:
-        tenant_id, user_id, state_provider = _decode_state(state)
-    except Exception:
-        raise HTTPException(400, "невалидный state")
-    if state_provider != provider:
-        raise HTTPException(400, "state/provider mismatch")
+        tenant_id, user_id = google_oauth.consume_state(state, provider)
+    except HTTPException:
+        return RedirectResponse(url=f"{redirect_target}&error=state", status_code=302)
 
     tenant = db.get(Tenant, tenant_id)
     if not tenant or not _tenant_configured(tenant, provider):

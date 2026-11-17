@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 from datetime import datetime, date, timezone
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..database import get_db
 from ..models import Company, Contact, Deal, DealStage, DealStatus
@@ -51,7 +51,7 @@ class DealOut(BaseModel):
 
 class DealCreate(BaseModel):
     title: str
-    amount_cents: int = 0
+    amount_cents: int = Field(default=0, ge=0, le=10**17)  # до 1 трлн ₸ в тиынах
     currency: str = "KZT"
     stage: DealStage = DealStage.new
     probability: Optional[int] = None
@@ -64,7 +64,7 @@ class DealCreate(BaseModel):
 
 class DealUpdate(BaseModel):
     title: Optional[str] = None
-    amount_cents: Optional[int] = None
+    amount_cents: Optional[int] = Field(default=None, ge=0, le=10**17)
     currency: Optional[str] = None
     stage: Optional[DealStage] = None
     probability: Optional[int] = None
@@ -178,6 +178,14 @@ def create_deal(
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="create", entity="deal", entity_id=row.id, detail=row.title)
     db.commit()
     db.refresh(row)
+    return row
+
+
+@router.get("/{did}", response_model=DealOut)
+def get_deal(did: int, ctx: TenantContext = Depends(require("deals.view")), db: Session = Depends(get_db)):
+    row = db.get(Deal, did)
+    if not row or row.tenant_id != ctx.tenant.id:
+        raise HTTPException(404, "Сделка не найдена")
     return row
 
 

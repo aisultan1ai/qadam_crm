@@ -29,13 +29,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, and_
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..database import get_db
 from ..models import (
     ProjectGroup, ProjectRoleAssignment, Project, CommentEditHistory, Comment, Task, TenantMembership,
     Directory, DirectoryEntry, DocumentFolder, Document, DocumentVersion,
-    TenantLogRetention, TenantHoliday, TenantSecurityPolicy, IntegrationProvider,
+    TenantLogRetention, TenantHoliday, TenantSecurityPolicy, IntegrationProvider, IntegrationRequest,
     Contact, Company, User, TotpBackupCode,
 )
 from ..schemas.common import Message
@@ -774,6 +774,7 @@ class ProviderOut(BaseModel):
     category: str
     status: str
     is_enabled: bool
+    requested: bool = False  # «Хочу эту интеграцию» — уже отправлено этим пользователем
 
 
 @router.get("/api/integrations", response_model=list[ProviderOut])
@@ -787,6 +788,11 @@ def list_integrations(ctx: TenantContext = Depends(get_current_context), db: Ses
     )
     catalog = {r.code: r for r in rows if r.tenant_id is None}
     own = {r.code: r for r in rows if r.tenant_id is not None}
+    my_requests = {
+        c for (c,) in db.query(IntegrationRequest.code).filter(
+            IntegrationRequest.tenant_id == ctx.tenant.id, IntegrationRequest.user_id == ctx.user.id,
+        )
+    }
     out = []
     for code, base in catalog.items():
         mine = own.get(code)
@@ -794,13 +800,14 @@ def list_integrations(ctx: TenantContext = Depends(get_current_context), db: Ses
         out.append(ProviderOut(
             id=(mine or base).id, code=code, label=base.label, category=base.category,
             status=base.status, is_enabled=bool(mine and mine.is_enabled),
+            requested=code in my_requests,
         ))
     out.sort(key=lambda p: (p.category, p.label))
     return out
 
 
 @router.post("/api/integrations/{code}/toggle", response_model=ProviderOut)
-def toggle_integration(code: str, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def toggle_integration(code: str, ctx: TenantContext = Depends(require("settings.system")), db: Session = Depends(get_db)):
     row = (
         db.query(IntegrationProvider)
         .filter(IntegrationProvider.tenant_id == ctx.tenant.id, IntegrationProvider.code == code)
@@ -822,6 +829,75 @@ def toggle_integration(code: str, ctx: TenantContext = Depends(get_current_conte
     db.commit()
     db.refresh(row)
     return row
+
+
+class IntegrationRequestIn(BaseModel):
+    comment: Optional[str] = Field(default=None, max_length=500)
+
+
+class IntegrationRequestOut(BaseModel):
+    code: str
+    requested: bool
+
+
+@router.post("/api/integrations/{code}/request", response_model=IntegrationRequestOut)
+def request_integration(
+    code: str,
+    payload: IntegrationRequestIn = IntegrationRequestIn(),
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    """«Хочу эту интеграцию»: голос за интеграцию из списка «Скоро». Повторный вызов снимает голос."""
+    base = db.query(IntegrationProvider).filter(
+        IntegrationProvider.tenant_id.is_(None), IntegrationProvider.code == code,
+    ).first()
+    if not base or base.status != "coming_soon":
+        raise HTTPException(404, "Такой интеграции нет в списке планируемых")
+    row = db.query(IntegrationRequest).filter(
+        IntegrationRequest.tenant_id == ctx.tenant.id,
+        IntegrationRequest.user_id == ctx.user.id,
+        IntegrationRequest.code == code,
+    ).first()
+    if row:
+        db.delete(row)
+        db.commit()
+        return IntegrationRequestOut(code=code, requested=False)
+    comment = (payload.comment or "").strip() or None
+    db.add(IntegrationRequest(tenant_id=ctx.tenant.id, user_id=ctx.user.id, code=code, comment=comment))
+    db.commit()
+    return IntegrationRequestOut(code=code, requested=True)
+
+
+class TwilioWebhookOut(BaseModel):
+    url: str
+    enabled: bool
+
+
+@router.get("/api/integrations/twilio/webhook", response_model=TwilioWebhookOut)
+def twilio_webhook_url(ctx: TenantContext = Depends(require("settings.system")), db: Session = Depends(get_db)):
+    """Адрес для Twilio (Status callback): с секретом компании. Включает интеграцию, если она выключена."""
+    import secrets as _secrets
+    from ..config import settings as _settings
+    template = db.query(IntegrationProvider).filter(
+        IntegrationProvider.tenant_id.is_(None), IntegrationProvider.code == "twilio",
+    ).first()
+    row = db.query(IntegrationProvider).filter(
+        IntegrationProvider.tenant_id == ctx.tenant.id, IntegrationProvider.code == "twilio",
+    ).first()
+    if not row:
+        row = IntegrationProvider(
+            tenant_id=ctx.tenant.id, code="twilio", label=template.label if template else "Twilio",
+            category="telephony", status=template.status if template else "beta", is_enabled=True, config={},
+        )
+        db.add(row)
+    cfg = dict(row.config or {})
+    if not cfg.get("webhook_secret"):
+        cfg["webhook_secret"] = _secrets.token_urlsafe(24)
+        row.config = cfg
+    row.is_enabled = True
+    db.commit()
+    url = f"{_settings.APP_BASE_URL.rstrip('/')}/api/webhooks/telephony/twilio?tenant_id={ctx.tenant.id}&key={cfg['webhook_secret']}"
+    return TwilioWebhookOut(url=url, enabled=row.is_enabled)
 
 
 # --- P4t.5: OAuth-инициация для интеграций ---
@@ -859,11 +935,8 @@ def integration_oauth_start(code: str, ctx: TenantContext = Depends(get_current_
                 503,
                 f"{code} не настроен: owner должен ввести client credentials в /settings/integrations",
             )
-        nonce = _secrets.token_urlsafe(16)
-        state_payload = _json.dumps(
-            {"t": ctx.tenant.id, "u": ctx.user.id, "p": code, "n": nonce}
-        ).encode("utf-8")
-        state = _b64.urlsafe_b64encode(state_payload).decode("ascii").rstrip("=")
+        from ..core import google_oauth
+        state = google_oauth.issue_state(ctx.tenant.id, ctx.user.id, code)
         if code == "google_drive":
             url = gdrive.build_auth_url(ctx.tenant, state)
         else:
@@ -1159,10 +1232,12 @@ def merge_contacts(payload: MergeIn, ctx: TenantContext = Depends(get_current_co
 @router.post("/api/contacts/import", response_model=Message)
 async def import_contacts(
     file: UploadFile = File(...),
-    ctx: TenantContext = Depends(get_current_context),
+    ctx: TenantContext = Depends(require("contacts.create")),
     db: Session = Depends(get_db),
 ):
-    content = await file.read()
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Файл больше 5 МБ")
     imported = 0
     if (file.filename or "").lower().endswith(".csv") or (file.content_type or "").startswith("text/csv"):
         text = content.decode("utf-8", errors="replace")
@@ -1220,7 +1295,7 @@ class ConvertToEmployeeIn(BaseModel):
 
 
 @router.post("/api/contacts/{cid}/convert-to-employee", response_model=Message)
-def convert_to_employee(cid: int, payload: ConvertToEmployeeIn, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def convert_to_employee(cid: int, payload: ConvertToEmployeeIn, ctx: TenantContext = Depends(require("users.create")), db: Session = Depends(get_db)):
     from ..core.security import hash_password
     c = db.get(Contact, cid)
     if not c or c.tenant_id != ctx.tenant.id:
@@ -1241,7 +1316,9 @@ def convert_to_employee(cid: int, payload: ConvertToEmployeeIn, ctx: TenantConte
     )
     db.add(u)
     db.flush()
-    db.add(TenantMembership(tenant_id=ctx.tenant.id, user_id=u.id, role="member"))
+    from ..core.plans import check_user_limit
+    check_user_limit(db, ctx.tenant)
+    db.add(TenantMembership(tenant_id=ctx.tenant.id, user_id=u.id, position=c.position))
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="convert", entity="contact", entity_id=cid, detail=f"→ user {u.id}")
     db.commit()
     return Message(message=f"Создан сотрудник #{u.id}")

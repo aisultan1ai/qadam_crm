@@ -1,7 +1,7 @@
 import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 EmailStr = str  # relaxed: avoid rejecting .local / internal TLDs
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import date, datetime
 
 from .role import RoleOut
@@ -110,6 +110,7 @@ class MeUpdate(BaseModel):
     phone: Optional[str] = None
     bio: Optional[str] = None
     birthday: Optional[date] = None
+    language: Optional[Literal["ru", "kk", "en"]] = None  # язык интерфейса
 
     @field_validator("new_password")
     @classmethod
@@ -125,6 +126,7 @@ class UserOut(UserBase):
     is_superuser: bool
     is_platform_admin: bool = False
     email_verified: bool = True
+    language: str = "ru"
     roles: List[RoleOut] = []
     department: Optional[DepartmentOut] = None  # основной отдел
     departments: List[DepartmentOut] = []  # все отделы в текущей компании
@@ -150,6 +152,8 @@ class TenantBrief(BaseModel):
     primary_color: Optional[str] = None
     company_display_name: Optional[str] = None
     is_owner: bool = False
+    # Владелец ещё не прошёл мастер первого запуска
+    onboarding_pending: bool = False
 
 
 class MeOut(UserOut):

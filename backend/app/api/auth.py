@@ -649,6 +649,7 @@ def me(
                         "primary_color": t.primary_color,
                         "company_display_name": t.company_display_name,
                         "is_owner": membership.is_owner,
+                        "onboarding_pending": bool(membership.is_owner and t.onboarding_completed_at is None),
                     }
         except JWTError:
             pass

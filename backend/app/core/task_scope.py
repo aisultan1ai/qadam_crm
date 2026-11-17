@@ -34,7 +34,8 @@ def _is_owner(db: Session, tenant_id: int, user_id: int) -> bool:
 
 
 def task_scope(db: Session, user: User, tenant_id: int) -> Scope:
-    if user_has(user, ["tasks.view_all"], tenant_id=tenant_id) or _is_owner(db, tenant_id, user.id):
+    via_token = getattr(user, "__dict__", {}).get("_token_scopes") is not None
+    if user_has(user, ["tasks.view_all"], tenant_id=tenant_id) or (not via_token and _is_owner(db, tenant_id, user.id)):
         return "all"
     if user_has(user, ["tasks.view_department"], tenant_id=tenant_id):
         return "department"

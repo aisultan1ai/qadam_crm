@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Modal } from "@/components/ui";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
-import { Puzzle, Check, ExternalLink, FolderOpen, Cloud, FileDown, ChevronRight, Loader2, Settings2, X } from "lucide-react";
+import { Check, ExternalLink, FolderOpen, Cloud, FileDown, ChevronRight, Loader2, Settings2, X, ThumbsUp } from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
 import { Button } from "@/components/lib/Button";
+import { useAuth } from "@/store/auth";
 
 type Provider = {
   id: number;
@@ -13,6 +16,7 @@ type Provider = {
   category: string;
   status: string;
   is_enabled: boolean;
+  requested?: boolean;
 };
 
 type StorageStatus = {
@@ -60,9 +64,26 @@ const STORAGE_CODES = new Set(["google_drive", "dropbox"]);
 
 export default function IntegrationsPage() {
   const qc = useQueryClient();
+  const canManage = useAuth((s) => s.can("settings.system") || !!s.me?.current_tenant?.is_owner);
   const toast = useToast();
   const [browsing, setBrowsing] = useState<"google_drive" | "dropbox" | null>(null);
   const [configuring, setConfiguring] = useState<"dropbox" | null>(null);
+  const [twilioUrl, setTwilioUrl] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const twilio = useMutation({
+    mutationFn: async () => (await api.get<{ url: string }>("/api/integrations/twilio/webhook")).data,
+    onSuccess: (r) => {
+      setTwilioUrl(r.url);
+      qc.invalidateQueries({ queryKey: ["integrations"] });
+    },
+    onError: (e) => toast.error("Не удалось получить адрес", extractApiError(e).message),
+  });
+  // Куда ведёт «Подключить»: у каждой интеграции свой сценарий, а не заглушка.
+  const connect = (code: string) => {
+    if (code === "google_calendar") return navigate("/settings/integrations");
+    if (code === "twilio") return twilio.mutate();
+    start.mutate(code);
+  };
 
   const { data, isPending } = useQuery({
     queryKey: ["integrations"],
@@ -89,8 +110,16 @@ export default function IntegrationsPage() {
     onError: (e) => toast.error("OAuth не настроен", extractApiError(e).message),
   });
 
-  // «Скоро» — то, что ещё не сделано. Не показываем стеной заглушек: прячем под отдельную кнопку.
-  const [showPlanned, setShowPlanned] = useState(false);
+  const vote = useMutation({
+    mutationFn: async (code: string) => (await api.post<{ requested: boolean }>(`/api/integrations/${code}/request`, {})).data,
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["integrations"] });
+      if (r.requested) toast.success("Спасибо, учли", "Сообщим, когда интеграция появится");
+    },
+    onError: (e) => toast.error("Не удалось отправить", extractApiError(e).message),
+  });
+
+  // «Скоро» — то, что ещё не сделано: не «кнопки-пустышки», а сбор спроса «Хочу эту интеграцию».
   const planned = (data || []).filter((p) => p.status === "coming_soon");
   const grouped = new Map<string, Provider[]>();
   (data || []).filter((p) => p.status !== "coming_soon").forEach((p) => {
@@ -115,8 +144,8 @@ export default function IntegrationsPage() {
               <ProviderCard
                 key={p.id}
                 p={p}
-                onConnect={() => start.mutate(p.code)}
-                onToggle={() => toggle.mutate(p.code)}
+                onConnect={() => connect(p.code)}
+                onToggle={canManage ? () => toggle.mutate(p.code) : undefined}
                 onBrowse={() => STORAGE_CODES.has(p.code) && setBrowsing(p.code as "google_drive" | "dropbox")}
                 onConfigure={() => p.code === "dropbox" && setConfiguring("dropbox")}
               />
@@ -127,23 +156,54 @@ export default function IntegrationsPage() {
 
       {planned.length > 0 && (
         <div className="border-t border-neutral-200 pt-4 dark:border-neutral-800">
-          <button
-            type="button"
-            onClick={() => setShowPlanned((v) => !v)}
-            className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
-          >
-            {showPlanned ? "Скрыть" : "Показать"} интеграции в разработке ({planned.length})
-          </button>
-          {showPlanned && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {planned.map((p) => (
-                <span key={p.code} className="chip bg-neutral-100 text-neutral-600 dark:bg-white/5 dark:text-neutral-400">
-                  {p.label}
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">Планируем</div>
+          <p className="mb-3 text-[13px] text-neutral-500">
+            Этих интеграций пока нет. Отметьте нужные — так мы поймём, что делать в первую очередь.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {planned.map((p) => (
+              <div key={p.code} className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-800">
+                <span className="truncate text-sm">{p.label}</span>
+                <Button
+                  size="sm"
+                  variant={p.requested ? "secondary" : "ghost"}
+                  className={clsx(p.requested && "!text-brand-600 dark:!text-brand-300")}
+                  disabled={vote.isPending && vote.variables === p.code}
+                  onClick={() => vote.mutate(p.code)}
+                  title={p.requested ? "Нажмите, чтобы отменить" : undefined}
+                >
+                  {p.requested ? <><Check size={12} /> Заявка отправлена</> : <><ThumbsUp size={12} /> Хочу эту интеграцию</>}
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
+
+      {twilioUrl && (
+        <Modal open onClose={() => setTwilioUrl(null)} title="Подключение Twilio" size="md">
+          <div className="space-y-3 text-[13px]">
+            <p>Звонки будут попадать в раздел «Звонки» автоматически. В консоли Twilio:</p>
+            <ol className="list-decimal space-y-1 pl-5 text-neutral-600 dark:text-neutral-300">
+              <li>Phone Numbers → выберите номер → Voice Configuration.</li>
+              <li>В поле <b>Call status changes</b> (Status callback) вставьте адрес ниже, метод POST.</li>
+              <li>Сохраните. Адрес содержит секрет компании — не публикуйте его.</li>
+            </ol>
+            <div className="flex items-center gap-2 rounded-lg bg-neutral-100 p-2 dark:bg-white/5">
+              <code className="min-w-0 flex-1 break-all text-[12px]">{twilioUrl}</code>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigator.clipboard?.writeText(twilioUrl).then(() => toast.success("Скопировано"), () => {})}
+              >
+                Копировать
+              </Button>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => setTwilioUrl(null)}>Готово</Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {browsing && (
@@ -168,7 +228,7 @@ function ProviderCard({
 }: {
   p: Provider;
   onConnect: () => void;
-  onToggle: () => void;
+  onToggle?: () => void;
   onBrowse: () => void;
   onConfigure: () => void;
 }) {
@@ -206,7 +266,7 @@ function ProviderCard({
               ) : configured ? (
                 "Компания настроена — можно подключить"
               ) : (
-                p.code === "dropbox" ? "Требуется настройка App key/secret" : "Требуется настройка Google OAuth"
+                p.code === "dropbox" ? "Требуется настройка App key/secret" : "Подключение Google пока недоступно — обратитесь к владельцу компании"
               )}
             </div>
           )}
@@ -251,13 +311,15 @@ function ProviderCard({
             >
               <ExternalLink size={13} /> Подключить
             </Button>
-            <Button
-              variant="ghost"
-              className={clsx(p.is_enabled ? "text-rose-500" : "text-emerald-600")}
-              onClick={onToggle}
-            >
-              {p.is_enabled ? "Выкл." : "Вкл."}
-            </Button>
+            {onToggle && (
+              <Button
+                variant="ghost"
+                className={clsx(p.is_enabled ? "text-rose-500" : "text-emerald-600")}
+                onClick={onToggle}
+              >
+                {p.is_enabled ? "Выкл." : "Вкл."}
+              </Button>
+            )}
           </>
         )}
       </div>

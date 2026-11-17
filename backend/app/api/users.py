@@ -299,6 +299,9 @@ def update_me(
     if payload.bio is not None and payload.bio != (user.bio or ""):
         user.bio = payload.bio or None
         changes.append("bio")
+    if payload.language is not None and payload.language != (user.language or "ru"):
+        user.language = payload.language
+        changes.append("язык")
     if payload.birthday is not None and payload.birthday != user.birthday:
         user.birthday = payload.birthday
         changes.append("день рождения")

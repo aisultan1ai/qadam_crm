@@ -15,6 +15,7 @@ from ..core.secrets import encrypt
 from ..database import get_db
 from ..models import GoogleCalendarAccount, Tenant
 from ..schemas.common import Message
+from ..core import google_oauth
 from ..services import google_calendar as gcal
 from .deps import TenantContext, get_current_context, log_action, require
 
@@ -38,14 +39,18 @@ class StatusOut(BaseModel):
 
 class TenantConfigOut(BaseModel):
     client_id: Optional[str] = None
-    redirect_uri: Optional[str] = None
     has_secret: bool = False
+    # Есть общее приложение Qadam — свои ключи не нужны (только для enterprise-политик)
+    platform_available: bool = False
+    using: Optional[str] = None  # tenant | platform | None
+    # Адреса возврата, которые нужно добавить в своё Google-приложение
+    redirect_uris: list[str] = []
 
 
 class TenantConfigIn(BaseModel):
     client_id: str = Field(min_length=10, max_length=200)
     client_secret: Optional[str] = Field(default=None, max_length=200)
-    redirect_uri: str = Field(min_length=10, max_length=500)
+    redirect_uri: Optional[str] = Field(default=None, max_length=500)  # устарело: считается автоматически
 
 
 class SyncResult(BaseModel):
@@ -68,15 +73,15 @@ def _require_owner(ctx: TenantContext):
         raise HTTPException(403, "Только владелец компании может менять эти настройки")
 
 
-def _encode_state(tenant_id: int, user_id: int, nonce: str) -> str:
-    payload = json.dumps({"t": tenant_id, "u": user_id, "n": nonce}).encode("utf-8")
-    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
-
-
-def _decode_state(state: str) -> tuple[int, int, str]:
-    pad = "=" * (-len(state) % 4)
-    data = json.loads(base64.urlsafe_b64decode((state + pad).encode("ascii")).decode("utf-8"))
-    return int(data["t"]), int(data["u"]), str(data["n"])
+def _config_out(t: Tenant) -> TenantConfigOut:
+    client = google_oauth.client_for(t)
+    return TenantConfigOut(
+        client_id=t.google_client_id,
+        has_secret=bool(t.google_client_secret_enc),
+        platform_available=google_oauth.platform_configured(),
+        using=client.source if client else None,
+        redirect_uris=[google_oauth.redirect_uri("google_calendar"), google_oauth.redirect_uri("google_drive")],
+    )
 
 
 @router.get("/tenant-config", response_model=TenantConfigOut)
@@ -85,12 +90,7 @@ def get_tenant_config(
     db: Session = Depends(get_db),
 ):
     _require_owner(ctx)
-    t = ctx.tenant
-    return TenantConfigOut(
-        client_id=t.google_client_id,
-        redirect_uri=t.google_redirect_uri,
-        has_secret=bool(t.google_client_secret_enc),
-    )
+    return _config_out(ctx.tenant)
 
 
 @router.put("/tenant-config", response_model=TenantConfigOut)
@@ -111,16 +111,12 @@ def put_tenant_config(
         t.google_client_secret_enc = encrypt(secret)
     elif not t.google_client_secret_enc:
         raise HTTPException(422, "client_secret обязателен при первом сохранении")
-    t.google_redirect_uri = payload.redirect_uri.strip()
+    t.google_redirect_uri = google_oauth.redirect_uri("google_calendar")
     log_action(db, tenant_id=t.id, user_id=ctx.user.id,
                action="update", entity="tenant_google_config", entity_id=t.id)
     db.commit()
     db.refresh(t)
-    return TenantConfigOut(
-        client_id=t.google_client_id,
-        redirect_uri=t.google_redirect_uri,
-        has_secret=bool(t.google_client_secret_enc),
-    )
+    return _config_out(t)
 
 
 @router.delete("/tenant-config", response_model=Message)
@@ -169,8 +165,7 @@ def auth_url(
     ctx: TenantContext = Depends(require("calendar.use")),
 ):
     _require_tenant_configured(ctx.tenant)
-    nonce = secrets.token_urlsafe(16)
-    state = _encode_state(ctx.tenant.id, ctx.user.id, nonce)
+    state = google_oauth.issue_state(ctx.tenant.id, ctx.user.id, "google_calendar")
     url = gcal.build_auth_url(ctx.tenant, state)
     return AuthUrlOut(auth_url=url)
 
@@ -188,9 +183,9 @@ def callback(
     if not code or not state:
         raise HTTPException(400, "Не удалось завершить подключение — попробуйте ещё раз")
     try:
-        tenant_id, user_id, _nonce = _decode_state(state)
-    except Exception:
-        raise HTTPException(400, "невалидный state")
+        tenant_id, user_id = google_oauth.consume_state(state, "google_calendar")
+    except HTTPException:
+        return RedirectResponse(url="/settings/integrations?google_error=state", status_code=302)
 
     tenant = db.get(Tenant, tenant_id)
     if not tenant or not gcal.tenant_configured(tenant):
