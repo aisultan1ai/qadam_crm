@@ -1,7 +1,8 @@
-"""Биллинг: mock-провайдер + заготовка под Stripe/Kaspi Pay.
+"""Биллинг: пока без онлайн-оплаты (заготовка под Stripe/Kaspi Pay).
 
 Модель Subscription хранит текущую подписку tenant'а (один активный ряд на tenant).
-Endpoint /subscribe — mock: сразу меняет `Tenant.plan` и создаёт/обновляет подписку.
+Endpoint /subscribe: бесплатный тариф — сразу; платный — заявка (plan_requests), которую подтверждает
+администратор платформы (/api/admin/plan-requests). BILLING_INSTANT_SWITCH=true — мгновенно (только dev).
 Webhook — только логирует payload и меняет статус для известных событий.
 """
 from __future__ import annotations
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..core.plans import plan_catalog, plan_exists
 from ..database import get_db
-from ..models import Subscription, SubscriptionStatus, Tenant
+from ..models import Plan, PlanRequest, Subscription, SubscriptionStatus, Tenant
 from ..schemas.common import Message
 from .deps import TenantContext, get_current_context, log_action, verify_same_origin
 
@@ -45,7 +46,7 @@ def _serialize(sub: Optional[Subscription], tenant: Tenant) -> dict:
         "status": (sub.status.value if sub else "active"),
         "current_period_start": sub.current_period_start.isoformat() if sub and sub.current_period_start else None,
         "current_period_end": sub.current_period_end.isoformat() if sub and sub.current_period_end else None,
-        "provider": sub.provider if sub else "mock",
+        "provider": sub.provider if sub else "manual",
     }
 
 
@@ -55,13 +56,47 @@ def get_plans(db: Session = Depends(get_db)):
     return plan_catalog(db)
 
 
+def _pending(db: Session, tenant_id: int) -> Optional[PlanRequest]:
+    return db.query(PlanRequest).filter(PlanRequest.tenant_id == tenant_id, PlanRequest.status == "pending").first()
+
+
 @router.get("/subscription")
 def get_subscription(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
     sub = db.query(Subscription).filter(Subscription.tenant_id == ctx.tenant.id).first()
-    return _serialize(sub, ctx.tenant)
+    out = _serialize(sub, ctx.tenant)
+    req = _pending(db, ctx.tenant.id)
+    out["pending_request"] = {"plan": req.plan, "created_at": req.created_at.isoformat()} if req else None
+    return out
+
+
+def apply_plan(db: Session, tenant: Tenant, plan: str, actor_id: Optional[int]) -> Subscription:
+    """Включить тариф компании (после оплаты или подтверждения администратором платформы)."""
+    now = _now()
+    sub = db.query(Subscription).filter(Subscription.tenant_id == tenant.id).first()
+    if not sub:
+        sub = Subscription(tenant_id=tenant.id, provider="manual")
+        db.add(sub)
+    sub.plan = plan
+    sub.status = SubscriptionStatus.active
+    sub.current_period_start = now
+    sub.current_period_end = now + timedelta(days=TRIAL_DAYS)
+    tenant.plan = plan
+    log_action(db, tenant_id=tenant.id, user_id=actor_id, action="subscribe", entity="tenant", entity_id=tenant.id, detail=plan)
+    return sub
+
+
+@router.delete("/request", response_model=Message)
+def cancel_request(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    if not (ctx.membership.is_owner or ctx.user.is_platform_admin):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Только владелец может менять тариф")
+    req = _pending(db, ctx.tenant.id)
+    if req:
+        req.status = "cancelled"
+        db.commit()
+    return Message(message="Заявка отменена")
 
 
 @router.post("/subscribe", dependencies=[Depends(verify_same_origin)])
@@ -74,37 +109,36 @@ def subscribe(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Только владелец может менять тариф")
 
     if not plan_exists(db, payload.plan):
-        raise HTTPException(400, f"Неизвестный план: {payload.plan}")
+        raise HTTPException(400, "Такого тарифа нет")
 
-    now = _now()
-    period_end = now + timedelta(days=TRIAL_DAYS)
+    plan = db.query(Plan).filter(Plan.key == payload.plan).first()
+    free = plan is not None and not plan.price_month
+    if free or settings.BILLING_INSTANT_SWITCH:
+        # Бесплатный тариф — сразу. Платный без оплаты включался бесплатно для всех — теперь только по заявке.
+        sub = apply_plan(db, ctx.tenant, payload.plan, ctx.user.id)
+        req = _pending(db, ctx.tenant.id)
+        if req:
+            req.status = "cancelled"
+        db.commit()
+        db.refresh(sub)
+        return {**_serialize(sub, ctx.tenant), "requested": False}
 
-    sub = db.query(Subscription).filter(Subscription.tenant_id == ctx.tenant.id).first()
-    if sub:
-        sub.plan = payload.plan
-        sub.status = SubscriptionStatus.active
-        sub.current_period_start = now
-        sub.current_period_end = period_end
+    req = _pending(db, ctx.tenant.id)
+    if req:
+        req.plan = payload.plan
+        req.user_id = ctx.user.id
     else:
-        sub = Subscription(
-            tenant_id=ctx.tenant.id,
-            plan=payload.plan,
-            status=SubscriptionStatus.active,
-            current_period_start=now,
-            current_period_end=period_end,
-            provider="mock",
-        )
-        db.add(sub)
-
-    ctx.tenant.plan = payload.plan
-    log_action(
-        db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
-        action="subscribe", entity="tenant", entity_id=ctx.tenant.id,
-        detail=payload.plan,
-    )
+        req = PlanRequest(tenant_id=ctx.tenant.id, user_id=ctx.user.id, plan=payload.plan, status="pending")
+        db.add(req)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="plan_request", entity="tenant",
+               entity_id=ctx.tenant.id, detail=payload.plan)
     db.commit()
-    db.refresh(sub)
-    return _serialize(sub, ctx.tenant)
+    sub = db.query(Subscription).filter(Subscription.tenant_id == ctx.tenant.id).first()
+    return {
+        **_serialize(sub, ctx.tenant),
+        "requested": True,
+        "pending_request": {"plan": req.plan, "created_at": (req.created_at or _now()).isoformat()},
+    }
 
 
 def _verify_webhook_signature(raw_body: bytes, signature_header: Optional[str]) -> None:

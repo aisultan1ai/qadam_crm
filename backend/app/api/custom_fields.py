@@ -14,7 +14,7 @@ from ..database import get_db
 from ..models import CustomFieldDef, CUSTOM_FIELD_ENTITY_TYPES, CUSTOM_FIELD_TYPES
 from ..models import Task, Project, Contact, Company, Deal
 from ..schemas.common import Message
-from .deps import TenantContext, get_current_context, log_action
+from .deps import TenantContext, get_current_context, require, log_action
 
 
 router = APIRouter(prefix="/api/custom-fields", tags=["custom-fields"])
@@ -97,7 +97,7 @@ def list_fields(
 
 
 @router.post("", response_model=FieldOut, status_code=201)
-def create_field(payload: FieldCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_field(payload: FieldCreate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     exists = (
         db.query(CustomFieldDef)
         .filter(CustomFieldDef.tenant_id == ctx.tenant.id, CustomFieldDef.entity_type == payload.entity_type, CustomFieldDef.code == payload.code)
@@ -115,7 +115,7 @@ def create_field(payload: FieldCreate, ctx: TenantContext = Depends(get_current_
 
 
 @router.patch("/{fid}", response_model=FieldOut)
-def update_field(fid: int, payload: FieldUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def update_field(fid: int, payload: FieldUpdate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     row = db.get(CustomFieldDef, fid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Поле не найдено")
@@ -129,13 +129,29 @@ def update_field(fid: int, payload: FieldUpdate, ctx: TenantContext = Depends(ge
 
 
 @router.delete("/{fid}", response_model=Message)
-def delete_field(fid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def delete_field(fid: int, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     row = db.get(CustomFieldDef, fid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Поле не найдено")
     db.delete(row)
     db.commit()
     return Message(message="Поле удалено")
+
+
+_UPDATE_PERM = {"task": "tasks.update", "project": "projects.update", "contact": "contacts.update",
+                "company": "contacts.update", "deal": "deals.update", "lead": "leads.update"}
+
+
+def _require_entity_update(db: Session, ctx: TenantContext, entity_type: str, row) -> None:
+    """Значения доп. полей меняет тот, кто вправе менять сам объект (и видит его)."""
+    from ..core.permissions import user_has
+    if entity_type == "task":
+        from ..core.task_scope import can_view_task
+        if not can_view_task(ctx.user, row, db):
+            raise HTTPException(404, "Запись не найдена")
+    perm = _UPDATE_PERM.get(entity_type)
+    if perm and not ctx.membership.is_owner and not user_has(ctx.user, [perm], tenant_id=ctx.tenant.id):
+        raise HTTPException(403, "Недостаточно прав для изменения этой записи")
 
 
 @router.patch("/values/{entity_type}/{entity_id}", response_model=Message)
@@ -151,7 +167,8 @@ def update_values(
         raise HTTPException(400, "Неизвестный тип объекта")
     row = db.get(Model, entity_id)
     if not row or getattr(row, "tenant_id", None) != ctx.tenant.id:
-        raise HTTPException(404, f"{entity_type}#{entity_id} not found")
+        raise HTTPException(404, "Запись не найдена")
+    _require_entity_update(db, ctx, entity_type, row)
 
     # Мержим custom_data — не затираем целиком.
     current = dict(row.custom_data or {})

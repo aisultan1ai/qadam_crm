@@ -1,5 +1,8 @@
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
+import { resolveMediaUrl } from "@/components/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { useAuth } from "@/store/auth";
@@ -27,6 +30,16 @@ export default function Login() {
     mode: "onBlur",
   });
 
+  // На адресе компании (soli.qcrm.kz) — её название и логотип.
+  const host = useQuery({
+    queryKey: ["host-tenant"],
+    queryFn: async () =>
+      (await api.get<{ on_subdomain: boolean; found?: boolean; name?: string; logo_url?: string | null }>("/api/auth/host-tenant")).data,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const brand = host.data?.on_subdomain ? host.data : null;
+
   if (me) return <Navigate to={next} replace />;
 
   const submit = async (data: LoginForm) => {
@@ -40,17 +53,26 @@ export default function Login() {
 
   return (
     <AuthLayout
-      title="Вход в рабочее пространство"
-      subtitle="Войдите с рабочим email вашей компании"
+      title={brand?.found ? `Вход в ${brand.name}` : brand ? "Компания не найдена" : "Вход в рабочее пространство"}
+      subtitle={
+        brand && !brand.found
+          ? "Такого адреса компании нет. Проверьте ссылку или войдите на основном адресе сайта."
+          : "Войдите с рабочим email вашей компании"
+      }
       footer={
-        <>
-          Нет аккаунта?{" "}
-          <Link to="/register" className="link font-medium">
-            Зарегистрировать компанию
-          </Link>
-        </>
+        brand ? undefined : (
+          <>
+            Нет аккаунта?{" "}
+            <Link to="/register" className="link font-medium">
+              Зарегистрировать компанию
+            </Link>
+          </>
+        )
       }
     >
+      {brand?.found && brand.logo_url && (
+        <img src={resolveMediaUrl(brand.logo_url) ?? undefined} alt="" className="mb-5 h-12 w-auto max-w-[200px] object-contain" />
+      )}
       <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
         <FormField label="Email" htmlFor="login-email" error={errors.email?.message}>
           <input

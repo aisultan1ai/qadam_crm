@@ -23,7 +23,7 @@ from starlette.responses import JSONResponse, Response
 log = logging.getLogger("qadam.ip_allowlist")
 
 
-PUBLIC_PREFIXES = ("/health", "/media/", "/public/", "/f/", "/book/", "/api/webhooks/", "/api/inbox/email")
+PUBLIC_PREFIXES = ("/health", "/media/", "/public/", "/api/public/", "/f/", "/book/", "/api/webhooks/", "/api/inbox/email")
 
 
 def _get_client_ip(request: Request) -> Optional[str]:
@@ -76,7 +76,8 @@ class IPAllowlistMiddleware(BaseHTTPMiddleware):
             from ..models import Tenant, TenantSecurityPolicy
             db = SessionLocal()
             try:
-                tenant = db.query(Tenant).filter(Tenant.slug == forced_slug).first()
+                from .subdomain import tenant_for_slug
+                tenant = tenant_for_slug(db, forced_slug)
                 if not tenant:
                     return await call_next(request)
                 policy = (

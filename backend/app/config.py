@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     SMTP_DRY_RUN: bool = False
 
     APP_BASE_URL: str = "http://localhost"
+    # Основной домен для адресов компаний (soli.qcrm.kz). Пусто — берётся из APP_BASE_URL.
+    APP_DOMAIN: Optional[str] = None
+    # Пока нет онлайн-оплаты: false — платный тариф включается по заявке (подтверждает админ платформы).
+    # true — мгновенное переключение без оплаты, только для локальной разработки.
+    BILLING_INSTANT_SWITCH: bool = False
 
     # Общее Google-приложение Qadam: «Подключить Google» без ключей у клиента.
     # В Google Cloud Console добавить адреса возврата:

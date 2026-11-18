@@ -164,10 +164,10 @@ def get_current_context(
     # он должен совпадать со slug'ом tenant'а из JWT. Иначе — не позволяем
     # смешивать сессию одной компании с домашней страницей другой.
     forced_slug = getattr(request.state, "forced_tenant_slug", None)
-    if forced_slug and forced_slug not in (tenant.subdomain, tenant.slug):
+    if forced_slug and forced_slug != tenant.subdomain:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Этот поддомен принадлежит другой компании — переключите tenant или откройте прямой URL",
+            "Этот адрес принадлежит другой компании. Откройте основной адрес сайта, чтобы работать в своей.",
         )
 
     # P5.2/P5.3: password rotation + session timeout enforcement
@@ -344,7 +344,10 @@ def verify_same_origin(request: Request) -> None:
     parsed = urlparse(origin)
     origin_root = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme else origin
     if origin_root not in allowed:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Origin not allowed")
+        # Адрес компании на поддомене (soli.qcrm.kz) — тот же сайт.
+        from ..core.subdomain import extract_subdomain
+        if not (parsed.scheme == "https" or not settings.is_prod) or not extract_subdomain(parsed.netloc):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Origin not allowed")
 
 
 def get_current_token(

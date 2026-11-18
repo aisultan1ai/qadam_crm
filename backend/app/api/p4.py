@@ -74,7 +74,7 @@ def list_project_groups(ctx: TenantContext = Depends(get_current_context), db: S
 
 
 @router.post("/api/project-groups", response_model=GroupOut, status_code=201)
-def create_project_group(payload: GroupCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_project_group(payload: GroupCreate, ctx: TenantContext = Depends(require("projects.update")), db: Session = Depends(get_db)):
     row = ProjectGroup(tenant_id=ctx.tenant.id, **payload.model_dump())
     db.add(row)
     db.commit()
@@ -83,7 +83,7 @@ def create_project_group(payload: GroupCreate, ctx: TenantContext = Depends(get_
 
 
 @router.patch("/api/project-groups/{gid}", response_model=GroupOut)
-def update_project_group(gid: int, payload: GroupCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def update_project_group(gid: int, payload: GroupCreate, ctx: TenantContext = Depends(require("projects.update")), db: Session = Depends(get_db)):
     row = db.get(ProjectGroup, gid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Группа не найдена")
@@ -94,7 +94,7 @@ def update_project_group(gid: int, payload: GroupCreate, ctx: TenantContext = De
 
 
 @router.delete("/api/project-groups/{gid}", response_model=Message)
-def delete_project_group(gid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def delete_project_group(gid: int, ctx: TenantContext = Depends(require("projects.update")), db: Session = Depends(get_db)):
     row = db.get(ProjectGroup, gid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Группа не найдена")
@@ -183,6 +183,7 @@ def update_comment_flags(cid: int, payload: CommentAction, ctx: TenantContext = 
     c = db.get(Comment, cid)
     if not c or c.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Комментарий не найден")
+    _comment_access(db, ctx, c, moderate=True)
     if payload.pinned is not None:
         c.is_pinned = payload.pinned
     if payload.hidden is not None:
@@ -206,6 +207,7 @@ def comment_edit_history(cid: int, ctx: TenantContext = Depends(get_current_cont
     c = db.get(Comment, cid)
     if not c or c.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Комментарий не найден")
+    _comment_access(db, ctx, c, moderate=False)
     return (
         db.query(CommentEditHistory)
         .filter(CommentEditHistory.comment_id == cid)
@@ -223,13 +225,28 @@ def move_comment(cid: int, payload: MoveComment, ctx: TenantContext = Depends(ge
     c = db.get(Comment, cid)
     if not c or c.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Комментарий не найден")
+    _comment_access(db, ctx, c, moderate=True)
     target = db.get(Task, payload.to_task_id)
-    if not target or target.tenant_id != ctx.tenant.id:
+    from ..core.task_scope import can_view_task as _cvt
+    if not target or target.tenant_id != ctx.tenant.id or not _cvt(ctx.user, target, db):
         raise HTTPException(400, "Целевая задача не найдена")
     c.task_id = payload.to_task_id
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="move_comment", entity="comment", entity_id=cid, task_id=payload.to_task_id)
     db.commit()
     return Message(message=f"Перенесён в задачу #{payload.to_task_id}")
+
+
+def _comment_access(db: Session, ctx: TenantContext, c, moderate: bool) -> None:
+    """Комментарий виден, только если видна задача. Менять флаги/переносить — автор или модератор."""
+    from ..core.permissions import user_has
+    from ..core.task_scope import can_view_task
+    task = db.get(Task, c.task_id) if c.task_id else None
+    if task is None or not can_view_task(ctx.user, task, db):
+        raise HTTPException(404, "Комментарий не найден")
+    if moderate and c.author_id != ctx.user.id and not ctx.membership.is_owner and not user_has(
+        ctx.user, ["comments.update_any"], tenant_id=ctx.tenant.id,
+    ):
+        raise HTTPException(403, "Это может сделать автор комментария или модератор")
 
 
 # =============================================================================
@@ -280,7 +297,7 @@ def list_directories(ctx: TenantContext = Depends(get_current_context), db: Sess
 
 
 @router.post("/api/directories", response_model=DirectoryOut, status_code=201)
-def create_directory(payload: DirectoryCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_directory(payload: DirectoryCreate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     if db.query(Directory).filter(Directory.tenant_id == ctx.tenant.id, Directory.code == payload.code).first():
         raise HTTPException(409, "Справочник с таким кодом уже существует")
     row = Directory(
@@ -298,7 +315,7 @@ def create_directory(payload: DirectoryCreate, ctx: TenantContext = Depends(get_
 
 
 @router.delete("/api/directories/{did}", response_model=Message)
-def delete_directory(did: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def delete_directory(did: int, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     row = db.get(Directory, did)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Справочник не найден")
@@ -328,7 +345,7 @@ def list_entries(code: str, ctx: TenantContext = Depends(get_current_context), d
 
 
 @router.post("/api/directories/{code}/entries", response_model=EntryOut, status_code=201)
-def create_entry(code: str, payload: EntryCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_entry(code: str, payload: EntryCreate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     d = db.query(Directory).filter(Directory.tenant_id == ctx.tenant.id, Directory.code == code).first()
     if not d:
         raise HTTPException(404, "Справочник не найден")
@@ -340,7 +357,7 @@ def create_entry(code: str, payload: EntryCreate, ctx: TenantContext = Depends(g
 
 
 @router.delete("/api/directory-entries/{eid}", response_model=Message)
-def delete_entry(eid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def delete_entry(eid: int, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     row = db.get(DirectoryEntry, eid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Запись не найдена")
@@ -377,7 +394,11 @@ def list_folders(parent_id: Optional[int] = None, ctx: TenantContext = Depends(g
 
 
 @router.post("/api/documents/folders", response_model=FolderOut, status_code=201)
-def create_folder(payload: FolderCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_folder(payload: FolderCreate, ctx: TenantContext = Depends(require("files.upload")), db: Session = Depends(get_db)):
+    if payload.parent_id:
+        parent = db.get(DocumentFolder, payload.parent_id)
+        if not parent or parent.tenant_id != ctx.tenant.id:
+            raise HTTPException(400, "Папка не найдена")
     row = DocumentFolder(tenant_id=ctx.tenant.id, parent_id=payload.parent_id, name=payload.name, created_by=ctx.user.id)
     db.add(row)
     db.commit()
@@ -395,6 +416,7 @@ class DocOut(BaseModel):
     version_count: int
     is_public: bool
     public_slug: Optional[str] = None
+    created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
@@ -413,7 +435,7 @@ def list_documents(folder_id: Optional[int] = None, ctx: TenantContext = Depends
 async def upload_document(
     file: UploadFile = File(...),
     folder_id: Optional[int] = Form(None),
-    ctx: TenantContext = Depends(get_current_context),
+    ctx: TenantContext = Depends(require("files.upload")),
     db: Session = Depends(get_db),
 ):
     from ..config import settings
@@ -450,6 +472,7 @@ def publish_document(did: int, ctx: TenantContext = Depends(get_current_context)
     row = db.get(Document, did)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Документ не найден")
+    _require_doc_manager(ctx, row)
     if not row.public_slug:
         row.public_slug = secrets.token_urlsafe(16)
     row.is_public = True
@@ -463,6 +486,7 @@ def unpublish_document(did: int, ctx: TenantContext = Depends(get_current_contex
     row = db.get(Document, did)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Документ не найден")
+    _require_doc_manager(ctx, row)
     row.is_public = False
     db.commit()
     db.refresh(row)
@@ -474,6 +498,7 @@ def delete_document(did: int, ctx: TenantContext = Depends(get_current_context),
     row = db.get(Document, did)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Документ не найден")
+    _require_doc_manager(ctx, row)
     db.delete(row)
     db.commit()
     return Message(message="Удалено")
@@ -503,7 +528,7 @@ def document_preview(did: int, ctx: TenantContext = Depends(get_current_context)
 
     if row.is_public and row.public_slug:
         # Google Docs Viewer работает с любым публичным URL — рендерит превью Office/PDF.
-        public_url = f"{base}/public/documents/{row.public_slug}/download"
+        public_url = f"{base}/api/public/documents/{row.public_slug}/download"
         return PreviewOut(
             kind="google_docs_viewer",
             url=f"https://docs.google.com/viewer?url={public_url}&embedded=true",
@@ -582,7 +607,7 @@ def list_holidays(
 
 
 @router.post("/api/holidays", response_model=HolidayOut, status_code=201)
-def create_holiday(payload: HolidayCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_holiday(payload: HolidayCreate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     row = TenantHoliday(tenant_id=ctx.tenant.id, **payload.model_dump())
     db.add(row)
     try:
@@ -595,7 +620,7 @@ def create_holiday(payload: HolidayCreate, ctx: TenantContext = Depends(get_curr
 
 
 @router.delete("/api/holidays/{hid}", response_model=Message)
-def delete_holiday(hid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def delete_holiday(hid: int, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
     row = db.get(TenantHoliday, hid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Не найдено")
@@ -943,25 +968,8 @@ def integration_oauth_start(code: str, ctx: TenantContext = Depends(get_current_
             url = dbx_svc.build_auth_url(ctx.tenant, state)
         return OAuthStartOut(provider=code, consent_url=url)
 
-    base_urls = {
-        "onedrive": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=YOUR_APP&response_type=code",
-        "slack": "https://slack.com/oauth/v2/authorize?client_id=YOUR_APP&scope=chat:write,channels:read",
-        "mailchimp": "https://login.mailchimp.com/oauth2/authorize?response_type=code&client_id=YOUR_APP",
-        "viber": "https://developers.viber.com/",
-        "tiktok": "https://developers.tiktok.com/apps",
-        "facebook_lead_ads": "https://www.facebook.com/v18.0/dialog/oauth?client_id=YOUR_APP&response_type=code",
-        "google_forms": "/api/integrations/google/auth?scopes=forms",
-        "google_calendar": "/api/integrations/google/auth",
-        "google_maps": "https://console.cloud.google.com/apis/library/maps-backend.googleapis.com",
-        "twilio": "https://console.twilio.com/",
-    }
-    url = base_urls.get(code)
-    if not url:
-        raise HTTPException(404, f"OAuth-flow для {code} не настроен")
-    note = None
-    if not url.startswith("/api/"):
-        note = "Заглушка: настройте YOUR_APP на реальный client_id/redirect_uri в консоли провайдера"
-    return OAuthStartOut(provider=code, consent_url=url, note=note)
+    # Остальные интеграции пока не сделаны — их можно отметить «Хочу эту интеграцию».
+    raise HTTPException(404, "Эта интеграция пока недоступна")
 
 
 # =============================================================================
@@ -1182,7 +1190,7 @@ class DuplicateGroup(BaseModel):
 
 
 @router.get("/api/contacts/duplicates", response_model=list[DuplicateGroup])
-def find_duplicates(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def find_duplicates(ctx: TenantContext = Depends(require("contacts.view")), db: Session = Depends(get_db)):
     """Простой алгоритм: группировка по email или phone."""
     from collections import defaultdict
     contacts = db.query(Contact).filter(Contact.tenant_id == ctx.tenant.id).all()
@@ -1209,7 +1217,7 @@ class MergeIn(BaseModel):
 
 
 @router.post("/api/contacts/merge", response_model=Message)
-def merge_contacts(payload: MergeIn, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def merge_contacts(payload: MergeIn, ctx: TenantContext = Depends(require("contacts.update", "contacts.delete")), db: Session = Depends(get_db)):
     primary = db.get(Contact, payload.primary_id)
     if not primary or primary.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Primary не найден")
@@ -1332,6 +1340,7 @@ def convert_to_employee(cid: int, payload: ConvertToEmployeeIn, ctx: TenantConte
 def export_account(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     """Экспорт данных tenant в один JSON. Только для владельца/админа."""
     import json
+    _require_security_admin(ctx)
     tid = ctx.tenant.id
     def dump(model, extra_filter=None):
         q = db.query(model)
@@ -1381,6 +1390,16 @@ def export_account(ctx: TenantContext = Depends(get_current_context), db: Sessio
     )
 
 
+def _require_doc_manager(ctx: TenantContext, row) -> None:
+    """Выложить документ в открытый доступ или удалить его может автор, владелец компании
+    или сотрудник с правом «Удаление файлов». Иначе любой мог бы опубликовать чужой файл в интернет."""
+    from ..core.permissions import user_has
+    if row.created_by == ctx.user.id or ctx.membership.is_owner:
+        return
+    if not user_has(ctx.user, ["files.delete"], tenant_id=ctx.tenant.id):
+        raise HTTPException(403, "Это может сделать автор документа или администратор")
+
+
 # =============================================================================
 # 13. Public document view (unauthenticated)
 # =============================================================================
@@ -1388,15 +1407,15 @@ def export_account(ctx: TenantContext = Depends(get_current_context), db: Sessio
 public_router = APIRouter(tags=["p4-public"])
 
 
-@public_router.get("/public/documents/{slug}")
+@public_router.get("/api/public/documents/{slug}")
 def public_doc_info(slug: str, db: Session = Depends(get_db)):
     d = db.query(Document).filter(Document.public_slug == slug, Document.is_public == True).first()  # noqa: E712
     if not d:
         raise HTTPException(404, "Not found")
-    return {"name": d.name, "size": d.size, "mime": d.mime, "download_url": f"/public/documents/{slug}/download"}
+    return {"name": d.name, "size": d.size, "mime": d.mime, "download_url": f"/api/public/documents/{slug}/download"}
 
 
-@public_router.get("/public/documents/{slug}/download")
+@public_router.get("/api/public/documents/{slug}/download")
 def public_doc_download(slug: str, db: Session = Depends(get_db)):
     d = db.query(Document).filter(Document.public_slug == slug, Document.is_public == True).first()  # noqa: E712
     if not d or not d.file_path:

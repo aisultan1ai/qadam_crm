@@ -13,7 +13,7 @@ from .activity import ActivityLog, ActivityState
 from .deadline_request import DeadlineRequest
 from .reaction import CommentReaction
 from .invitation import Invitation
-from .subscription import Subscription, SubscriptionStatus
+from .subscription import Subscription, SubscriptionStatus, PlanRequest
 from .plan import Plan
 from .automation import Automation, AutomationRun, AutomationAction, AutomationRunStatus, AutomationActionStatus
 from .manager_availability import ManagerAvailability, DEFAULT_WORKING_HOURS
@@ -104,6 +104,7 @@ __all__ = [
     "Invitation",
     "Subscription",
     "SubscriptionStatus",
+    "PlanRequest",
     "Plan",
     "Automation",
     "AutomationRun",

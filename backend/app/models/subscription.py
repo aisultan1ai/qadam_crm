@@ -42,3 +42,17 @@ class Subscription(Base):
     )
 
     tenant: Mapped["Tenant"] = relationship("Tenant", lazy="joined")  # type: ignore  # noqa: F821
+
+
+class PlanRequest(Base):
+    """Заявка владельца на платный тариф. Пока нет онлайн-оплаты, тариф включает администратор платформы."""
+    __tablename__ = "plan_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    plan: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)  # pending|approved|rejected|cancelled
+    decided_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

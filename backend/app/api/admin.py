@@ -520,6 +520,53 @@ def admin_delete_plan(
 
 
 # =============================================================================
+# Заявки на платный тариф (пока нет онлайн-оплаты)
+# =============================================================================
+
+@router.get("/plan-requests")
+def plan_requests(_: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
+    from ..models import PlanRequest
+    rows = (
+        db.query(PlanRequest, Tenant, User)
+        .join(Tenant, Tenant.id == PlanRequest.tenant_id)
+        .outerjoin(User, User.id == PlanRequest.user_id)
+        .order_by((PlanRequest.status == "pending").desc(), PlanRequest.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return [
+        {
+            "id": r.id, "plan": r.plan, "status": r.status, "created_at": r.created_at.isoformat(),
+            "tenant": {"id": t.id, "name": t.name, "plan": t.plan},
+            "user": {"name": u.name, "email": u.email} if u else None,
+        }
+        for r, t, u in rows
+    ]
+
+
+@router.post("/plan-requests/{rid}/{decision}")
+def decide_plan_request(rid: int, decision: str, admin: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
+    from datetime import datetime, timezone
+    from ..models import PlanRequest
+    from .billing import apply_plan
+    if decision not in ("approve", "reject"):
+        raise HTTPException(400, "Неизвестное решение")
+    r = db.get(PlanRequest, rid)
+    if not r or r.status != "pending":
+        raise HTTPException(404, "Заявка не найдена или уже обработана")
+    tenant = db.get(Tenant, r.tenant_id)
+    if decision == "approve":
+        if not plan_exists(db, r.plan):
+            raise HTTPException(400, "Такого тарифа больше нет")
+        apply_plan(db, tenant, r.plan, admin.id)
+    r.status = "approved" if decision == "approve" else "rejected"
+    r.decided_by = admin.id
+    r.decided_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"status": r.status, "tenant_plan": tenant.plan}
+
+
+# =============================================================================
 # Спрос на интеграции («Хочу эту интеграцию»)
 # =============================================================================
 

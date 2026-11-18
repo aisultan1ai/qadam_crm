@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -11,6 +12,7 @@ import { EmptyState, Modal, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { Button } from "@/components/lib/Button";
+import { useAuth } from "@/store/auth";
 import { FormField } from "@/components/lib/FormField";
 import { DataTable, Column } from "@/components/lib/DataTable";
 import { fromNow } from "@/lib/date";
@@ -27,6 +29,7 @@ type Doc = {
   public_slug: string | null;
   created_at: string;
   updated_at: string;
+  created_by?: number | null;
 };
 
 const folderSchema = z.object({
@@ -41,6 +44,10 @@ function fmtSize(bytes: number): string {
 }
 
 export default function DocumentsPage() {
+  const me = useAuth((s) => s.me);
+  const canUpload = useAuth((s) => s.can("files.upload") || !!s.me?.current_tenant?.is_owner);
+  const canManageAll = useAuth((s) => s.can("files.delete") || !!s.me?.current_tenant?.is_owner);
+  const canManage = (d: Doc) => canManageAll || d.created_by === me?.id;
   const qc = useQueryClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -159,7 +166,7 @@ export default function DocumentsPage() {
           </Button>
           {d.is_public && d.public_slug && (
             <a
-              href={`/public/documents/${d.public_slug}/download`}
+              href={`/api/public/documents/${d.public_slug}/download`}
               target="_blank"
               rel="noreferrer"
               className="btn-ghost !p-1.5"
@@ -168,7 +175,7 @@ export default function DocumentsPage() {
               <Download size={13} />
             </a>
           )}
-          {d.is_public ? (
+          {!canManage(d) ? null : d.is_public ? (
             <Button
               variant="ghost"
               size="icon"
@@ -190,7 +197,7 @@ export default function DocumentsPage() {
               <Share2 size={13} />
             </Button>
           )}
-          <Button
+          {canManage(d) && <Button
             variant="ghost"
             size="icon"
             className="text-rose-500"
@@ -206,7 +213,7 @@ export default function DocumentsPage() {
             aria-label="Удалить"
           >
             <Trash2 size={13} />
-          </Button>
+          </Button>}
         </div>
       ),
     },
@@ -219,7 +226,7 @@ export default function DocumentsPage() {
           <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Знания</div>
           <h1 className="page-title">Документы</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className={clsx("flex items-center gap-2", !canUpload && "hidden")}>
           <Button variant="secondary" leftIcon={<FolderPlus size={15} />} onClick={() => setOpenNewFolder(true)}>
             Папка
           </Button>

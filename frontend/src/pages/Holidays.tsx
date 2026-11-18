@@ -9,6 +9,7 @@ import { EmptyState, Modal, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { Button } from "@/components/lib/Button";
+import { useAuth } from "@/store/auth";
 import { FormField } from "@/components/lib/FormField";
 import { DataTable, Column } from "@/components/lib/DataTable";
 import { holidaySchema, type HolidayForm } from "@/lib/validation";
@@ -21,6 +22,7 @@ const holidayFormSchema = holidaySchema.extend({
 type HolidayFullForm = z.infer<typeof holidayFormSchema>;
 
 export default function HolidaysPage() {
+  const canEdit = useAuth((s) => s.can("settings.dictionaries") || !!s.me?.current_tenant?.is_owner);
   const qc = useQueryClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -77,7 +79,7 @@ export default function HolidaysPage() {
       header: "",
       align: "right",
       width: 80,
-      render: (h) => (
+      render: (h) => canEdit && (
         <Button
           variant="ghost"
           size="icon"
@@ -112,14 +114,14 @@ export default function HolidaysPage() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <Button variant="primary" leftIcon={<Plus size={15} />} onClick={() => setOpenNew(true)}>
+          <Button variant="primary" leftIcon={<Plus size={15} />} onClick={() => setOpenNew(true)} hidden={!canEdit}>
             День
           </Button>
         </div>
       </div>
 
       {!isPending && (!data || data.length === 0) ? (
-        <EmptyState icon={<Palmtree size={32} />} title={`За ${year} год пусто`} description="Праздники и переносы рабочих дней — учитываются в сроках и календаре." />
+        <EmptyState icon={<Palmtree size={32} />} title={`За ${year} год пусто`} description="Список праздников и переносов рабочих дней компании — чтобы команда видела, когда выходные." />
       ) : (
         <DataTable
           columns={columns}

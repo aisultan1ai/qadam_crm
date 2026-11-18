@@ -41,7 +41,7 @@ type GlobalUser = {
   companies?: { tenant_id: number; tenant_name: string; is_owner: boolean; role: string | null }[];
 };
 
-type Tab = "tenants" | "users" | "plans" | "demand";
+type Tab = "tenants" | "users" | "plans" | "requests" | "demand";
 
 type PlanFeatureFlags = {
   export: boolean;
@@ -181,6 +181,7 @@ export default function Admin() {
           { key: "tenants", label: "Компании", icon: Building2 },
           { key: "users", label: "Пользователи", icon: UsersIcon },
           { key: "plans", label: "Тарифы", icon: CreditCard },
+          { key: "requests", label: "Заявки на тариф", icon: Check },
           { key: "demand", label: "Спрос на интеграции", icon: ThumbsUp },
         ]}
       />
@@ -198,6 +199,8 @@ export default function Admin() {
         <GlobalUsersTab query={q} />
       ) : tab === "plans" ? (
         <PlansTab />
+      ) : tab === "requests" ? (
+        <PlanRequestsTab />
       ) : tab === "demand" ? (
         <IntegrationDemandTab />
       ) : (
@@ -489,7 +492,7 @@ function EditTenantModal({
               placeholder="acme"
             />
             <div className="mt-1 text-[11px] text-neutral-500">
-              Итог: <span className="font-mono">{subdomain || "—"}.qadam.kz</span>
+              Итог: <span className="font-mono">{subdomain || "—"}.{window.location.hostname.replace(/^www\./, "")}</span>
             </div>
           </label>
           <label className="block">
@@ -1403,6 +1406,79 @@ function IntegrationDemandTab() {
                       </div>
                     ))
                   : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+
+type PlanReq = {
+  id: number;
+  plan: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  created_at: string;
+  tenant: { id: number; name: string; plan: string };
+  user: { name: string; email: string } | null;
+};
+const REQ_STATUS: Record<PlanReq["status"], string> = {
+  pending: "Ждёт решения", approved: "Тариф включён", rejected: "Отклонена", cancelled: "Отменена компанией",
+};
+
+/** Заявки на платный тариф: пока нет онлайн-оплаты, тариф включает администратор после оплаты по счёту. */
+function PlanRequestsTab() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data, isPending } = useQuery({
+    queryKey: ["admin", "plan-requests"],
+    queryFn: async () => (await api.get<PlanReq[]>("/api/admin/plan-requests")).data,
+  });
+  const decide = useMutation({
+    mutationFn: ({ id, decision }: { id: number; decision: "approve" | "reject" }) =>
+      api.post(`/api/admin/plan-requests/${id}/${decision}`),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ["admin"] });
+      toast.success(v.decision === "approve" ? "Тариф включён" : "Заявка отклонена");
+    },
+    onError: (e) => toast.error("Не удалось", extractApiError(e).message),
+  });
+  if (isPending) return <div className="h-32 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />;
+  if (!data?.length) return <div className="card p-8 text-center text-sm text-neutral-500">Заявок на тариф пока нет.</div>;
+  return (
+    <div className="table-container">
+      <table className="w-full">
+        <thead className="table-head">
+          <tr>
+            <th className="table-head-cell">Компания</th>
+            <th className="table-head-cell">Сейчас → хочет</th>
+            <th className="table-head-cell">Кто</th>
+            <th className="table-head-cell">Дата</th>
+            <th className="table-head-cell">Статус</th>
+            <th className="table-head-cell text-right" />
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((r) => (
+            <tr key={r.id} className="table-row">
+              <td className="table-cell font-medium">{r.tenant.name}</td>
+              <td className="table-cell font-mono text-xs">{r.tenant.plan} → {r.plan}</td>
+              <td className="table-cell text-xs">{r.user ? `${r.user.name} · ${r.user.email}` : "—"}</td>
+              <td className="table-cell text-xs text-neutral-500">{new Date(r.created_at).toLocaleDateString("ru-RU")}</td>
+              <td className="table-cell text-xs">{REQ_STATUS[r.status]}</td>
+              <td className="table-cell text-right">
+                {r.status === "pending" && (
+                  <div className="flex justify-end gap-1">
+                    <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: r.id, decision: "approve" })}>
+                      Оплачено — включить
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => decide.mutate({ id: r.id, decision: "reject" })}>
+                      Отклонить
+                    </Button>
+                  </div>
+                )}
               </td>
             </tr>
           ))}

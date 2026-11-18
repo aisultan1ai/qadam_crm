@@ -113,7 +113,8 @@ def _inbox_domain() -> str:
 @router.post("/task/{task_id}/enable", response_model=InboxAddress)
 def enable_task_inbox(task_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
+    from ..core.task_scope import can_view_task
+    if not task or task.tenant_id != ctx.tenant.id or not can_view_task(ctx.user, task, db):
         raise HTTPException(404, "Задача не найдена")
     if not task.inbox_token:
         task.inbox_token = secrets.token_urlsafe(18)[:24]

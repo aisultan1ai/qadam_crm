@@ -9,7 +9,7 @@ from ..database import get_db
 from ..models import SavedReport, ReportGroup
 from ..core.tenant_refs import ensure_owned
 from ..schemas.common import Message
-from .deps import TenantContext, get_current_context
+from .deps import TenantContext, get_current_context, require
 
 
 router = APIRouter(prefix="/api/reports", tags=["saved-reports"])
@@ -40,7 +40,7 @@ def list_groups(ctx: TenantContext = Depends(get_current_context), db: Session =
 
 
 @router.post("/groups", response_model=GroupOut, status_code=201)
-def create_group(payload: GroupCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def create_group(payload: GroupCreate, ctx: TenantContext = Depends(require("analytics.reports")), db: Session = Depends(get_db)):
     row = ReportGroup(tenant_id=ctx.tenant.id, name=payload.name, order_index=payload.order_index)
     db.add(row)
     db.commit()

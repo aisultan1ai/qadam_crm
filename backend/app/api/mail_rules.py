@@ -48,9 +48,29 @@ class RuleUpdate(BaseModel):
     actions: Optional[list[dict[str, Any]]] = None
 
 
+def _my_mailbox_ids(db: Session, ctx: TenantContext) -> set[int]:
+    from ..models import Mailbox
+    return {m for (m,) in db.query(Mailbox.id).filter(Mailbox.tenant_id == ctx.tenant.id, Mailbox.user_id == ctx.user.id)}
+
+
+def _own_rule(db: Session, ctx: TenantContext, rid: int) -> MailRule:
+    row = db.get(MailRule, rid)
+    if not row or row.tenant_id != ctx.tenant.id or row.mailbox_id not in _my_mailbox_ids(db, ctx):
+        raise HTTPException(404, "Правило не найдено")
+    return row
+
+
+def _template_editor(ctx: TenantContext, row) -> None:
+    from ..core.permissions import user_has
+    if row.created_by == ctx.user.id or ctx.membership.is_owner:
+        return
+    if not user_has(ctx.user, ["settings.dictionaries"], tenant_id=ctx.tenant.id):
+        raise HTTPException(403, "Шаблон меняет автор или администратор")
+
+
 @router.get("/rules", response_model=list[RuleOut])
 def list_rules(mailbox_id: Optional[int] = None, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    q = db.query(MailRule).filter(MailRule.tenant_id == ctx.tenant.id)
+    q = db.query(MailRule).filter(MailRule.tenant_id == ctx.tenant.id, MailRule.mailbox_id.in_(_my_mailbox_ids(db, ctx)))
     if mailbox_id is not None:
         q = q.filter(MailRule.mailbox_id == mailbox_id)
     return q.order_by(MailRule.mailbox_id, MailRule.order_index).all()
@@ -58,6 +78,8 @@ def list_rules(mailbox_id: Optional[int] = None, ctx: TenantContext = Depends(ge
 
 @router.post("/rules", response_model=RuleOut, status_code=201)
 def create_rule(payload: RuleCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    if payload.mailbox_id not in _my_mailbox_ids(db, ctx):
+        raise HTTPException(400, "Правила настраиваются только для своего почтового ящика")
     row = MailRule(tenant_id=ctx.tenant.id, **payload.model_dump())
     db.add(row)
     db.flush()
@@ -69,9 +91,7 @@ def create_rule(payload: RuleCreate, ctx: TenantContext = Depends(get_current_co
 
 @router.patch("/rules/{rid}", response_model=RuleOut)
 def update_rule(rid: int, payload: RuleUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    row = db.get(MailRule, rid)
-    if not row or row.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Правило не найдено")
+    row = _own_rule(db, ctx, rid)
     for f in ("name", "is_active", "order_index", "stop_on_match", "conditions", "actions"):
         v = getattr(payload, f)
         if v is not None:
@@ -83,9 +103,7 @@ def update_rule(rid: int, payload: RuleUpdate, ctx: TenantContext = Depends(get_
 
 @router.delete("/rules/{rid}", response_model=Message)
 def delete_rule(rid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
-    row = db.get(MailRule, rid)
-    if not row or row.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Правило не найдено")
+    row = _own_rule(db, ctx, rid)
     db.delete(row)
     db.commit()
     return Message(message="Удалено")
@@ -136,6 +154,7 @@ def update_template(tid: int, payload: TemplateUpdate, ctx: TenantContext = Depe
     row = db.get(MailTemplate, tid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Шаблон не найден")
+    _template_editor(ctx, row)
     for f in ("name", "subject", "body", "variables"):
         v = getattr(payload, f)
         if v is not None:
@@ -150,6 +169,7 @@ def delete_template(tid: int, ctx: TenantContext = Depends(get_current_context),
     row = db.get(MailTemplate, tid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Шаблон не найден")
+    _template_editor(ctx, row)
     db.delete(row)
     db.commit()
     return Message(message="Удалено")

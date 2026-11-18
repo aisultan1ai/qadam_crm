@@ -1,7 +1,7 @@
 """AI-помощник: генерация задач из писем, summary тредов, подсказки для отчётов.
 
 Использует Anthropic Claude API (SDK 0.72+). Ключ — ANTHROPIC_API_KEY из env.
-Модель по умолчанию — claude-opus-4-7 (актуальная на 2026). Prompt caching для
+Модель по умолчанию — claude-opus-5-5 (меняется переменной AI_MODEL). Prompt caching для
 frozen system-промптов.
 """
 from __future__ import annotations
@@ -17,8 +17,24 @@ from .deps import TenantContext, get_current_context
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
-DEFAULT_MODEL = os.getenv("AI_MODEL", "claude-opus-4-7")
-MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "4096"))
+DEFAULT_MODEL = os.getenv("AI_MODEL", "claude-opus-5-5")
+# У claude-opus-5-5 размышление всегда включено и тратит тот же лимит, поэтому запас побольше.
+MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "16000"))
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+
+def _create(client, **kwargs):
+    """Запрос к Claude с серверным резервом: если модель откажет по правилам безопасности,
+    API сам повторит запрос на подходящей модели. Отказ всей цепочки — понятная ошибка."""
+    try:
+        response = client.beta.messages.create(betas=[FALLBACK_BETA], extra_body={"fallbacks": "default"}, **kwargs)
+    except Exception as e:  # резерв недоступен для ключа/платформы — обычный запрос
+        if "fallback" not in str(e).lower():
+            raise
+        response = client.messages.create(**kwargs)
+    if getattr(response, "stop_reason", None) == "refusal":
+        raise HTTPException(422, "AI-ассистент не может обработать этот текст. Переформулируйте запрос")
+    return response
 
 
 def _client():
@@ -84,7 +100,8 @@ def generate_tasks(
         user_message = f"Контекст: {payload.context}\n\nПисьмо:\n{payload.text}"
 
     try:
-        response = client.messages.create(
+        response = _create(
+            client,
             model=DEFAULT_MODEL,
             max_tokens=MAX_TOKENS,
             system=[
@@ -96,6 +113,8 @@ def generate_tasks(
             ],
             messages=[{"role": "user", "content": user_message}],
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
 
@@ -169,7 +188,8 @@ def summarize(
 
     client = _client()
     try:
-        response = client.messages.create(
+        response = _create(
+            client,
             model=DEFAULT_MODEL,
             max_tokens=MAX_TOKENS,
             system=[
@@ -181,6 +201,8 @@ def summarize(
             ],
             messages=[{"role": "user", "content": payload.text}],
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
 
@@ -241,9 +263,10 @@ def report_suggest(
 
     client = _client()
     try:
-        response = client.messages.create(
+        response = _create(
+            client,
             model=DEFAULT_MODEL,
-            max_tokens=512,
+            max_tokens=4000,
             system=[
                 {
                     "type": "text",
@@ -253,6 +276,8 @@ def report_suggest(
             ],
             messages=[{"role": "user", "content": payload.description}],
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
 

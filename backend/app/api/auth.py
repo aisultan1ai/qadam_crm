@@ -130,6 +130,21 @@ def _dispatch_verification_email(user: User) -> None:
         log.warning("Failed to enqueue email verification for %s: %s", user.email, exc)
 
 
+def _host_tenant(request: Request, db: Session):
+    """Компания, на чьём адресе (поддомене) открыт сайт; None — основной адрес."""
+    from ..core.subdomain import tenant_for_slug
+    slug = getattr(request.state, "forced_tenant_slug", None)
+    if not slug:
+        return None, None
+    return slug, tenant_for_slug(db, slug)
+
+
+def _is_member(db: Session, user_id: int, tenant_id: int) -> bool:
+    return db.query(TenantMembership.id).join(Tenant, Tenant.id == TenantMembership.tenant_id).filter(
+        TenantMembership.user_id == user_id, TenantMembership.tenant_id == tenant_id, Tenant.is_active.is_(True),
+    ).first() is not None
+
+
 def _pick_default_tenant(db: Session, user_id: int) -> int | None:
     """Первый активный tenant пользователя (owner в приоритете)."""
     row = (
@@ -204,6 +219,23 @@ def _read_refresh(request: Request, body: RefreshRequest | None) -> str | None:
     return body.refresh_token if body else None
 
 
+@router.get("/host-tenant")
+def host_tenant(request: Request, db: Session = Depends(get_db)):
+    """Брендинг для страницы входа на адресе компании (soli.qcrm.kz). Только публичное: название, логотип, цвет."""
+    slug, t = _host_tenant(request, db)
+    if not slug:
+        return {"on_subdomain": False}
+    if not t or not t.is_active:
+        return {"on_subdomain": True, "found": False}
+    return {
+        "on_subdomain": True,
+        "found": True,
+        "name": t.company_display_name or t.name,
+        "logo_url": t.logo_url,
+        "primary_color": t.primary_color,
+    }
+
+
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(settings.LOGIN_RATE_LIMIT)
 def login(
@@ -224,8 +256,21 @@ def login(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь заблокирован")
 
     _reset_login_fail(email)
+    slug, host_tenant = _host_tenant(request, db)
+    if slug:
+        # Вход на адресе компании открывает именно её.
+        if not host_tenant or not host_tenant.is_active:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Компания с таким адресом не найдена")
+        if not _is_member(db, user.id, host_tenant.id):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"Вы не сотрудник компании «{host_tenant.company_display_name or host_tenant.name}». "
+                "Войдите на основном адресе сайта.",
+            )
+        tenant_id = host_tenant.id
+    else:
+        tenant_id = _pick_default_tenant(db, user.id)
     user.last_login_at = datetime.now(timezone.utc)
-    tenant_id = _pick_default_tenant(db, user.id)
     log_action(db, tenant_id=tenant_id, user_id=user.id, action="login", entity="user", entity_id=user.id)
 
     access, refresh, ttl, _sid = _issue_pair_with_session(db, request, user.id, tenant_id)
@@ -244,6 +289,11 @@ def register(
     db: Session = Depends(get_db),
 ):
     """Публичная регистрация: создаёт компанию и владельца одним запросом."""
+    if getattr(request.state, "forced_tenant_slug", None):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Это адрес существующей компании. Зарегистрировать новую можно на основном адресе сайта.",
+        )
     client_ip = request.client.host if request.client else None
     if not verify_captcha(payload.captcha_token, remote_ip=client_ip):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Проверка CAPTCHA не пройдена")
@@ -535,6 +585,9 @@ def refresh(
             tenant_id = _pick_default_tenant(db, user.id)
     else:
         tenant_id = _pick_default_tenant(db, user.id)
+    _slug, _host = _host_tenant(request, db)
+    if _host is not None and _is_member(db, user.id, _host.id):
+        tenant_id = _host.id
 
     # Сессия: если старый refresh имеет sid — используем ту же запись, иначе
     # (legacy без sid) — создаём новую. Обновляем token_hash под новый refresh.
@@ -725,6 +778,12 @@ def switch_tenant(
     )
     if not membership:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к компании")
+    _slug, _host = _host_tenant(request, db)
+    if _slug and (_host is None or _host.id != tenant_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Вы на адресе другой компании. Откройте основной адрес сайта, чтобы переключиться.",
+        )
 
     # Переиспользуем текущую сессию (только меняем tenant_id внутри). Так UI
     # «Активные сессии» покажет одну запись на устройство, а не по одной на

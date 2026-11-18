@@ -109,6 +109,11 @@ def delete_call(cid: int, ctx: TenantContext = Depends(get_current_context), db:
     row = db.get(Call, cid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Звонок не найден")
+    from ..core.permissions import user_has
+    if row.user_id != ctx.user.id and not ctx.membership.is_owner and not user_has(
+        ctx.user, ["settings.system"], tenant_id=ctx.tenant.id,
+    ):
+        raise HTTPException(403, "Удалить звонок может тот, кто его вёл, или администратор")
     db.delete(row)
     db.commit()
     return Message(message="Звонок удалён")

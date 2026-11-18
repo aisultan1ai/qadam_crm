@@ -164,6 +164,10 @@ def create_app() -> FastAPI:
         path = request.url.path
         csp = DOCS_CSP if path.startswith(DOCS_PATHS) else API_CSP_STRICT
         response.headers.setdefault("Content-Security-Policy", csp)
+        # Данные компании не кэшируются браузером/прокси: иначе после смены аккаунта
+        # (или на общем компьютере) можно увидеть ответы прошлого пользователя.
+        if path.startswith("/api/") and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         # HSTS ставим только когда приложение реально работает по HTTPS,
         # иначе браузер запомнит для локальных доменов и dev-режим сломается.
         if settings.is_prod and settings.COOKIE_SECURE:

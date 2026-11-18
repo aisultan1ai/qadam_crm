@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..core.subdomain import base_domain
 from ..config import settings
 from ..core.plans import check_feature, tenant_usage
 from ..database import get_db
@@ -59,6 +60,7 @@ def _serialize(tenant: Tenant, ctx: TenantContext) -> dict:
         "logo_url": tenant.logo_url,
         "primary_color": tenant.primary_color,
         "subdomain": tenant.subdomain,
+        "base_domain": base_domain(),
         "company_display_name": tenant.company_display_name,
         "is_active": tenant.is_active,
         "is_owner": ctx.membership.is_owner,

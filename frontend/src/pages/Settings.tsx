@@ -308,6 +308,7 @@ type TenantCurrent = {
   logo_url: string | null;
   primary_color: string | null;
   subdomain: string | null;
+  base_domain?: string;
   company_display_name: string | null;
   is_owner: boolean;
 };
@@ -423,14 +424,30 @@ function BrandingSettings() {
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Поддомен (acme.qadam.kz)</span>
-        <input
-          className="input"
-          type="text"
-          placeholder="acme"
-          value={subdomain}
-          onChange={(e) => setSubdomain(e.target.value)}
-        />
+        <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+          Адрес компании (поддомен)
+        </span>
+        <div className="flex items-center gap-1.5">
+          <input
+            className="input max-w-[220px]"
+            type="text"
+            placeholder="acme"
+            value={subdomain}
+            onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+          />
+          <span className="text-sm text-neutral-500">.{data?.base_domain || "домен"}</span>
+        </div>
+        <span className="mt-1 block text-[12px] text-neutral-500">
+          На этом адресе страница входа показывает название и логотип компании, а вход сразу открывает её.
+          {data?.subdomain && data.base_domain && (
+            <>
+              {" "}Текущий адрес:{" "}
+              <a className="link" href={`${window.location.protocol}//${data.subdomain}.${data.base_domain}`} target="_blank" rel="noreferrer">
+                {data.subdomain}.{data.base_domain}
+              </a>
+            </>
+          )}
+        </span>
       </label>
 
       <div className="flex justify-end">
@@ -453,6 +470,7 @@ type Sub = {
   plan: string;
   status: string;
   current_period_end: string | null;
+  pending_request?: { plan: string; created_at: string } | null;
 };
 
 type PlanInfo = {
@@ -504,15 +522,28 @@ function BillingSettings() {
   const [pendingPlan, setPendingPlan] = useState<PlanInfo | null>(null);
 
   const subscribe = useMutation({
-    mutationFn: (plan: string) => api.post("/api/billing/subscribe", { plan }),
-    onSuccess: async () => {
+    mutationFn: async (plan: string) => (await api.post<{ requested?: boolean }>("/api/billing/subscribe", { plan })).data,
+    onSuccess: async (r) => {
+      setPendingPlan(null);
+      if (r.requested) {
+        qc.invalidateQueries({ queryKey: ["billing-sub"] });
+        toast.success("Заявка отправлена", "Мы свяжемся с вами для оплаты и включим тариф");
+        return;
+      }
       await qc.invalidateQueries();
       await fetchMe();
-      setPendingPlan(null);
       toast.success("Тариф обновлён");
     },
     onError: (e) => toast.error("Ошибка", extractApiError(e).message),
   });
+  const cancelRequest = useMutation({
+    mutationFn: () => api.delete("/api/billing/request"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["billing-sub"] });
+      toast.success("Заявка отменена");
+    },
+  });
+  const requestedPlan = plans?.find((p) => p.key === sub?.pending_request?.plan);
 
   const currentPlanInfo = plans?.find((p) => p.key === sub?.plan);
   const daysLeft = sub?.current_period_end
@@ -559,6 +590,17 @@ function BillingSettings() {
             {usageWarnings.map((w) => w.label).join(", ")}. Перейдите на более крупный тариф ниже,
             чтобы избежать блокировок при создании ресурсов.
           </div>
+        </div>
+      )}
+      {sub?.pending_request && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200">
+          <span>
+            Заявка на тариф <b>{requestedPlan?.title ?? sub.pending_request.plan}</b> отправлена{" "}
+            {new Date(sub.pending_request.created_at).toLocaleDateString("ru-RU")}. Мы свяжемся с вами для оплаты и включим тариф.
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => cancelRequest.mutate()} isLoading={cancelRequest.isPending}>
+            Отменить заявку
+          </Button>
         </div>
       )}
       <div className="card p-5">
@@ -714,7 +756,15 @@ function BillingSettings() {
                     setPendingPlan(p);
                   }}
                 >
-                  {current ? "Текущий тариф" : p.price_month === null ? "Связаться" : "Перейти на этот тариф"}
+                  {current
+                    ? "Текущий тариф"
+                    : p.price_month === null
+                      ? "Связаться"
+                      : sub?.pending_request?.plan === p.key
+                        ? "Заявка отправлена"
+                        : p.price_month === 0
+                          ? "Перейти на этот тариф"
+                          : "Оставить заявку"}
                 </button>
               </div>
             );
@@ -726,17 +776,19 @@ function BillingSettings() {
         <div className="flex items-start gap-2">
           <Shield size={14} className="mt-0.5 shrink-0" />
           <span>
-            При переходе на другой тариф текущий период сбрасывается и начинается новый (30 дней).
-            Оплата пока в тестовом режиме — все переходы бесплатны. Полноценный биллинг через Kaspi Pay / Stripe скоро.
+            Онлайн-оплата пока не подключена: на платный тариф оставьте заявку — мы выставим счёт и включим тариф
+            после оплаты. Переход на бесплатный тариф — сразу.
           </span>
         </div>
       </div>
 
       {pendingPlan && (
-        <Modal open onClose={() => setPendingPlan(null)} title={`Перейти на «${pendingPlan.title}»?`}>
+        <Modal open onClose={() => setPendingPlan(null)} title={pendingPlan.price_month ? `Заявка на «${pendingPlan.title}»` : `Перейти на «${pendingPlan.title}»?`}>
           <div className="space-y-3">
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Тариф изменится сразу. Если новые лимиты меньше текущего использования, часть операций может быть заблокирована.
+              {pendingPlan.price_month
+                ? "Мы получим заявку, свяжемся с вами для оплаты и включим тариф. До этого всё работает на текущем тарифе."
+                : "Тариф изменится сразу. Если новые лимиты меньше текущего использования, часть операций может быть заблокирована."}
             </p>
             <div className="rounded-lg bg-neutral-50 p-3 text-sm dark:bg-neutral-800/50">
               <div className="flex justify-between">
@@ -763,7 +815,7 @@ function BillingSettings() {
                 disabled={subscribe.isPending}
                 onClick={() => subscribe.mutate(pendingPlan.key)}
               >
-                Подтвердить
+                {pendingPlan.price_month ? "Отправить заявку" : "Подтвердить"}
               </Button>
             </div>
           </div>

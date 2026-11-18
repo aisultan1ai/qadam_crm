@@ -78,11 +78,20 @@ def create_template(
     return row
 
 
+def _template_editor(ctx: TenantContext, row) -> None:
+    from ..core.permissions import user_has
+    if row.created_by == ctx.user.id or ctx.membership.is_owner:
+        return
+    if not user_has(ctx.user, ["settings.dictionaries"], tenant_id=ctx.tenant.id):
+        raise HTTPException(403, "Шаблон меняет автор или администратор")
+
+
 @router.patch("/{tid}", response_model=TemplateOut)
 def update_template(tid: int, payload: TemplateUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     row = db.get(EntityTemplate, tid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Шаблон не найден")
+    _template_editor(ctx, row)
     for f in ("name", "description", "payload"):
         v = getattr(payload, f)
         if v is not None:
@@ -97,6 +106,7 @@ def delete_template(tid: int, ctx: TenantContext = Depends(get_current_context),
     row = db.get(EntityTemplate, tid)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Шаблон не найден")
+    _template_editor(ctx, row)
     db.delete(row)
     db.commit()
     return Message(message="Шаблон удалён")

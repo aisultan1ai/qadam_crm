@@ -10,6 +10,7 @@ import { EmptyState, Modal, FieldError, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { Button } from "@/components/lib/Button";
+import { useAuth } from "@/store/auth";
 import { FormField } from "@/components/lib/FormField";
 import { DataTable, Column } from "@/components/lib/DataTable";
 
@@ -28,6 +29,7 @@ const dirCreateSchema = z.object({
 type DirCreateForm = z.infer<typeof dirCreateSchema>;
 
 export default function DirectoriesPage() {
+  const canEdit = useAuth((s) => s.can("settings.dictionaries") || !!s.me?.current_tenant?.is_owner);
   const [active, setActive] = useState<string | null>(null);
   const [openNew, setOpenNew] = useState(false);
 
@@ -42,15 +44,15 @@ export default function DirectoriesPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[13px] text-zinc-500">Свои списки значений — страны, продукты, типы клиентов — для полей задач и CRM.</p>
-        <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
+        {canEdit && <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenNew(true)}>
           Справочник
-        </Button>
+        </Button>}
       </div>
 
       {isPending ? (
         <div className="h-40 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800/60" />
       ) : !dirs || dirs.length === 0 ? (
-        <EmptyState icon={<BookText size={32} />} title="Справочников нет" description="Списки, которые используются в разных местах: объекты, виды работ, склады. Задайте поля и заполните записи." />
+        <EmptyState icon={<BookText size={32} />} title="Справочников нет" description="Свои списки компании: объекты, виды работ, склады. Задайте поля и заполните записи." />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
           <div className="space-y-1">
@@ -81,6 +83,7 @@ export default function DirectoriesPage() {
 }
 
 function EntriesPanel({ dir }: { dir: Dir }) {
+  const canEdit = useAuth((s) => s.can("settings.dictionaries") || !!s.me?.current_tenant?.is_owner);
   const qc = useQueryClient();
   const confirm = useConfirm();
   const [openNew, setOpenNew] = useState(false);
@@ -117,7 +120,7 @@ function EntriesPanel({ dir }: { dir: Dir }) {
       header: "",
       align: "right",
       width: 60,
-      render: (e) => (
+      render: (e) => canEdit && (
         <Button
           variant="ghost"
           size="icon"
@@ -146,9 +149,11 @@ function EntriesPanel({ dir }: { dir: Dir }) {
           <h2 className="text-lg font-semibold">{dir.label} <span className="text-xs text-neutral-500">/{dir.code}</span></h2>
           <p className="text-xs text-neutral-500">{dir.fields.length} полей · {data?.length ?? 0} записей</p>
         </div>
-        <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => setOpenNew(true)}>
-          Запись
-        </Button>
+        {canEdit && (
+          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => setOpenNew(true)}>
+            Запись
+          </Button>
+        )}
       </div>
 
       {!isPending && (!data || data.length === 0) ? (
@@ -234,10 +239,10 @@ function NewDirModal({ onClose }: { onClose: () => void }) {
             <input className="input !text-xs" placeholder="имя" value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })} />
             <input className="input !text-xs" placeholder="Метка" value={nf.label} onChange={(e) => setNf({ ...nf, label: e.target.value })} />
             <select className="input !text-xs" value={nf.type} onChange={(e) => setNf({ ...nf, type: e.target.value })}>
-              <option value="text">text</option>
-              <option value="number">number</option>
-              <option value="date">date</option>
-              <option value="checkbox">bool</option>
+              <option value="text">Текст</option>
+              <option value="number">Число</option>
+              <option value="date">Дата</option>
+              <option value="checkbox">Флажок</option>
             </select>
             <Button
               variant="ghost"
