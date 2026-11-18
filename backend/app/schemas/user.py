@@ -154,6 +154,8 @@ class TenantBrief(BaseModel):
     is_owner: bool = False
     # Владелец ещё не прошёл мастер первого запуска
     onboarding_pending: bool = False
+    # Свой адрес компании (soli.qcrm.kz) — интерфейс переносит туда после входа
+    subdomain: Optional[str] = None
 
 
 class MeOut(UserOut):

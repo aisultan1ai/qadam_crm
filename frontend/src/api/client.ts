@@ -128,7 +128,7 @@ api.interceptors.response.use(
     // Гость может сидеть на публичном лендинге, вызывающий сам решит, что делать.
     const isMeCheck = url.includes("/api/auth/me");
     // Принятие приглашения: 401 = «неверный пароль от аккаунта», а не истёкшая сессия — показываем ошибку на месте.
-    const isCredentialCheck = /\/api\/invitations\/[^/]+\/accept/.test(url);
+    const isCredentialCheck = /\/api\/invitations\/[^/]+\/accept/.test(url) || url.includes("/api/auth/handoff/exchange");
 
     // не пытаемся рефрешить сам /auth/refresh или /auth/login
     if (

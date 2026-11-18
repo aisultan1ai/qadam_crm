@@ -46,6 +46,18 @@ def extract_subdomain(host: str) -> Optional[str]:
     return None
 
 
+def tenant_origin(tenant) -> str:
+    """Адрес, на котором работает компания: её поддомен или основной сайт."""
+    base = settings.APP_BASE_URL.rstrip("/")
+    sub = getattr(tenant, "subdomain", None)
+    domain = base_domain()
+    if not sub or not domain or domain == "localhost" and "localhost" not in base:
+        return base
+    scheme = urlparse(base).scheme or "https"
+    port = urlparse(base).port
+    return f"{scheme}://{sub}.{domain}" + (f":{port}" if port else "")
+
+
 def tenant_for_slug(db, slug: Optional[str]):
     """Компания по адресу — только явно настроенный поддомен (Настройки → Брендинг)."""
     if not slug:

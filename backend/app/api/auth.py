@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -703,6 +703,7 @@ def me(
                         "company_display_name": t.company_display_name,
                         "is_owner": membership.is_owner,
                         "onboarding_pending": bool(membership.is_owner and t.onboarding_completed_at is None),
+                        "subdomain": t.subdomain,
                     }
         except JWTError:
             pass
@@ -753,9 +754,84 @@ def list_my_tenants(
             "primary_color": t.primary_color,
             "company_display_name": t.company_display_name,
             "is_owner": m.is_owner,
+            "subdomain": t.subdomain,
         }
         for m, t in rows
     ]
+
+
+# =============================================================================
+# Перенос сессии на адрес компании (qcrm.kz → soli.qcrm.kz) без повторного входа
+# =============================================================================
+# У каждого адреса своя сессия (cookie без общего домена), поэтому переносим её
+# одноразовым кодом: живёт 30 секунд, работает один раз и только на адресе своей компании.
+
+HANDOFF_TTL = 30
+
+
+class HandoffIn(BaseModel):
+    tenant_id: int
+
+
+class HandoffCodeIn(BaseModel):
+    code: str = Field(min_length=20, max_length=100)
+
+
+@router.post("/handoff")
+@limiter.limit("30/minute")
+def create_handoff(
+    request: Request,
+    payload: HandoffIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import json as _json
+    import secrets as _secrets
+    from ..core.redis_client import get_redis
+    from ..core.subdomain import tenant_origin
+    tenant = db.get(Tenant, payload.tenant_id)
+    if not tenant or not tenant.is_active or not _is_member(db, user.id, tenant.id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к компании")
+    code = _secrets.token_urlsafe(32)
+    try:
+        get_redis().set(f"handoff:{code}", _json.dumps({"u": user.id, "t": tenant.id}), ex=HANDOFF_TTL)
+    except Exception:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Сервис временно недоступен — попробуйте ещё раз")
+    return {"url": f"{tenant_origin(tenant)}/auth/handoff?code={code}"}
+
+
+@router.post("/handoff/exchange", response_model=TokenResponse)
+@limiter.limit("20/minute")
+def exchange_handoff(
+    request: Request,
+    response: Response,
+    payload: HandoffCodeIn,
+    db: Session = Depends(get_db),
+):
+    import json as _json
+    from ..core.redis_client import get_redis
+    try:
+        r = get_redis()
+        raw = r.get(f"handoff:{payload.code}")
+        r.delete(f"handoff:{payload.code}")  # одноразовый
+    except Exception:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Сервис временно недоступен — войдите заново")
+    if not raw:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ссылка входа устарела — войдите заново")
+    data = _json.loads(raw)
+    user = db.get(User, int(data["u"]))
+    tenant = db.get(Tenant, int(data["t"]))
+    if not user or not user.is_active or not tenant or not tenant.is_active or not _is_member(db, user.id, tenant.id):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ссылка входа недействительна — войдите заново")
+    # Код работает только на адресе своей компании: на чужом поддомене его не применить.
+    slug = getattr(request.state, "forced_tenant_slug", None)
+    if (slug or None) != (tenant.subdomain or None):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ссылка входа не для этого адреса — войдите заново")
+    access, refresh, ttl, _sid = _issue_pair_with_session(db, request, user.id, tenant.id)
+    log_action(db, tenant_id=tenant.id, user_id=user.id, action="login", entity="user", entity_id=user.id, detail="handoff")
+    db.commit()
+    set_auth_cookies(response, access, refresh)
+    return TokenResponse(access_token=access, refresh_token=refresh, expires_in=ttl)
 
 
 @router.post("/switch-tenant/{tenant_id}", response_model=TokenResponse)

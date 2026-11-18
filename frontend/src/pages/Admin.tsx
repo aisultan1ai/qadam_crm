@@ -570,11 +570,13 @@ function DeleteTenantModal({
           <div className="font-medium">Опасное действие</div>
           <div className="mt-1 text-xs">
             Будут удалены все данные компании «{tenant.name}»: {tenant.users} чел., {tenant.projects} проектов,{" "}
-            {tenant.tasks} задач, комментарии, вложения. Восстановление невозможно.
+            {tenant.tasks} задач, комментарии, вложения и файлы на диске.
+            {tenant.subdomain && <> Адрес {tenant.subdomain}.{window.location.hostname.replace(/^www\./, "")} освободится.</>} Восстановление невозможно.
           </div>
         </div>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Если хотите просто временно отключить компанию — используйте «Деактивировать» вместо удаления.
+          Если хотите просто временно отключить компанию — используйте «Деактивировать» вместо удаления
+          (данные и адрес компании сохранятся, войти в неё будет нельзя).
         </p>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">

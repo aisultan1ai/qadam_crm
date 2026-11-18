@@ -43,6 +43,8 @@ export type Tenant = {
   is_owner: boolean;
   /** Владелец ещё не прошёл мастер первого запуска */
   onboarding_pending?: boolean;
+  /** Свой адрес компании (soli.qcrm.kz) */
+  subdomain?: string | null;
 };
 
 export type Me = User & {

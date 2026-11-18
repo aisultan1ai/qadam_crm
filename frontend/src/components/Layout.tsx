@@ -33,6 +33,7 @@ import { ShortcutsDialog, useGlobalShortcuts } from "./Shortcuts";
 import TenantSwitcher from "./TenantSwitcher";
 import WelcomeModal from "./WelcomeModal";
 import { useT } from "@/lib/i18n";
+import { goToCompany, onCompanyHost } from "@/lib/companyAddress";
 import OnboardingWizard from "./OnboardingWizard";
 import { TimerWidget } from "./TimerWidget";
 import { LogoMark } from "./Logo";
@@ -248,6 +249,21 @@ export default function Layout() {
 
   useRealtimeUpdates();
   const online = useOnline();
+
+  // У компании свой адрес (soli.qcrm.kz), а открыт основной сайт — переносим туда уже вошедшим.
+  const companySub = me?.current_tenant?.subdomain;
+  const companyId = me?.current_tenant?.id;
+  useEffect(() => {
+    if (!companySub || !companyId || onCompanyHost(companySub)) return;
+    const key = `qadam:handoff-tried:${companyId}`;
+    try {
+      if (sessionStorage.getItem(key)) return; // не зацикливаемся, если перенос не удался
+      sessionStorage.setItem(key, "1");
+    } catch {
+      // sessionStorage недоступен — пробуем один раз
+    }
+    goToCompany(companyId, window.location.pathname + window.location.search).catch(() => {});
+  }, [companySub, companyId]);
 
   useEffect(() => {
     applyBrandColor(me?.current_tenant?.primary_color ?? null);

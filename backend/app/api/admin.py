@@ -258,10 +258,9 @@ def delete_tenant(
     admin: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
-    """Полное удаление tenant'а вместе со всеми связанными данными.
-
-    Опасная операция — cascade удалит проекты, задачи, комментарии, вложения, memberships.
-    Файлы в uploads/{tenant_id}/ остаются на диске (для аудита).
+    """Полное удаление компании: все записи в базе (каскадом), её адрес-поддомен (хранится в самой
+    компании и освобождается) и её файлы на диске — вложения, документы, почта, логотип, выгрузки.
+    Учётные записи людей остаются: человек мог работать и в других компаниях.
     """
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
@@ -272,7 +271,32 @@ def delete_tenant(
     _audit(db, admin, "delete_tenant", tenant, detail=f"name='{name}', slug='{tenant.slug}'")
     db.delete(tenant)
     db.commit()
+    _remove_tenant_files(tenant_id)
     return Message(message=f"Компания «{name}» удалена")
+
+
+def _remove_tenant_files(tenant_id: int) -> None:
+    """Файлы компании: uploads/{id}/, uploads/tenant_{id}/ (документы), exports/{id}/.
+    Удаляем только папки строго внутри корня хранилища."""
+    import logging
+    import shutil
+    from pathlib import Path
+    from ..config import settings
+    targets = [
+        (settings.UPLOAD_DIR, str(tenant_id)),
+        (settings.UPLOAD_DIR, f"tenant_{tenant_id}"),
+        (getattr(settings, "EXPORT_DIR", None), str(tenant_id)),
+    ]
+    for root, name in targets:
+        if not root:
+            continue
+        try:
+            base = Path(root).resolve()
+            path = (base / name).resolve()
+            if path.parent == base and path.is_dir():
+                shutil.rmtree(path)
+        except Exception:
+            logging.getLogger("qadam.admin").warning("Не удалось удалить файлы компании %s в %s", tenant_id, root, exc_info=True)
 
 
 @router.post("/tenants/{tenant_id}/deactivate", response_model=Message)
