@@ -475,7 +475,7 @@ function EditTenantModal({
               className="input font-mono"
               value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase())}
-              placeholder="my-company"
+              placeholder="латинскими буквами, через дефис"
             />
             <div className="mt-1 text-[11px] text-neutral-500">
               a-z, 0-9, дефис. Изменение может сломать закладки.
@@ -489,7 +489,7 @@ function EditTenantModal({
               className="input font-mono"
               value={subdomain}
               onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
-              placeholder="acme"
+              placeholder="латинскими буквами"
             />
             <div className="mt-1 text-[11px] text-neutral-500">
               Итог: <span className="font-mono">{subdomain || "—"}.{window.location.hostname.replace(/^www\./, "")}</span>
@@ -1304,7 +1304,7 @@ function CreateTenantModal({
       >
         <label className="block">
           <span className="label">Название компании</span>
-          <input autoFocus className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} placeholder="ТОО «Пример»" />
+          <input autoFocus className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} placeholder="Название компании" />
         </label>
         <label className="block">
           <span className="label">Тариф</span>
@@ -1330,7 +1330,7 @@ function CreateTenantModal({
                   className="input"
                   value={ownerEmail}
                   onChange={(e) => setOwnerEmail(e.target.value)}
-                  placeholder="director@company.kz"
+                  placeholder="Email будущего владельца"
                 />
                 <p className="mt-1 text-xs text-zinc-500">
                   Есть аккаунт — станет владельцем сразу. Нет — получит приглашение и станет владельцем после регистрации.

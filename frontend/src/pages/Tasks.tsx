@@ -780,8 +780,8 @@ function KanbanCardGhost({ task }: { task: TaskListItem }) {
 }
 
 // Grid layout для Tasks table-view. Одинаковый template для header и rows.
-const TASKS_GRID_COLS = "36px minmax(240px,2.5fr) 130px 120px minmax(160px,1fr) 120px 60px";
-const TASKS_GRID_COLS_NO_SELECT = "minmax(240px,2.5fr) 130px 120px minmax(160px,1fr) 120px 60px";
+const TASKS_GRID_COLS = "36px minmax(240px,2.5fr) 130px 120px minmax(150px,1fr) minmax(150px,1fr) 120px 60px";
+const TASKS_GRID_COLS_NO_SELECT = "minmax(240px,2.5fr) 130px 120px minmax(150px,1fr) minmax(150px,1fr) 120px 60px";
 const TASK_ROW_HEIGHT = 52;
 const TASK_CARD_HEIGHT = 76;
 
@@ -835,6 +835,7 @@ function TableView({
           <div>Задача</div>
           <div>Статус</div>
           <div>Приоритет</div>
+          <div>Постановщик</div>
           <div>Исполнитель</div>
           <div>Дедлайн</div>
           <div />
@@ -874,6 +875,14 @@ function TableView({
                 </div>
                 <div><StatusChip status={t.status} /></div>
                 <div><PriorityChip priority={t.priority} /></div>
+                <div className="min-w-0">
+                  {t.author ? (
+                    <div className="flex items-center gap-2 min-w-0" title={`Поставил: ${t.author.name}`}>
+                      <Avatar name={t.author.name} size={22} url={t.author.avatar_url} />
+                      <span className="truncate">{t.author.name}</span>
+                    </div>
+                  ) : "—"}
+                </div>
                 <div className="min-w-0">
                   {t.assignee ? (
                     <div className="flex items-center gap-2 min-w-0">
@@ -983,6 +992,10 @@ export function TaskFormModal({
   const qc = useQueryClient();
   const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
+  const me = useAuth((s) => s.me);
+  // Поставить от имени другого (секретарь за директора) — только с правом «Назначение исполнителей».
+  const canSetAuthor = useAuth((s) => s.can("tasks.assign") || !!s.me?.current_tenant?.is_owner);
+  const [authorId, setAuthorId] = useState<string>("");
 
   const {
     register,
@@ -1010,6 +1023,7 @@ export function TaskFormModal({
         project_id: data.project_id || null,
         assignee_id: data.assignee_id || null,
         deadline: data.deadline ? new Date(data.deadline).toISOString() : null,
+        author_id: authorId ? Number(authorId) : null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -1034,6 +1048,22 @@ export function TaskFormModal({
           <FieldError msg={errors.description?.message} />
         </label>
         <div className="grid grid-cols-2 gap-3">
+          <label className="col-span-2 block sm:col-span-1">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Постановщик</span>
+            {canSetAuthor ? (
+              <select className="input" value={authorId} onChange={(e) => setAuthorId(e.target.value)}>
+                <option value="">{me?.name ? `${me.name} (вы)` : "Вы"}</option>
+                {users.filter((u) => u.id !== me?.id).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            ) : (
+              <div className="input flex items-center bg-neutral-50 text-neutral-600 dark:bg-white/[0.03] dark:text-neutral-300">
+                {me?.name ? `${me.name} (вы)` : "Вы"}
+              </div>
+            )}
+            {authorId && (
+              <span className="mt-1 block text-[11.5px] text-neutral-500">Вы останетесь наблюдателем задачи.</span>
+            )}
+          </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Проект</span>
             <select className="input" {...register("project_id", { setValueAs: (v) => (v ? Number(v) : "") })}>

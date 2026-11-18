@@ -798,7 +798,7 @@ function ActionInspector({
               className="input !py-1.5 font-mono text-xs"
               value={String(config.url || "")}
               onChange={(e) => onConfigChange({ url: e.target.value })}
-              placeholder="https://api.example.com/hook"
+              placeholder="Адрес вашего сервиса (https://…)"
             />
           </Field>
           <Field label="Метод">

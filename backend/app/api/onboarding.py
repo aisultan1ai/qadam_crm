@@ -261,6 +261,7 @@ async def import_companies(
 def companies_template(ctx: TenantContext = Depends(require("contacts.create"))):
     from fastapi.responses import StreamingResponse
     from openpyxl import Workbook
+    from openpyxl.comments import Comment
     from openpyxl.styles import Font, PatternFill
     wb = Workbook()
     ws = wb.active
@@ -269,7 +270,17 @@ def companies_template(ctx: TenantContext = Depends(require("contacts.create")))
     for c in ws[1]:
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor="2563EB")
-    ws.append(["ТОО «Пример»", "", "+7 727 000 00 00", "info@example.kz", "г. Алматы", "", "Строительство"])
+    hints = [
+        "Наименование контрагента, как в документах. Обязательно.",
+        "БИН или ИИН — 12 цифр. Проверяется по контрольной сумме.",
+        "Номер телефона.",
+        "Email для связи.",
+        "Юридический или фактический адрес.",
+        "Адрес сайта.",
+        "Отрасль или сфера деятельности.",
+    ]
+    for cell, hint in zip(ws[1], hints):
+        cell.comment = Comment(hint, "Qadam")
     for col, w in zip("ABCDEFG", (36, 16, 18, 26, 36, 22, 20)):
         ws.column_dimensions[col].width = w
     buf = io.BytesIO()

@@ -171,7 +171,7 @@ export default function InvitationsPanel() {
             <input
               className="input"
               type="email"
-              placeholder="colleague@example.com"
+              placeholder="Рабочий email сотрудника"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => {

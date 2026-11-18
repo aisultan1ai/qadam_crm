@@ -561,7 +561,7 @@ function CompanyModal({ initial, onClose }: { initial: Company | null; onClose: 
             <input className="input" {...register("industry")} />
           </FormField>
           <FormField label="Сайт" error={errors.website?.message}>
-            <input className="input" placeholder="example.com" {...register("website")} />
+            <input className="input" placeholder="Адрес сайта" {...register("website")} />
           </FormField>
         </div>
         <div className="grid grid-cols-2 gap-3">

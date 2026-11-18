@@ -287,6 +287,7 @@ def _analyze(db: Session, ctx: TenantContext, rows: list[Row]) -> Preview:
 @router.get("/template")
 def template(ctx: TenantContext = Depends(require("users.create")), db: Session = Depends(get_db)):
     from openpyxl import Workbook
+    from openpyxl.comments import Comment
     from openpyxl.styles import Font, PatternFill
     wb = Workbook()
     ws = wb.active
@@ -295,8 +296,17 @@ def template(ctx: TenantContext = Depends(require("users.create")), db: Session 
     for c in ws[1]:
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor="2563EB")
-    ws.append(["Иванов Иван Иванович", "ivanov@company.kz", "Начальник участка", "Производство", DEFAULT_ROLE, ""])
-    ws.append(["Петрова Анна", "petrova@company.kz", "Мастер смены", "Производство", DEFAULT_ROLE, "ivanov@company.kz"])
+    # Без строк-примеров с выдуманными людьми: подсказки — в примечаниях к заголовкам.
+    hints = [
+        "Фамилия Имя Отчество сотрудника. Обязательно.",
+        "Рабочий email — на него придёт приглашение. Обязательно.",
+        "Должность в компании.",
+        "Название отдела. Нового отдела нет — создастся при импорте (если есть право).",
+        f"Роль из листа «Справка». Пусто — «{DEFAULT_ROLE}».",
+        "Email или ФИО руководителя: из этого файла или уже работающего сотрудника.",
+    ]
+    for cell, hint in zip(ws[1], hints):
+        cell.comment = Comment(hint, "Qadam")
     for col, w in zip("ABCDEF", (32, 30, 26, 22, 18, 30)):
         ws.column_dimensions[col].width = w
     ref = wb.create_sheet("Справка")
@@ -309,7 +319,7 @@ def template(ctx: TenantContext = Depends(require("users.create")), db: Session 
         ref.append([d.name])
     ref.append([])
     ref.append(["Руководитель — email или ФИО: из этого файла или уже работающего сотрудника."])
-    ref.append(["Строки-примеры удалите перед импортом."])
+    ref.append(["Подсказка по каждой колонке — в примечании к её заголовку (наведите на ячейку)."])
     ref.column_dimensions["A"].width = 70
     buf = io.BytesIO()
     wb.save(buf)

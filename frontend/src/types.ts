@@ -110,6 +110,8 @@ export type TaskListItem = {
   custom_status_id?: number | null;
   /** Срок напрямую меняют постановщик и аудиторы; остальные отправляют запрос на перенос. */
   author_id?: number | null;
+  /** Постановщик — для колонки в списке */
+  author?: UserBrief | null;
   auditor_ids?: number[];
 };
 

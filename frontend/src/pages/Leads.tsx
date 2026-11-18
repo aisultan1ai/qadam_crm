@@ -732,11 +732,11 @@ function NewLeadModal({ onClose }: { onClose: () => void }) {
       >
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-500">Имя *</span>
-          <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Иван Иванов" />
+          <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя и фамилия" />
         </label>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-500">Контакт (email / телефон) *</span>
-          <input className="input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="+7 700 000 00 00 или ivan@company.kz" />
+          <input className="input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Телефон или email" />
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">

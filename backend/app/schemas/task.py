@@ -138,6 +138,8 @@ class TaskCreate(TaskBase):
     auditor_ids: Optional[List[int]] = None
     participant_ids: Optional[List[int]] = None
     reminders: Optional[List[TaskReminderCreate]] = None
+    # Постановщик, если задачу ставят от имени другого (секретарь за директора). Пусто — создатель.
+    author_id: Optional[int] = None
 
 
 class TaskUpdate(BaseModel):
@@ -187,6 +189,7 @@ class TaskListItem(BaseModel):
     custom_status_id: Optional[int] = None
     # Кто может менять срок напрямую (остальные шлют запрос): постановщик и аудиторы.
     author_id: Optional[int] = None
+    author: Optional[UserBrief] = None  # постановщик — для колонки в списке задач
     auditor_ids: List[int] = []
 
 

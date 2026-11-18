@@ -529,7 +529,7 @@ function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: () => 
       <div className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-500">Кому (через запятую)</span>
-          <input className="input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="client@example.com" />
+          <input className="input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="Email получателя" />
         </label>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-500">Копия</span>

@@ -173,6 +173,13 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
     if payload.assignee_id:
         _assert_user_in_tenant(db, ctx.tenant.id, payload.assignee_id, "Исполнитель не является членом компании")
     _assert_project_in_tenant(db, ctx.tenant.id, payload.project_id)
+    # Постановщик — создатель или (по праву «Назначение исполнителей») другой сотрудник компании.
+    author_id = user.id
+    if payload.author_id and payload.author_id != user.id:
+        if not (ctx.membership.is_owner or user_has(user, ["tasks.assign"], tenant_id=ctx.tenant.id)):
+            raise HTTPException(403, "Ставить задачу от имени другого может сотрудник с правом «Назначение исполнителей»")
+        _assert_user_in_tenant(db, ctx.tenant.id, payload.author_id, "Постановщик не является членом компании")
+        author_id = payload.author_id
     if payload.parent_task_id:
         _assert_parent_in_tenant(db, ctx.tenant.id, payload.parent_task_id)
     if payload.custom_status_id:
@@ -189,7 +196,7 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
         assignee_id=payload.assignee_id,
         start_date=payload.start_date,
         deadline=payload.deadline,
-        author_id=user.id,
+        author_id=author_id,
         parent_task_id=payload.parent_task_id or None,
         recurrence_rule=payload.recurrence_rule,
         recurrence_next_at=payload.deadline if payload.recurrence_rule else None,
@@ -210,6 +217,9 @@ def create_task(payload: TaskCreate, ctx: TenantContext = Depends(require("tasks
     task.assignees = _valid_users(payload.assignee_ids)
     task.auditors = _valid_users(payload.auditor_ids)
     task.participants = _valid_users(payload.participant_ids)
+    # Поставил от имени другого — сам остаётся наблюдателем, иначе потеряет доступ к своей же задаче.
+    if author_id != user.id and not any(u.id == user.id for u in list(task.assignees) + list(task.auditors)):
+        task.auditors = list(task.auditors) + [user]
     # Если legacy assignee_id есть, но нет в assignees — добавим (primary всегда среди назначенных).
     if task.assignee_id and not any(u.id == task.assignee_id for u in task.assignees):
         primary = db.get(User, task.assignee_id)

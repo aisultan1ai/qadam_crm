@@ -431,7 +431,7 @@ function BrandingSettings() {
           <input
             className="input max-w-[220px]"
             type="text"
-            placeholder="acme"
+            placeholder="латинскими буквами"
             value={subdomain}
             onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
           />
@@ -1171,17 +1171,17 @@ function LeadFormEditor({
   const apiEndpoint = `${window.location.origin}/api/f/${tenantSlug}/${form.id}`;
   const apiPayload = draft.fields_config.reduce<Record<string, string>>((acc, f) => {
     acc[f.key] = f.type === "email"
-      ? "you@company.com"
+      ? "<Email>"
       : f.type === "phone"
-      ? "+7 700 000 00 00"
+      ? "<Номер телефона>"
       : f.type === "number"
-      ? "42"
+      ? "<Число>"
       : `<${f.label}>`;
     return acc;
   }, {});
   const apiCurl = `curl -X POST '${apiEndpoint}' \\
   -H 'Content-Type: application/json' \\
-  -d '${JSON.stringify({ payload: Object.keys(apiPayload).length ? apiPayload : { name: "Иван", contact: "+7 700 000 00 00" } })}'`;
+  -d '${JSON.stringify({ payload: Object.keys(apiPayload).length ? apiPayload : { name: "<Имя>", contact: "<Телефон или email>" } })}'`;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
@@ -1626,9 +1626,9 @@ function fieldIcon(type: FormFieldT["type"]) {
 function fieldPlaceholder(f: FormFieldT): string {
   if (f.placeholder) return f.placeholder;
   switch (f.type) {
-    case "email": return "you@company.com";
-    case "phone": return "+7 700 000 00 00";
-    case "number": return "0";
+    case "email": return "Email";
+    case "phone": return "Номер телефона";
+    case "number": return "Число";
     case "textarea": return "Расскажите о задаче…";
     case "select": return "Выберите…";
     default: return f.label;
@@ -3074,11 +3074,11 @@ function MailboxSettings() {
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-500">Имя отправителя</span>
-            <input className="input" value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="Иван Петров" />
+            <input className="input" value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="Имя и фамилия" />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-500">Email</span>
-            <input className="input" type="email" value={form.email} onChange={(e) => upd("email", e.target.value)} placeholder="ivan@company.kz" />
+            <input className="input" type="email" value={form.email} onChange={(e) => upd("email", e.target.value)} placeholder="Рабочий email" />
           </label>
           <label className="block sm:col-span-2">
             <span className="mb-1 block text-xs font-medium text-neutral-500">Reply-To имя (опционально)</span>

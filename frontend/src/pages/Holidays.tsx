@@ -167,7 +167,7 @@ function NewHolidayModal({ onClose }: { onClose: () => void }) {
           <input type="date" className="input" {...register("date")} />
         </FormField>
         <FormField label="Название" required error={errors.name?.message}>
-          <input className="input" placeholder="Наурыз" {...register("name")} />
+          <input className="input" placeholder="Название праздника" {...register("name")} />
         </FormField>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" {...register("is_workday")} />

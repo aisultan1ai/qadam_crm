@@ -100,7 +100,7 @@ class WhatsAppProvider(MessengerProvider):
               "field": "messages",
               "value": {
                 "messages": [{"from":"77001234567","id":"wamid.xxx","type":"text","text":{"body":"hi"}}],
-                "contacts": [{"wa_id":"77001234567","profile":{"name":"Иван"}}]
+                "contacts": [{"wa_id":"77001234567","profile":{"name":"<имя>"}}]
               }
             }]
           }]
