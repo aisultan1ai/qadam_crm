@@ -64,6 +64,8 @@ class TenantMembership(Base):
     position: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     # Руководитель ещё не в компании (приглашён) — свяжем, когда примет приглашение.
     pending_manager_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Владелец компании требует от этого сотрудника вход с двухфакторной защитой.
+    require_2fa: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="memberships", lazy="joined")

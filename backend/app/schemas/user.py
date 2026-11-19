@@ -91,6 +91,8 @@ class UserUpdate(BaseModel):
     bio: Optional[str] = None
     birthday: Optional[date] = None
     hire_date: Optional[date] = None
+    # Требовать вход с 2FA (меняет только владелец компании)
+    require_2fa: Optional[bool] = None
 
     @field_validator("password")
     @classmethod
@@ -132,6 +134,10 @@ class UserOut(UserBase):
     departments: List[DepartmentOut] = []  # все отделы в текущей компании
     last_login_at: Optional[datetime] = None
     created_at: datetime
+    # Владелец требует от сотрудника 2FA в этой компании
+    require_2fa: bool = False
+    # Включена ли 2FA — видит только владелец (и сам человек в /me); иначе None
+    two_factor_enabled: Optional[bool] = None
 
 
 class UserBrief(BaseModel):
@@ -164,3 +170,5 @@ class MeOut(UserOut):
     # Показываем UI что смена email ещё ожидает подтверждения — юзер видит
     # плашку «Мы отправили письмо на X, кликните ссылку чтобы завершить».
     pending_email: Optional[str] = None
+    # Своя 2FA: включена ли и требует ли её владелец текущей компании
+    totp_enabled: bool = False

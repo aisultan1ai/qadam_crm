@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import {
-  FolderPlus, Folder, FileText, Upload, Trash2, Share2, Eye, Download, ChevronLeft,
+  FolderPlus, Folder, FileText, Upload, Trash2, Share2, Eye, Download, ChevronLeft, History,
 } from "lucide-react";
 import { EmptyState, Modal, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
@@ -48,6 +48,9 @@ export default function DocumentsPage() {
   const canUpload = useAuth((s) => s.can("files.upload") || !!s.me?.current_tenant?.is_owner);
   const canManageAll = useAuth((s) => s.can("files.delete") || !!s.me?.current_tenant?.is_owner);
   const canManage = (d: Doc) => canManageAll || d.created_by === me?.id;
+  // Журнал просмотров — владельцу и администратору (как и сервер: settings.system).
+  const canSeeViews = useAuth((s) => s.can("settings.system") || !!s.me?.current_tenant?.is_owner || !!s.me?.is_platform_admin);
+  const [openViews, setOpenViews] = useState<Doc | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -158,12 +161,17 @@ export default function DocumentsPage() {
       key: "actions",
       header: "",
       align: "right",
-      width: 160,
+      width: 190,
       render: (d) => (
         <div className="flex items-center justify-end gap-1">
           <Button variant="ghost" size="icon" onClick={() => setOpenPreview(d)} title="Просмотр" aria-label="Просмотр">
             <Eye size={13} />
           </Button>
+          {canSeeViews && (
+            <Button variant="ghost" size="icon" onClick={() => setOpenViews(d)} title="Кто открывал" aria-label="Кто открывал">
+              <History size={13} />
+            </Button>
+          )}
           {d.is_public && d.public_slug && (
             <a
               href={`/api/public/documents/${d.public_slug}/download`}
@@ -312,6 +320,7 @@ export default function DocumentsPage() {
         <NewFolderModal parentId={folderId} onClose={() => setOpenNewFolder(false)} />
       )}
       {openPreview && <PreviewModal doc={openPreview} onClose={() => setOpenPreview(null)} />}
+      {openViews && <ViewsModal doc={openViews} onClose={() => setOpenViews(null)} />}
     </div>
   );
 }
@@ -375,6 +384,69 @@ function PreviewModal({ doc, onClose }: { doc: Doc; onClose: () => void }) {
         <iframe src={data.url} className="h-[70vh] w-full rounded border border-neutral-200 dark:border-neutral-800" title={doc.name} />
       ) : (
         <div className="py-8 text-center text-sm text-neutral-500">Не удалось получить preview</div>
+      )}
+    </Modal>
+  );
+}
+
+type RecordView = {
+  id: number;
+  user: { id: number; name: string; email?: string | null } | null;
+  ip: string | null;
+  user_agent: string | null;
+  viewed_at: string;
+};
+
+/** Кто открывал документ: просмотр и скачивание (повторы одного человека в течение 10 минут — одной строкой). */
+function ViewsModal({ doc, onClose }: { doc: Doc; onClose: () => void }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ["record-views", "document", doc.id],
+    queryFn: async () =>
+      (await api.get<RecordView[]>("/api/record-views", { params: { entity_type: "document", entity_id: doc.id } })).data,
+  });
+
+  return (
+    <Modal open onClose={onClose} title={`Кто открывал: ${doc.name}`} size="lg">
+      <p className="mb-3 text-xs text-neutral-500">
+        Просмотры и скачивания документа. Если человек открывал его несколько раз подряд, в течение 10 минут это одна запись.
+      </p>
+      {isPending ? (
+        <div className="h-40 animate-pulse rounded bg-neutral-100 dark:bg-neutral-800/60" />
+      ) : error ? (
+        <FormError msg={extractApiError(error).message} />
+      ) : !data || data.length === 0 ? (
+        <div className="py-8 text-center text-sm text-neutral-500">Документ ещё никто не открывал</div>
+      ) : (
+        <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-neutral-50 text-left text-xs text-neutral-500 dark:bg-neutral-900">
+              <tr>
+                <th className="px-3 py-2 font-medium">Кто</th>
+                <th className="px-3 py-2 font-medium">Когда</th>
+                <th className="px-3 py-2 font-medium">IP-адрес</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((v) => (
+                <tr key={v.id} className="border-t border-neutral-100 dark:border-neutral-800">
+                  <td className="px-3 py-2">
+                    {v.user ? (
+                      <span className="font-medium">{v.user.name}</span>
+                    ) : (
+                      <span className="text-neutral-500">По открытой ссылке, без входа</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400" title={fromNow(v.viewed_at)}>
+                    {new Date(v.viewed_at).toLocaleString("ru-RU")}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs text-neutral-600 dark:text-neutral-400" title={v.user_agent ?? undefined}>
+                    {v.ip || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Modal>
   );

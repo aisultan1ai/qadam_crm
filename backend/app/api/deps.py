@@ -172,6 +172,7 @@ def get_current_context(
 
     # P5.2/P5.3: password rotation + session timeout enforcement
     _enforce_security_policies(db, request, user, tenant.id, payload, membership)
+    _enforce_member_2fa(request, user, membership)
 
     return TenantContext(user=user, tenant=tenant, membership=membership)
 
@@ -319,6 +320,21 @@ def _enforce_security_policies(
         logging.getLogger("qadam.security").warning("policy enforcement failed", exc_info=True)
 
 
+def _enforce_member_2fa(request: Request, user: "User", membership: TenantMembership) -> None:
+    """2FA, которую владелец включил конкретному сотруднику (не зависит от политики компании).
+    Пока не настроит — доступны только профиль, настройка 2FA и выход."""
+    if not getattr(membership, "require_2fa", False) or user.totp_enabled:
+        return
+    path = request.url.path or ""
+    if any(path.startswith(p) for p in _SECURITY_BYPASS_PATHS):
+        return
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        detail={"error": "2fa_required",
+                "message": "Владелец компании включил для вас двухфакторную защиту. Включите её в настройках профиля."},
+    )
+
+
 def get_current_tenant(ctx: TenantContext = Depends(get_current_context)) -> Tenant:
     return ctx.tenant
 
@@ -392,6 +408,7 @@ def log_action(
     detail: str | None = None,
     task_id: int | None = None,
 ) -> None:
+    from ..core.request_context import current_ip, current_user_agent
     entry = ActivityLog(
         tenant_id=tenant_id,
         user_id=user_id,
@@ -400,5 +417,7 @@ def log_action(
         entity_id=entity_id,
         detail=detail,
         task_id=task_id,
+        ip=current_ip(),
+        user_agent=current_user_agent(),
     )
     db.add(entry)
