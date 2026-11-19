@@ -256,6 +256,10 @@ def create_app() -> FastAPI:
     from .api import security_audit as security_audit_api
     app.include_router(security_audit_api.router)
 
+    # Реестр договоров
+    from .api import contracts as contracts_api
+    app.include_router(contracts_api.router)
+
     @app.get("/health", tags=["system"])
     def health():
         """Быстрая liveness-проба. Не трогает БД/Redis."""

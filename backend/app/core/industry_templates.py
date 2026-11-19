@@ -2,31 +2,16 @@
 
 Ставятся одной кнопкой в мастере первого запуска. Реестры — обычные сущности Объектов:
 клиент сам меняет поля, добавляет свои. Повторная установка не дублирует (по коду сущности).
+Договоры — отдельный модуль «Договоры» (не Объекты); акты и рекламации ссылаются на него
+как на системную цель связи "contract".
 """
 from __future__ import annotations
 
-CONTRACT_STATUSES = ["Черновик", "На согласовании", "На подписании", "Действует", "Исполнен", "Расторгнут"]
-
 SCHEMAS: dict[str, dict] = {
-    "contract": {
-        "label": "Договоры",
-        "fields": [
-            {"name": "number", "label": "Номер договора", "type": "text"},
-            {"name": "counterparty", "label": "Контрагент", "type": "relation", "target": "company", "required": True},
-            {"name": "contract_type", "label": "Тип", "type": "select",
-             "options": ["Поставка", "Подряд", "Услуги", "Аренда", "Агентский", "Прочее"]},
-            {"name": "amount", "label": "Сумма, ₸", "type": "number"},
-            {"name": "signed_at", "label": "Дата заключения", "type": "date"},
-            {"name": "valid_until", "label": "Действует до", "type": "date"},
-            {"name": "curator", "label": "Куратор", "type": "user"},
-            {"name": "deal", "label": "Сделка", "type": "relation", "target": "deal"},
-            {"name": "status", "label": "Статус", "type": "select", "options": CONTRACT_STATUSES},
-        ],
-    },
     "act": {
         "label": "Акты выполненных работ",
         "fields": [
-            {"name": "contract", "label": "Договор", "type": "relation", "target": "object:contract", "required": True},
+            {"name": "contract", "label": "Договор", "type": "relation", "target": "contract", "required": True},
             {"name": "period", "label": "Период", "type": "text"},
             {"name": "amount", "label": "Сумма, ₸", "type": "number"},
             {"name": "act_date", "label": "Дата акта", "type": "date"},
@@ -36,7 +21,7 @@ SCHEMAS: dict[str, dict] = {
     "service_act": {
         "label": "Акты оказанных услуг",
         "fields": [
-            {"name": "contract", "label": "Договор", "type": "relation", "target": "object:contract", "required": True},
+            {"name": "contract", "label": "Договор", "type": "relation", "target": "contract", "required": True},
             {"name": "period", "label": "Период", "type": "text"},
             {"name": "amount", "label": "Сумма, ₸", "type": "number"},
             {"name": "act_date", "label": "Дата акта", "type": "date"},
@@ -105,7 +90,7 @@ SCHEMAS: dict[str, dict] = {
         "label": "Рекламации",
         "fields": [
             {"name": "client", "label": "Клиент", "type": "relation", "target": "company", "required": True},
-            {"name": "contract", "label": "Договор", "type": "relation", "target": "object:contract"},
+            {"name": "contract", "label": "Договор", "type": "relation", "target": "contract"},
             {"name": "description", "label": "Суть претензии", "type": "textarea", "required": True},
             {"name": "responsible", "label": "Ответственный", "type": "user"},
             {"name": "status", "label": "Статус", "type": "select", "options": ["Новая", "В работе", "Удовлетворена", "Отклонена"]},
@@ -130,38 +115,38 @@ INDUSTRIES: list[dict] = [
         "description": "Рудник, обогащение, геология, охрана труда",
         "departments": ["Руководство", "Производство", "Геология", "Охрана труда и ТБ", "Снабжение (МТР)",
                         "Финансы и бухгалтерия", "Юридический отдел", "Персонал"],
-        "schemas": ["contract", "permit", "mtr_request", "hse_incident"],
+        "schemas": ["permit", "mtr_request", "hse_incident"],
     },
     {
         "key": "epc", "label": "EPC / строительство",
         "description": "Проектирование, строительство, технадзор, подрядчики",
         "departments": ["Руководство", "Управление проектами", "Проектирование", "Строительство", "Технадзор",
                         "ПТО", "Снабжение", "Финансы", "Юридический отдел"],
-        "schemas": ["contract", "act", "site_remark", "mtr_request"],
+        "schemas": ["act", "site_remark", "mtr_request"],
     },
     {
         "key": "trade", "label": "Торговля и дистрибуция",
         "description": "Продажи, закупки, склад, логистика",
         "departments": ["Руководство", "Продажи", "Закупки", "Склад и логистика", "Финансы", "Маркетинг"],
-        "schemas": ["contract", "purchase_request", "client_claim"],
+        "schemas": ["purchase_request", "client_claim"],
     },
     {
         "key": "services", "label": "Услуги и консалтинг",
         "description": "Проекты для клиентов, акты, договоры",
         "departments": ["Руководство", "Продажи", "Проекты", "Финансы", "Персонал"],
-        "schemas": ["contract", "service_act"],
+        "schemas": ["service_act"],
     },
     {
         "key": "it", "label": "IT и разработка",
         "description": "Разработка, продукт, поддержка клиентов",
         "departments": ["Руководство", "Разработка", "Продукт", "Продажи", "Поддержка", "Персонал"],
-        "schemas": ["contract", "support_ticket"],
+        "schemas": ["support_ticket"],
     },
     {
         "key": "other", "label": "Другая отрасль",
         "description": "Базовая структура — дальше настроите под себя",
         "departments": ["Руководство", "Продажи", "Финансы", "Персонал"],
-        "schemas": ["contract"],
+        "schemas": [],
     },
 ]
 
@@ -169,7 +154,7 @@ INDUSTRY_BY_KEY = {i["key"]: i for i in INDUSTRIES}
 
 
 def ordered_schema_codes(codes: list[str]) -> list[str]:
-    """Сначала то, на что ссылаются другие (договоры раньше актов)."""
+    """Сначала то, на что ссылаются другие (связи object:<code> между реестрами)."""
     deps = {c: {f["target"][7:] for f in SCHEMAS[c]["fields"] if str(f.get("target", "")).startswith("object:")} for c in codes}
     out: list[str] = []
     while len(out) < len(codes):

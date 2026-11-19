@@ -7,7 +7,7 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  AtSign, Bell, BellRing, CalendarClock, CheckCheck, CircleDot, Clock, Mail, MailOpen, MessageSquare, Undo2, UserPlus,
+  AtSign, Bell, BellRing, CalendarClock, CheckCheck, CircleDot, Clock, FileSignature, Mail, MailOpen, MessageSquare, Undo2, UserPlus,
 } from "lucide-react";
 
 import { api, extractApiError } from "@/api/client";
@@ -35,6 +35,8 @@ const KIND_ICON: Record<string, typeof Bell> = {
   messenger_digest: Mail,
   deadline_request: CalendarClock,
   deadline_decision: CalendarClock,
+  contract_expiry: FileSignature,
+  guarantee_expiry: FileSignature,
 };
 
 function at(hours: number, addDays: number) {

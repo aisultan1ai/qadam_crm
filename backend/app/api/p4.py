@@ -450,7 +450,8 @@ def list_documents(
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Document).filter(Document.tenant_id == ctx.tenant.id)
+    # Файлы договоров живут в карточке договора (доступ — по праву contracts.view)
+    q = db.query(Document).filter(Document.tenant_id == ctx.tenant.id, Document.contract_id.is_(None))
     if deal_id is not None:
         # Документы сделки — из всех папок
         q = q.filter(Document.deal_id == deal_id)
@@ -622,6 +623,7 @@ def document_preview(did: int, ctx: TenantContext = Depends(get_current_context)
     row = db.get(Document, did)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Документ не найден")
+    _require_contract_file_access(ctx, row)
     from ..core.view_log import log_view
     log_view(db, ctx, "document", row.id)
 
@@ -667,6 +669,7 @@ def download_internal(did: int, ctx: TenantContext = Depends(get_current_context
     row = db.get(Document, did)
     if not row or row.tenant_id != ctx.tenant.id or not row.file_path:
         raise HTTPException(404, "Not found")
+    _require_contract_file_access(ctx, row)
     from ..core.view_log import log_view
     file_path, mime = row.file_path, row.mime
     log_view(db, ctx, "document", row.id)
@@ -1494,6 +1497,15 @@ def export_account(ctx: TenantContext = Depends(get_current_context), db: Sessio
         media_type="application/json",
         headers={"Content-Disposition": f"attachment; filename=qadam_account_{tid}_{int(datetime.now().timestamp())}.json"},
     )
+
+
+def _require_contract_file_access(ctx: TenantContext, row) -> None:
+    """Файл, приложенный к договору, открывают только те, кому виден реестр договоров."""
+    if not getattr(row, "contract_id", None) or ctx.membership.is_owner:
+        return
+    from ..core.permissions import user_has
+    if not user_has(ctx.user, ["contracts.view"], tenant_id=ctx.tenant.id):
+        raise HTTPException(403, "Файл приложен к договору — нужен доступ к реестру договоров")
 
 
 def _require_doc_manager(ctx: TenantContext, row) -> None:

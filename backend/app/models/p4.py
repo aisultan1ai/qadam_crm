@@ -145,6 +145,8 @@ class Document(Base):
     # Документ сделки и его вид: nda | loi | mou | term_sheet | agreement | other (миграция 0055)
     deal_id: Mapped[Optional[int]] = mapped_column(ForeignKey("deals.id", ondelete="SET NULL"), nullable=True, index=True)
     doc_kind: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # Договор, к которому приложен файл (миграция 0056)
+    contract_id: Mapped[Optional[int]] = mapped_column(ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True, index=True)
 
 
 class DocumentVersion(Base):

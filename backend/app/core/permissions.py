@@ -111,6 +111,12 @@ PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("deals.update", "Редактирование сделок (в т.ч. перевод по стадиям)"),
         ("deals.delete", "Удаление сделок"),
     ],
+    "Договоры": [
+        ("contracts.view", "Просмотр реестра договоров"),
+        ("contracts.create", "Создание договоров"),
+        ("contracts.update", "Редактирование договоров и смена статуса"),
+        ("contracts.delete", "Удаление договоров"),
+    ],
 }
 
 

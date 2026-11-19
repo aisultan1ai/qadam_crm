@@ -1,7 +1,7 @@
 """Ссылки между записями: «любая запись может ссылаться на любую другую».
 
 Цель ссылки (target):
-  contact, company, deal, project, task, user — системные сущности;
+  contact, company, deal, project, task, user, contract — системные сущности;
   object:<code> — запись пользовательской сущности (Объекты).
 
 Одна точка для: поиска при выборе (lookup), подписи для отображения (labels), превью
@@ -18,7 +18,7 @@ from sqlalchemy import or_, String, cast
 from sqlalchemy.orm import Session
 
 from ..models import (
-    Company, Contact, CustomObjectRecord, CustomObjectSchema, Deal, Project, Task,
+    Company, Contact, Contract, CustomObjectRecord, CustomObjectSchema, Deal, Project, Task,
     TenantMembership, User,
 )
 from .permissions import user_has
@@ -31,12 +31,14 @@ SYSTEM_TARGETS = {
     "project": "Проект",
     "task": "Задача",
     "user": "Сотрудник",
+    "contract": "Договор",
 }
 _PERM = {
     "contact": "contacts.view",
     "company": "contacts.view",
     "deal": "deals.view",
     "project": "projects.view",
+    "contract": "contracts.view",
 }
 
 
@@ -124,6 +126,18 @@ def _query(db: Session, user: User, tenant_id: int, target: str):
             return Ref(p.id, p.name, "В архиве" if p.is_archived else None, f"/projects/{p.id}",
                        [("Статус", "В архиве" if p.is_archived else "Активный")])
         return q, to_ref, (lambda s: Project.name.ilike(s)), Project
+    if target == "contract":
+        from ..models.contract import CONTRACT_STATUSES
+        q = db.query(Contract).filter(Contract.tenant_id == tenant_id)
+        def to_ref(c: Contract) -> Ref:
+            cp = c.company.name if c.company else None
+            label = f"№ {c.number}" + (f" · {cp}" if cp else "")
+            status = CONTRACT_STATUSES.get(c.status, c.status)
+            until = c.valid_until.strftime("%d.%m.%Y") if c.valid_until else None
+            return Ref(c.id, label, status, f"/contracts/{c.id}",
+                       [(k, v) for k, v in (("Контрагент", cp), ("Статус", status), ("Действует до", until)) if v])
+        search = lambda s: or_(Contract.number.ilike(s), Contract.subject.ilike(s))
+        return q, to_ref, search, Contract
     if target == "task":
         q = apply_task_scope(db.query(Task).filter(Task.tenant_id == tenant_id), db, user, tenant_id)
         def to_ref(t: Task) -> Ref:
@@ -185,7 +199,8 @@ def resolve(db: Session, user: User, tenant_id: int, is_owner: bool, target: str
 def ensure_exists(db: Session, tenant_id: int, target: str, ref_id: int) -> None:
     """Ссылка обязана указывать на запись этой компании (права не проверяем — проверка
     целостности, а не видимости: сотрудник может сослаться на задачу коллеги из своего отдела)."""
-    model = {"contact": Contact, "company": Company, "deal": Deal, "project": Project, "task": Task}.get(target)
+    model = {"contact": Contact, "company": Company, "deal": Deal, "project": Project, "task": Task,
+             "contract": Contract}.get(target)
     if model is not None:
         row = db.get(model, ref_id)
         ok = row is not None and row.tenant_id == tenant_id
