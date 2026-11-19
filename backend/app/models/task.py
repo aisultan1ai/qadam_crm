@@ -167,3 +167,48 @@ class TaskReminder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     task: Mapped["Task"] = relationship("Task", back_populates="reminders")
+
+
+# ----------------------------------------------------------------------------
+# Единый источник «исполнителей» — task.assignees. Legacy assignee_id — лишь
+# «основной» из них. Раньше часть путей (PATCH, bulk, автоматизации, импорт,
+# повторяющиеся задачи, задачи из писем/лидов) писала только assignee_id, и список
+# показывал человека, а карточка — «Не назначено». Держим инвариант на уровне ORM.
+# ----------------------------------------------------------------------------
+
+def set_primary_assignee(session, task: "Task", user_id: Optional[int]) -> None:
+    """Меняет основного исполнителя: прежний основной убирается из assignees,
+    новый добавляется первым. None — снимает всех исполнителей."""
+    from .user import User  # локально — избегаем циклического импорта
+
+    old_id = task.assignee_id
+    task.assignee_id = user_id or None
+    if not user_id:
+        task.assignees = []
+        return
+    keep = [u for u in task.assignees if u.id != old_id]
+    if not any(u.id == user_id for u in keep):
+        user = session.get(User, user_id)
+        if user is not None:
+            keep.insert(0, user)
+    task.assignees = keep
+
+
+from sqlalchemy import event as _sa_event  # noqa: E402
+from sqlalchemy.orm import Session as _SASession  # noqa: E402
+
+
+@_sa_event.listens_for(_SASession, "before_flush")
+def _sync_primary_assignee(session, flush_context, instances) -> None:
+    """Любая задача с assignee_id обязана иметь этого человека среди assignees."""
+    from .user import User
+
+    with session.no_autoflush:
+        for obj in list(session.new) + list(session.dirty):
+            if not isinstance(obj, Task) or not obj.assignee_id:
+                continue
+            if any(u.id == obj.assignee_id for u in obj.assignees):
+                continue
+            user = session.get(User, obj.assignee_id)
+            if user is not None:
+                obj.assignees.append(user)

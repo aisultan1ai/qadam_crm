@@ -75,3 +75,31 @@ export function SkeletonKanban({ cols = 5, cards = 3 }: { cols?: number; cards?:
     </div>
   );
 }
+
+/** Каркас недельной сетки календаря — пока грузится код страницы. */
+export function SkeletonWeekGrid() {
+  const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const lines =
+    "bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_47px,rgb(228_228_231/0.6)_47px,rgb(228_228_231/0.6)_48px)]";
+  return (
+    <div className="flex h-[calc(100vh-8rem)] flex-col gap-3">
+      <div className="page-header">
+        <h1 className="page-title">Календарь</h1>
+      </div>
+      <div className="card min-h-0 flex-1 overflow-hidden p-3">
+        <div className="grid h-full grid-cols-[56px_repeat(7,minmax(0,1fr))] grid-rows-[32px_1fr] overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700/60">
+          <div className="border-b border-zinc-200 dark:border-zinc-700/60" />
+          {days.map((d) => (
+            <div key={d} className="grid place-items-center border-b border-l border-zinc-200 text-xs text-zinc-400 dark:border-zinc-700/60">
+              {d}
+            </div>
+          ))}
+          <div className={lines} />
+          {days.map((d) => (
+            <div key={d} className={clsx("border-l border-zinc-200 dark:border-zinc-700/60", lines)} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

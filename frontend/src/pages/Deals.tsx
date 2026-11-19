@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
+import { DatePicker } from "@/components/DatePicker";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
@@ -519,6 +520,7 @@ function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => 
     handleSubmit,
     setValue,
     watch,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<DealModalForm>({
     resolver: zodResolver(dealModalSchema),
@@ -635,7 +637,13 @@ function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => 
           </FormField>
         )}
         <FormField label="Дата закрытия" error={errors.close_date?.message}>
-          <input className="input" type="date" {...register("close_date")} />
+          <Controller
+            control={control}
+            name="close_date"
+            render={({ field }) => (
+              <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} aria-label="Дата закрытия" />
+            )}
+          />
         </FormField>
         <FormField label="Заметка" error={errors.note?.message}>
           <textarea className="input min-h-[80px]" {...register("note")} />

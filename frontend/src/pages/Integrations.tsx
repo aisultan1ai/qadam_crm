@@ -266,7 +266,7 @@ function ProviderCard({
               ) : configured ? (
                 "Компания настроена — можно подключить"
               ) : (
-                p.code === "dropbox" ? "Требуется настройка App key/secret" : "Подключение Google пока недоступно — обратитесь к владельцу компании"
+                p.code === "dropbox" ? "Требуется настройка App key/secret" : "Подключение Google скоро будет доступно"
               )}
             </div>
           )}

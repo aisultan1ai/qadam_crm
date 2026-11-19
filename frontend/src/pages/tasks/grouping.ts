@@ -127,7 +127,7 @@ export function buildGroups(by: GroupBy, ctx: GroupCtx): { groups: TaskGroup[]; 
         label: u.name,
         user: u,
         accepts: perms.assign,
-        drop: () => ({ body: { assignee_id: u.id }, optimistic: { assignee: u } }),
+        drop: () => ({ body: { assignee_id: u.id }, optimistic: { assignee: u, assignees: [u] } }),
         create: { assignee_id: u.id },
       }));
     groups.push({
@@ -135,7 +135,7 @@ export function buildGroups(by: GroupBy, ctx: GroupCtx): { groups: TaskGroup[]; 
       label: "Без исполнителя",
       user: null,
       accepts: perms.assign,
-      drop: () => ({ body: { assignee_id: null }, optimistic: { assignee: null } }),
+      drop: () => ({ body: { assignee_id: null }, optimistic: { assignee: null, assignees: [] } }),
     });
     return { groups, keyOf: (t) => (t.assignee ? `as:${t.assignee.id}` : "as:none") };
   }

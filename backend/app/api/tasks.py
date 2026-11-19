@@ -9,6 +9,7 @@ from ..models import Task, User, ChecklistItem, Notification, Project, TenantMem
 from ..models.task import (
     TaskStatus, TaskPriority, TaskReminder,
     task_assignees, task_auditors, task_participants,
+    set_primary_assignee,
 )
 from ..core.events import build_change_payload, fire_event, serialize_task
 from ..core.permissions import user_has
@@ -123,7 +124,8 @@ def list_tasks(
     if project_id is not None:
         query = query.filter(Task.project_id == project_id)
     if assignee_id is not None:
-        query = query.filter(Task.assignee_id == assignee_id)
+        # Исполнители — только task.assignees (то же, что видно в карточке).
+        query = query.filter(Task.id.in_(db_subq(task_assignees, assignee_id)))
     if status is not None:
         query = query.filter(Task.status == status)
     if priority is not None:
@@ -136,13 +138,13 @@ def list_tasks(
         ))
 
     # Planfix-style scope:
-    #  incoming = мне назначено (legacy assignee_id ИЛИ я в task_assignees)
+    #  incoming = мне назначено (я в task_assignees)
     #  outgoing = я поставил (author_id)
     #  audited  = я аудитор (task_auditors)
     #  participating = я участник (task_participants)
     if scope == "incoming":
         assignee_ids = db_subq(task_assignees, user.id)
-        query = query.filter(or_(Task.assignee_id == user.id, Task.id.in_(assignee_ids)))
+        query = query.filter(Task.id.in_(assignee_ids))
     elif scope == "outgoing":
         query = query.filter(Task.author_id == user.id)
     elif scope == "audited":
@@ -299,7 +301,7 @@ def update_task(task_id: int, payload: TaskUpdate, ctx: TenantContext = Depends(
             raise HTTPException(403, "Нет права назначать исполнителей")
         if new_assignee:
             _assert_user_in_tenant(db, ctx.tenant.id, new_assignee, "Исполнитель не является членом компании")
-        task.assignee_id = new_assignee
+        set_primary_assignee(db, task, new_assignee)
         changes.append("исполнитель")
         if task.assignee_id and task.assignee_id != user.id:
             _notify(db, ctx.tenant.id, task.assignee_id, "assigned", "Вам назначена задача", task.title, task.id)
@@ -419,7 +421,7 @@ def bulk_update(payload: TaskBulkUpdate, ctx: TenantContext = Depends(require("t
             t.priority = p.priority
             changes.append(f"приоритет {old} → {p.priority.value}")
         if p.assignee_id is not None and p.assignee_id != t.assignee_id:
-            t.assignee_id = p.assignee_id
+            set_primary_assignee(db, t, p.assignee_id)
             changes.append("исполнитель")
             if t.assignee_id and t.assignee_id != user.id:
                 _notify(db, ctx.tenant.id, t.assignee_id, "assigned", "Вам назначена задача", t.title, t.id)

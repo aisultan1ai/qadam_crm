@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { DatePicker } from "@/components/DatePicker";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/store/auth";
@@ -479,15 +480,15 @@ function EditProfileModal({
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Телефон</span>
             <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </label>
-          <label className="block">
+          <div className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">День рождения</span>
-            <input className="input" type="date" value={form.birthday} onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
-          </label>
+            <DatePicker value={form.birthday} onChange={(v) => setForm({ ...form, birthday: v })} aria-label="День рождения" />
+          </div>
           {!isSelf && (
-            <label className="block">
+            <div className="block">
               <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дата найма</span>
-              <input className="input" type="date" value={form.hire_date} onChange={(e) => setForm({ ...form, hire_date: e.target.value })} />
-            </label>
+              <DatePicker value={form.hire_date} onChange={(v) => setForm({ ...form, hire_date: v })} aria-label="Дата найма" />
+            </div>
           )}
         </div>
 
@@ -901,15 +902,15 @@ function GoalModal({
         )}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">
+          <div className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дедлайн</span>
-            <input
-              className="input" type="date"
+            <DatePicker
               value={form.deadline}
-              onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+              onChange={(v) => setForm({ ...form, deadline: v })}
               disabled={managingFieldsDisabled}
+              aria-label="Дедлайн"
             />
-          </label>
+          </div>
           {(!isDaily || !isNew) && (
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Статус</span>

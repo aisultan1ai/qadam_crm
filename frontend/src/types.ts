@@ -109,7 +109,9 @@ export type TaskListItem = {
   status: TaskStatus;
   priority: TaskPriority;
   project_id?: number | null;
+  /** Основной из assignees; null — исполнителей нет (в списке «—»). */
   assignee?: UserBrief | null;
+  assignees?: UserBrief[];
   start_date?: string | null;
   deadline?: string | null;
   created_at: string;

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { DatePicker } from "@/components/DatePicker";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -119,7 +120,7 @@ type TaskPatch = {
   custom_status_id?: number;
 };
 
-/** ISO (UTC) → значение для <input type="datetime-local"> в местном времени. */
+/** ISO (UTC) → "YYYY-MM-DDTHH:mm" в местном времени (значение DatePicker с withTime). */
 function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -585,23 +586,26 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
             </SidebarField>
 
             <SidebarField icon={<Calendar size={14} />} label="Дата начала">
-              <input
-                className="input !h-8 !py-0 text-[13px]"
-                type="datetime-local"
+              <DatePicker
+                withTime
+                inputClassName="!h-8 !py-0 text-[13px]"
                 disabled={!can("tasks.update")}
                 value={toLocalInput(task.start_date)}
-                onChange={(e) => patch.mutate({ start_date: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                onChange={(v) => patch.mutate({ start_date: v ? new Date(v).toISOString() : null })}
+                aria-label="Дата начала"
               />
             </SidebarField>
 
             <SidebarField icon={<Calendar size={14} />} label="Дата завершения">
               {canSetDeadline(task, me) ? (
-                <input
-                  className="input !h-8 !py-0 text-[13px]"
-                  type="datetime-local"
+                <DatePicker
+                  withTime
+                  defaultTime="18:00"
+                  inputClassName="!h-8 !py-0 text-[13px]"
                   disabled={!can("tasks.update")}
                   value={toLocalInput(task.deadline)}
-                  onChange={(e) => patch.mutate({ deadline: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  onChange={(v) => patch.mutate({ deadline: v ? new Date(v).toISOString() : null })}
+                  aria-label="Дата завершения"
                 />
               ) : (
                 <DeadlineRequestButton

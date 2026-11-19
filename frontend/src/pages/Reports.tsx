@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DatePicker } from "@/components/DatePicker";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { PieChart, Play, BarChart3, Sparkles } from "lucide-react";
@@ -112,14 +113,14 @@ export default function ReportsPage() {
                 </select>
               </label>
               <div className="grid grid-cols-2 gap-2">
-                <label className="block">
+                <div className="block">
                   <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">С</span>
-                  <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
-                </label>
-                <label className="block">
+                  <DatePicker value={from} onChange={setFrom} aria-label="Период с" />
+                </div>
+                <div className="block">
                   <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">По</span>
-                  <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
-                </label>
+                  <DatePicker value={to} onChange={setTo} aria-label="Период по" />
+                </div>
               </div>
             </div>
           </div>

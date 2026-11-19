@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DatePicker } from "@/components/DatePicker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Plus, Trash2, Check } from "lucide-react";
@@ -377,7 +378,7 @@ function ManualEntryForm({ defaultDate, onCreated }: { defaultDate: Date; onCrea
     <form onSubmit={submit} className="flex flex-wrap items-end gap-2 text-sm">
       <div className="flex flex-col">
         <label className="text-xs text-neutral-500">Дата</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !py-1" />
+        <DatePicker value={date} onChange={setDate} clearable={false} className="w-44" inputClassName="!py-1" aria-label="Дата" />
       </div>
       <div className="flex flex-col">
         <label className="text-xs text-neutral-500">Часы</label>
@@ -450,11 +451,11 @@ function ReportsView({ canApprove }: { canApprove: boolean }) {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col">
           <label className="text-xs text-neutral-500">С</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input !py-1" />
+          <DatePicker value={from} onChange={setFrom} className="w-44" inputClassName="!py-1" aria-label="Период с" />
         </div>
         <div className="flex flex-col">
           <label className="text-xs text-neutral-500">По</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input !py-1" />
+          <DatePicker value={to} onChange={setTo} className="w-44" inputClassName="!py-1" aria-label="Период по" />
         </div>
         <div className="flex flex-col">
           <label className="text-xs text-neutral-500">Группировать</label>
