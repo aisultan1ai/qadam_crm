@@ -142,6 +142,9 @@ class Document(Base):
     company_id: Mapped[Optional[int]] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     company: Mapped[Optional["Company"]] = relationship("Company", foreign_keys=[company_id], lazy="joined")  # type: ignore  # noqa: F821
 
+    # Договор, к которому приложен файл (миграция 0056)
+    contract_id: Mapped[Optional[int]] = mapped_column(ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True, index=True)
+
 
 class DocumentVersion(Base):
     __tablename__ = "document_versions"

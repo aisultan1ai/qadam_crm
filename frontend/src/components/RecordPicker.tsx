@@ -20,6 +20,7 @@ export const SYSTEM_TARGETS: { key: string; label: string }[] = [
   { key: "project", label: "Проект" },
   { key: "task", label: "Задача" },
   { key: "user", label: "Сотрудник" },
+  { key: "contract", label: "Договор" },
 ];
 
 function useDebounced<T>(value: T, ms = 250): T {

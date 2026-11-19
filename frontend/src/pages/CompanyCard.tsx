@@ -225,7 +225,7 @@ export default function CompanyCard() {
             />
             {tab === "contacts" && <ContactsTab companyId={company.id} />}
             {tab === "deals" && canDeals && <DealsTab companyId={company.id} />}
-            {tab === "contracts" && <CompanyContractsTab companyId={company.id} />}
+            {tab === "contracts" && <CompanyContractsTab companyId={company.id} companyName={company.name} />}
             {tab === "documents" && <DocumentsTab company={company} />}
             {tab === "mail" && <MailTab companyId={company.id} />}
             {tab === "timeline" && <TimelineTab companyId={company.id} />}

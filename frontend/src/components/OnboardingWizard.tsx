@@ -393,6 +393,11 @@ function TemplatesStep({
       <p className="mb-4 text-[13px] text-zinc-500">
         Реестры появятся в «Объектах»: со связями с контрагентами, сделками, проектами и сотрудниками. Поля можно менять под себя.
       </p>
+      {available.length === 0 && (
+        <p className="mb-3 text-[13px] text-zinc-500">
+          Для этой отрасли готовых реестров нет. Договоры ведутся в разделе «Договоры» (CRM), свои реестры можно создать в «Объектах».
+        </p>
+      )}
       <div className="grid gap-2 sm:grid-cols-2">
         {available.map((s) => {
           const done = installed.includes(s.code);

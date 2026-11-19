@@ -34,6 +34,7 @@ celery_app = Celery(
         "app.tasks.calendar",
         "app.tasks.time_tracking",
         "app.tasks.p3",
+        "app.tasks.contracts",
     ],
 )
 
@@ -107,6 +108,11 @@ celery_app.conf.beat_schedule = {
     # P4: удаление старых логов согласно retention policy — раз в сутки в 4:00 UTC
     "p4-purge-old-logs-daily": {
         "task": "p4.purge_old_logs",
+        "schedule": crontab(hour=4, minute=0),
+    },
+    # Договоры: напоминания об окончании срока договора и банковских гарантий (09:00 по Астане)
+    "contracts-expiry-reminders-daily": {
+        "task": "contracts.expiry_reminders",
         "schedule": crontab(hour=4, minute=0),
     },
 }

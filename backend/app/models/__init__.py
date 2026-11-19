@@ -75,6 +75,9 @@ from .channel import (
     Poll, PollOption, PollVote,
 )
 from .legal_entity import LegalEntity
+from .contract import (
+    Contract, ContractStage, ContractGuarantee, ContractRetention, ContractPenalty, ContractReminderMark,
+)
 
 __all__ = [
     "Tenant",
@@ -228,4 +231,10 @@ __all__ = [
     "PollOption",
     "PollVote",
     "LegalEntity",
+    "Contract",
+    "ContractStage",
+    "ContractGuarantee",
+    "ContractRetention",
+    "ContractPenalty",
+    "ContractReminderMark",
 ]

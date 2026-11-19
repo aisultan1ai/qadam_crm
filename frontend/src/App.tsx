@@ -49,6 +49,8 @@ const Help = lazy(() => import("@/pages/Help"));
 const Planner = lazy(() => import("@/pages/Planner"));
 const Contacts = lazy(() => import("@/pages/Contacts"));
 const CompanyCard = lazy(() => import("@/pages/CompanyCard"));
+const Contracts = lazy(() => import("@/pages/Contracts"));
+const ContractCard = lazy(() => import("@/pages/ContractCard"));
 const ProfileSettings = lazy(() => import("@/pages/ProfileSettings"));
 const Activity = lazy(() => import("@/pages/Activity"));
 const Notifications = lazy(() => import("@/pages/Notifications"));
@@ -208,6 +210,8 @@ export default function App() {
         <Route path="planner" element={<Planner />} />
         <Route path="contacts" element={<Contacts />} />
         <Route path="contacts/companies/:id" element={<CompanyCard />} />
+        <Route path="contracts" element={<Contracts />} />
+        <Route path="contracts/:id" element={<ContractCard />} />
         <Route path="activity" element={<Activity />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="timeoff" element={<TimeOff />} />

@@ -6,7 +6,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type React
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity as ActivityIcon, AlarmClock, ArrowUpCircle, BarChart3, Bell, BookOpen, BookUser, Boxes, Calendar as CalendarIcon,
-  CalendarClock, CheckSquare, ChevronDown, Coins, Contact2, Eye, FileText, FolderKanban, Home, Inbox as InboxIcon,
+  CalendarClock, CheckSquare, ChevronDown, Coins, Contact2, Eye, FileSignature, FileText, FolderKanban, Home, Inbox as InboxIcon,
   LayoutGrid, LifeBuoy, ListChecks, LogOut, Mail as MailIcon, Menu, MessageSquare, MessagesSquare, Moon, Network,
   Palmtree, PanelLeftClose, PanelLeftOpen, PenSquare, Phone, PieChart, Plus, Search, Settings, Shield, Star, Sun,
   Timer as TimerIcon, User as UserIcon, UserCheck, UserPlus, Users, Workflow, X, Zap, CircleDot,
@@ -116,6 +116,7 @@ const MODULES: Module[] = [
     icon: Coins,
     items: [
       { to: "/deals", label: "Сделки", icon: Coins, code: "deals.view" },
+      { to: "/contracts", label: "Договоры", icon: FileSignature, code: "contracts.view" },
       { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
       { to: "/contacts", label: "Контакты", icon: BookUser },
       { to: "/calls", label: "Звонки", icon: Phone },
@@ -910,6 +911,7 @@ function CreateMenu({ can }: { can: Can }) {
     { label: "Задача", hint: "в список задач", icon: CheckSquare, to: "/tasks?new=1", show: can("tasks.create") },
     { label: "Проект", hint: "новое пространство", icon: FolderKanban, to: "/projects?new=1", show: can("projects.create") },
     { label: "Сделка", hint: "в воронку продаж", icon: Coins, to: "/deals?new=1", show: can("deals.create") },
+    { label: "Договор", hint: "в реестр договоров", icon: FileSignature, to: "/contracts?new=1", show: can("contracts.create") },
   ].filter((i) => i.show);
   if (items.length === 0) return null;
   return (

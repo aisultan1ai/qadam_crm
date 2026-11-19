@@ -179,6 +179,28 @@ def seed_roles(db) -> None:
             "deals.view",
         ],
     )
+    # Юрист: реестр договоров, файлы, контрагенты и сделки (просмотр), комментарии.
+    lawyer_existed = db.query(Role.id).filter(Role.name == "Юрист", Role.tenant_id.is_(None)).first() is not None
+    lawyer = ensure_role(
+        "Юрист", "Договоры: ведение реестра, файлы и сроки; контрагенты и сделки — просмотр",
+        [
+            "contracts.view", "contracts.create", "contracts.update",
+            "files.upload", "files.download",
+            "contacts.view",
+            "deals.view",
+            "comments.view", "comments.create", "comments.update_own",
+        ],
+    )
+    if not lawyer_existed:
+        # Новый шаблон — один раз раздаём его уже существующим компаниям
+        # (новые получат его при создании). Удалённую компанией роль потом не возвращаем.
+        tenant_ids = [tid for (tid,) in db.query(Tenant.id).all()]
+        for tid in tenant_ids:
+            if db.query(Role.id).filter(Role.tenant_id == tid, Role.name == "Юрист").first():
+                continue
+            tr = Role(tenant_id=tid, name="Юрист", description=lawyer.description, is_system=False)
+            tr.permissions = list(lawyer.permissions)
+            db.add(tr)
     db.commit()
 
 
