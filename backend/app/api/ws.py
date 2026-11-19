@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..core.security import decode_token, is_blacklisted, TOKEN_TYPE_ACCESS
 from ..core.ws_hub import hub
-from ..database import get_db
+from starlette.concurrency import run_in_threadpool
 from ..models import Tenant, TenantMembership
 
 router = APIRouter()
@@ -16,7 +16,16 @@ router = APIRouter()
 MEMBERSHIP_RECHECK_SEC = 60
 
 
-def _membership_active(db: Session, user_id: int, tenant_id: int) -> bool:
+def _membership_active(user_id: int, tenant_id: int) -> bool:
+    """Короткая сессия на одну проверку. Соединение WebSocket живёт часами — держать на нём
+    сессию БД нельзя: это занятое подключение из пула и открытая транзакция, которая
+    блокирует изменения схемы (миграции) и при десятках онлайн-пользователей исчерпывает пул."""
+    from ..database import SessionLocal
+    with SessionLocal() as db:
+        return _membership_query(db, user_id, tenant_id)
+
+
+def _membership_query(db: Session, user_id: int, tenant_id: int) -> bool:
     return (
         db.query(TenantMembership.id)
         .join(Tenant, Tenant.id == TenantMembership.tenant_id)
@@ -34,7 +43,6 @@ def _membership_active(db: Session, user_id: int, tenant_id: int) -> bool:
 async def websocket_endpoint(
     ws: WebSocket,
     token: str | None = Query(default=None),
-    db: Session = Depends(get_db),
 ):
     # 1) httpOnly cookie в приоритете (не попадает в access-логи), 2) query — фолбэк.
     cookie_token = ws.cookies.get(settings.AUTH_COOKIE_NAME)
@@ -64,7 +72,7 @@ async def websocket_endpoint(
 
     # Проверяем, что юзер реально состоит в этом tenant'е — токен мог остаться,
     # а membership отозвали (owner удалил пользователя из компании).
-    if not _membership_active(db, user_id, tenant_id):
+    if not await run_in_threadpool(_membership_active, user_id, tenant_id):
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
@@ -78,7 +86,7 @@ async def websocket_endpoint(
                 # чтобы не бить БД на каждом пинге и не ловить события удалённого юзера.
                 now = time.monotonic()
                 if now - last_check >= MEMBERSHIP_RECHECK_SEC:
-                    if not _membership_active(db, user_id, tenant_id) or is_blacklisted(payload.get("jti")):
+                    if not await run_in_threadpool(_membership_active, user_id, tenant_id) or is_blacklisted(payload.get("jti")):
                         await ws.send_text('{"type":"membership.revoked"}')
                         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
@@ -88,7 +96,7 @@ async def websocket_endpoint(
                 # sub:channel:{id} — клиент открыл чат, подписываемся на per-channel events
                 try:
                     cid = int(msg.split(":", 2)[2])
-                    if _is_channel_member(db, cid, user_id, tenant_id):
+                    if await run_in_threadpool(_channel_member_check, cid, user_id, tenant_id):
                         await hub.subscribe_channel_ws(tenant_id, cid, ws)
                 except (ValueError, IndexError):
                     pass
@@ -102,6 +110,12 @@ async def websocket_endpoint(
         pass
     finally:
         await hub.disconnect(tenant_id, user_id, ws)
+
+
+def _channel_member_check(channel_id: int, user_id: int, tenant_id: int) -> bool:
+    from ..database import SessionLocal
+    with SessionLocal() as db:
+        return _is_channel_member(db, channel_id, user_id, tenant_id)
 
 
 def _is_channel_member(db: Session, channel_id: int, user_id: int, tenant_id: int) -> bool:
