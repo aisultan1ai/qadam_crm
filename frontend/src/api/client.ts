@@ -161,9 +161,15 @@ api.interceptors.response.use(
     if (status === 403) {
       emit("forbidden", err);
       // Политика безопасности компании: ведём туда, где это исправляется (сообщение покажет тост).
-      const code = (err.response?.data as ErrorBody | undefined)?.error?.code;
-      const target = code === "password_expired" ? "/profile" : code === "2fa_required" ? "/profile/settings" : null;
-      if (target && location.pathname !== target) location.assign(target);
+      const body = (err.response?.data as ErrorBody | undefined)?.error;
+      const code = body?.code;
+      if (code === "2fa_required") {
+        // Страница перезагрузится и тост пропадёт — сохраняем причину, её покажет вкладка «Безопасность».
+        try { sessionStorage.setItem("qadam.2fa_required", body?.message || ""); } catch { /* нет хранилища */ }
+        if (location.pathname !== "/profile/settings") location.assign("/profile/settings?tab=security");
+      } else if (code === "password_expired" && location.pathname !== "/profile") {
+        location.assign("/profile");
+      }
     }
 
     // Сетевая ошибка (нет соединения, DNS, таймаут) — показываем баннер.

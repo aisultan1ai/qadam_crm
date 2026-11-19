@@ -16,6 +16,7 @@ from .core.errors import install_error_handlers
 from .core.redis_client import get_redis
 from .core.subdomain import SubdomainTenantMiddleware
 from .core.ip_allowlist import IPAllowlistMiddleware
+from .core.request_context import RequestContextMiddleware
 from .database import engine
 from .api import (
     auth, roles, users, projects, tasks, comments, attachments,
@@ -146,6 +147,8 @@ def create_app() -> FastAPI:
     app.add_middleware(SubdomainTenantMiddleware)
 
     install_error_handlers(app)
+    # IP и браузер запроса для журнала действий/просмотров (ContextVar) — снаружи всех остальных.
+    app.add_middleware(RequestContextMiddleware)
 
     app.add_middleware(
         CORSMiddleware,
@@ -248,6 +251,10 @@ def create_app() -> FastAPI:
         legal_entities_api.router,
     ):
         app.include_router(r)
+
+    # Журнал действий с IP и журнал просмотров (владелец / settings.system)
+    from .api import security_audit as security_audit_api
+    app.include_router(security_audit_api.router)
 
     @app.get("/health", tags=["system"])
     def health():

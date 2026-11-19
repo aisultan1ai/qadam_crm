@@ -586,6 +586,8 @@ def document_preview(did: int, ctx: TenantContext = Depends(get_current_context)
     row = db.get(Document, did)
     if not row or row.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Документ не найден")
+    from ..core.view_log import log_view
+    log_view(db, ctx, "document", row.id)
 
     base = (getattr(settings, "APP_BASE_URL", None) or "http://localhost").rstrip("/")
 
@@ -629,14 +631,17 @@ def download_internal(did: int, ctx: TenantContext = Depends(get_current_context
     row = db.get(Document, did)
     if not row or row.tenant_id != ctx.tenant.id or not row.file_path:
         raise HTTPException(404, "Not found")
+    from ..core.view_log import log_view
+    file_path, mime = row.file_path, row.mime
+    log_view(db, ctx, "document", row.id)
     def gen():
-        with open(row.file_path, "rb") as f:
+        with open(file_path, "rb") as f:
             while True:
                 chunk = f.read(65536)
                 if not chunk:
                     break
                 yield chunk
-    return StreamingResponse(gen(), media_type=row.mime or "application/octet-stream")
+    return StreamingResponse(gen(), media_type=mime or "application/octet-stream")
 
 
 # =============================================================================
@@ -1096,6 +1101,8 @@ def totp_disable(payload: TotpVerifyIn, ctx: TenantContext = Depends(get_current
         raise HTTPException(501, "pyotp не установлен")
     from ..core.totp_crypto import decrypt_totp
     user = ctx.user
+    if getattr(ctx.membership, "require_2fa", False):
+        raise HTTPException(403, "Владелец компании требует от вас двухфакторную защиту — выключить её нельзя")
     plain_secret = decrypt_totp(user.totp_secret)
     if plain_secret:
         totp = pyotp.TOTP(plain_secret)
@@ -1483,8 +1490,12 @@ def public_doc_download(slug: str, db: Session = Depends(get_db)):
     d = db.query(Document).filter(Document.public_slug == slug, Document.is_public == True).first()  # noqa: E712
     if not d or not d.file_path:
         raise HTTPException(404, "Not found")
+    # Скачали по публичной ссылке без входа — пишем без сотрудника, только IP.
+    from ..core.view_log import log_view
+    file_path, mime, name = d.file_path, d.mime, d.name
+    log_view(db, None, "document", d.id, tenant_id=d.tenant_id)
     def gen():
-        with open(d.file_path, "rb") as f:
+        with open(file_path, "rb") as f:
             while True:
                 chunk = f.read(65536)
                 if not chunk:
@@ -1492,6 +1503,6 @@ def public_doc_download(slug: str, db: Session = Depends(get_db)):
                 yield chunk
     return StreamingResponse(
         gen(),
-        media_type=d.mime or "application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{d.name}"'},
+        media_type=mime or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )

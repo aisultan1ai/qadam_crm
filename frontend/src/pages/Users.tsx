@@ -5,7 +5,7 @@ import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import clsx from "clsx";
 import { api, extractApiError } from "@/api/client";
-import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers, UserPlus } from "lucide-react";
+import { Plus, Trash2, Search, Pencil, Users as UsersIcon, Layers, UserPlus, ShieldCheck, ShieldAlert } from "lucide-react";
 import type { User, Role, Department, Page } from "@/types";
 import { Avatar, Loader, Modal, FieldError, FormError, EmptyState } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
@@ -154,7 +154,7 @@ function UsersList() {
 
 // Grid layout: те же колонки что и раньше, но div-структура для виртуализации.
 // Ширины колонок в px + fr для гибких — header и rows используют один и тот же grid-template.
-const USERS_GRID_COLS = "minmax(200px,1.5fr) minmax(200px,1.5fr) minmax(160px,2fr) minmax(120px,1fr) 110px 150px 80px";
+const USERS_GRID_COLS = "minmax(200px,1.5fr) minmax(200px,1.5fr) minmax(160px,2fr) minmax(120px,1fr) 190px 150px 80px";
 const USER_ROW_HEIGHT = 56;
 
 function UsersGrid({
@@ -221,7 +221,7 @@ function UsersGrid({
             <div className="truncate text-neutral-600" title={deptsOf(u).map((d) => d.name).join(", ")}>
               {deptsOf(u).map((d) => d.name).join(", ") || "—"}
             </div>
-            <div>
+            <div className="flex flex-col items-start gap-0.5">
               <span
                 className={`chip ${
                   u.is_active
@@ -231,6 +231,7 @@ function UsersGrid({
               >
                 {u.is_active ? "активен" : "заблокирован"}
               </span>
+              <TwoFactorBadge user={u} />
             </div>
             <div className="text-xs text-neutral-500 truncate">
               {u.last_login_at ? new Date(u.last_login_at).toLocaleString("ru-RU") : "—"}
@@ -545,6 +546,9 @@ function UserFormModal({
   const qc = useQueryClient();
   const isEdit = !!initial;
   const [formError, setFormError] = useState<string | null>(null);
+  // Требовать 2FA решает только владелец компании (сервер проверяет то же самое).
+  const canManage2fa = useAuth((s) => !!s.me?.current_tenant?.is_owner || !!s.me?.is_platform_admin);
+  const [require2fa, setRequire2fa] = useState<boolean>(!!initial?.require_2fa);
 
   // UserUpdateForm — supertype: те же поля, но password optional.
   // Для create-формы валидация userCreateSchema гарантирует, что password непустой.
@@ -583,6 +587,7 @@ function UserFormModal({
         department_id: data.department_id || null,
       };
       if (data.password) body.password = data.password;
+      if (isEdit && canManage2fa && require2fa !== !!initial?.require_2fa) body.require_2fa = require2fa;
       if (isEdit) return api.patch(`/api/users/${initial!.id}`, body);
       return api.post("/api/users", body);
     },
@@ -653,6 +658,21 @@ function UserFormModal({
           Активен
         </label>
 
+        {isEdit && canManage2fa && (
+          <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={require2fa} onChange={(e) => setRequire2fa(e.target.checked)} />
+              Требовать двухфакторный вход
+            </label>
+            <p className="mt-1 pl-6 text-xs text-neutral-500">
+              При входе сотрудник будет вводить ещё и код из приложения на телефоне. Пока он не настроит
+              двухфакторную защиту, ему будет открыта только страница её настройки.
+              {initial?.two_factor_enabled === true && " У сотрудника она уже включена."}
+              {initial?.two_factor_enabled === false && " Сейчас у сотрудника она не включена."}
+            </p>
+          </div>
+        )}
+
         <FormError msg={formError} />
 
         <div className="flex justify-end gap-2 pt-2">
@@ -663,6 +683,27 @@ function UserFormModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** Состояние 2FA сотрудника — сервер присылает его только владельцу (иначе two_factor_enabled = null). */
+function TwoFactorBadge({ user }: { user: User }) {
+  if (user.two_factor_enabled == null) return null;
+  if (user.two_factor_enabled) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-300" title="Двухфакторная защита включена">
+        <ShieldCheck size={12} /> 2FA включена
+      </span>
+    );
+  }
+  if (!user.require_2fa) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-300"
+      title="Вы требуете от сотрудника двухфакторный вход, но он её ещё не настроил"
+    >
+      <ShieldAlert size={12} /> 2FA обязательна, не настроена
+    </span>
   );
 }
 

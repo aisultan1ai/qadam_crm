@@ -30,6 +30,12 @@ export type User = {
   roles: Role[];
   last_login_at?: string | null;
   created_at: string;
+  /** Владелец требует от сотрудника вход с 2FA в этой компании */
+  require_2fa?: boolean;
+  /** Включена ли 2FA у сотрудника — приходит только владельцу (иначе null) */
+  two_factor_enabled?: boolean | null;
+  /** Своя 2FA (только в /api/auth/me) */
+  totp_enabled?: boolean;
 };
 
 export type Tenant = {

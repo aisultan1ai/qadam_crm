@@ -4,6 +4,7 @@ import { api, extractApiError } from "@/api/client";
 import { Shield, Save } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { Button } from "@/components/lib/Button";
+import { AuditLogSection } from "./AuditLog";
 
 type Policy = {
   password_min_length: number;
@@ -91,6 +92,9 @@ export default function SecurityPolicyPage() {
           <input type="checkbox" checked={form.require_2fa_for_admins} onChange={(e) => setForm({ ...form, require_2fa_for_admins: e.target.checked })} />
           Обязательна для админов
         </label>
+        <p className="text-xs text-neutral-500">
+          Владелец может потребовать двухфакторный вход и от отдельных сотрудников — в их карточке в разделе «Пользователи».
+        </p>
       </div>
 
       <div className="card p-4 space-y-4">
@@ -124,6 +128,8 @@ export default function SecurityPolicyPage() {
           <Save size={15} /> Сохранить
         </Button>
       </div>
+
+      <AuditLogSection />
     </div>
   );
 }

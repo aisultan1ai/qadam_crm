@@ -62,13 +62,13 @@ def _load_tenant_user(db: Session, tenant_id: int, user_id: int) -> User:
     return user
 
 
-def _user_out(db: Session, tenant_id: int, user: User) -> UserOut:
+def _user_out(db: Session, tenant_id: int, user: User, show_security: bool = False) -> UserOut:
     """Пользователь глазами текущей компании: только её роли и её отдел
     (у человека в другой компании — свои роли и отдел, их здесь не показываем)."""
-    return _users_out(db, tenant_id, [user])[0]
+    return _users_out(db, tenant_id, [user], show_security)[0]
 
 
-def _users_out(db: Session, tenant_id: int, users: list[User]) -> list[UserOut]:
+def _users_out(db: Session, tenant_id: int, users: list[User], show_security: bool = False) -> list[UserOut]:
     """То же для списка — отделы и руководители одним запросом, а не по два на каждого."""
     ids = [u.id for u in users]
     members = {
@@ -78,6 +78,12 @@ def _users_out(db: Session, tenant_id: int, users: list[User]) -> list[UserOut]:
             TenantMembership.position,
         ).filter(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id.in_(ids))
     } if ids else {}
+    require_2fa = {
+        uid for (uid,) in db.query(TenantMembership.user_id).filter(
+            TenantMembership.tenant_id == tenant_id, TenantMembership.user_id.in_(ids),
+            TenantMembership.require_2fa.is_(True),
+        )
+    } if ids else set()
     all_deps: dict[int, list[int]] = {}
     if ids:
         for uid, did in db.query(DepartmentMember.user_id, DepartmentMember.department_id).filter(
@@ -90,8 +96,18 @@ def _users_out(db: Session, tenant_id: int, users: list[User]) -> list[UserOut]:
     for user in users:
         view = _member_view(user, tenant_id, *members.get(user.id, (None, None, None)), deps)
         mine = sorted((deps[d] for d in all_deps.get(user.id, []) if d in deps), key=lambda d: d.name.lower())
-        out.append(view.model_copy(update={"departments": [DepartmentOut.model_validate(d) for d in mine]}))
+        out.append(view.model_copy(update={
+            "departments": [DepartmentOut.model_validate(d) for d in mine],
+            "require_2fa": user.id in require_2fa,
+            # Состояние 2FA сотрудников — только владельцу (он решает, кому её требовать).
+            "two_factor_enabled": bool(user.totp_enabled) if show_security else None,
+        }))
     return out
+
+
+def _can_manage_2fa(ctx: TenantContext) -> bool:
+    """Требовать 2FA от сотрудника решает только владелец компании (и администратор платформы)."""
+    return bool(ctx.membership.is_owner or ctx.user.is_platform_admin)
 
 
 def _member_view(
@@ -176,7 +192,7 @@ def list_users(
         query = query.join(User.roles).filter(Role.id == role_id)
     query = query.order_by(User.id)
     page = paginate(query, pagination)
-    page.items = _users_out(db, ctx.tenant.id, page.items)
+    page.items = _users_out(db, ctx.tenant.id, page.items, _can_manage_2fa(ctx))
     return page
 
 
@@ -406,7 +422,7 @@ def delete_my_avatar(ctx: TenantContext = Depends(get_current_context), db: Sess
 
 @router.get("/users/{user_id}", response_model=UserOut)
 def get_user(user_id: int, ctx: TenantContext = Depends(require("users.view")), db: Session = Depends(get_db)):
-    return _user_out(db, ctx.tenant.id, _load_tenant_user(db, ctx.tenant.id, user_id))
+    return _user_out(db, ctx.tenant.id, _load_tenant_user(db, ctx.tenant.id, user_id), _can_manage_2fa(ctx))
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
@@ -454,10 +470,22 @@ def update_user(user_id: int, payload: UserUpdate, ctx: TenantContext = Depends(
         user.birthday = payload.birthday
     if payload.hire_date is not None:
         user.hire_date = payload.hire_date
+    if payload.require_2fa is not None:
+        if not _can_manage_2fa(ctx):
+            raise HTTPException(403, "Требовать двухфакторный вход может только владелец компании")
+        member = db.query(TenantMembership).filter(
+            TenantMembership.tenant_id == ctx.tenant.id, TenantMembership.user_id == user.id,
+        ).first()
+        if member and bool(member.require_2fa) != payload.require_2fa:
+            member.require_2fa = payload.require_2fa
+            log_action(
+                db, tenant_id=ctx.tenant.id, user_id=actor.id, action="update", entity="user", entity_id=user.id,
+                detail="2fa_required_on" if payload.require_2fa else "2fa_required_off",
+            )
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="update", entity="user", entity_id=user.id)
     db.commit()
     db.refresh(user)
-    return _user_out(db, ctx.tenant.id, user)
+    return _user_out(db, ctx.tenant.id, user, _can_manage_2fa(ctx))
 
 
 @router.delete("/users/{user_id}", response_model=Message)

@@ -69,6 +69,7 @@ from .p4 import (
     IntegrationProvider, IntegrationRequest,
 )
 from .api_token import ApiToken
+from .record_view import RecordView
 from .channel import (
     Channel, ChannelMember, Message, MessageAttachment, MessageReaction,
     Poll, PollOption, PollVote,

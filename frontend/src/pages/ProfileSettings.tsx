@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, extractApiError } from "@/api/client";
 import clsx from "clsx";
 import { Bell, Globe, Shield, Monitor, Link as LinkIcon, ArrowLeft, LogOut, ShieldCheck, Trash2, KeyRound, Copy, RefreshCw, Check } from "lucide-react";
@@ -25,7 +25,9 @@ const TABS: { key: Tab; label: string; icon: typeof Bell }[] = [
 
 export default function ProfileSettings() {
   const tr = useT();
-  const [tab, setTab] = useState<Tab>("notifications");
+  const [params] = useSearchParams();
+  const initialTab = TABS.some((t) => t.key === params.get("tab")) ? (params.get("tab") as Tab) : "notifications";
+  const [tab, setTab] = useState<Tab>(initialTab);
   return (
     <div className="space-y-5">
       <Link to="/profile" className="inline-flex items-center gap-1 text-[13px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
@@ -187,9 +189,23 @@ function SecurityTab() {
   });
 
   const totpEnabled = (me as any)?.totp_enabled === true;
+  // Причина, по которой нас сюда привели (обязательная 2FA от владельца или политики компании).
+  const [requiredMsg] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("qadam.2fa_required"); } catch { return null; }
+  });
+  const showRequired = !totpEnabled && (requiredMsg !== null || me?.require_2fa === true);
+  if (totpEnabled && requiredMsg !== null) {
+    try { sessionStorage.removeItem("qadam.2fa_required"); } catch { /* нет хранилища */ }
+  }
 
   return (
     <div className="space-y-4">
+      {showRequired && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          {requiredMsg || "Для работы в компании нужна двухфакторная защита. Включите её ниже."}
+          {" "}Пока она не включена, остальные разделы недоступны.
+        </div>
+      )}
       <div>
         <h2 className="mb-1 text-lg font-semibold">Пароль</h2>
         <p className="mb-2 text-sm text-neutral-500">Смена пароля доступна на странице профиля</p>
