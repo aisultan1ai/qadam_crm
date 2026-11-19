@@ -5,8 +5,8 @@
 Код теперь держит инвариант сам; эта миграция чинит уже накопленные строки.
 Схема не меняется.
 
-Revision ID: 0051a_ui_fixes
-Revises: 0050_plan_requests
+Revision ID: 0054_task_assignees_sync
+Revises: 0053_security_audit
 Create Date: 2026-11-19
 """
 from typing import Sequence, Union
@@ -14,8 +14,8 @@ from typing import Sequence, Union
 from alembic import op
 
 
-revision: str = "0051a_ui_fixes"
-down_revision: Union[str, None] = "0050_plan_requests"
+revision: str = "0054_task_assignees_sync"
+down_revision: Union[str, None] = "0053_security_audit"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
