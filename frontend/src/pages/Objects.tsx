@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DatePicker } from "@/components/DatePicker";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Boxes, Trash2, Pencil, ChevronRight, Link2 } from "lucide-react";
@@ -622,10 +623,12 @@ function RecordModal({
                   <option value="">— выберите —</option>
                   {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
+              ) : f.type === "date" ? (
+                <DatePicker value={data[f.name] ?? ""} onChange={(v) => set(f.name, v)} aria-label={f.label} />
               ) : (
                 <input
                   className="input"
-                  type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                  type={f.type === "number" ? "number" : "text"}
                   step={f.type === "number" ? "any" : undefined}
                   value={data[f.name] ?? ""}
                   onChange={(e) => set(f.name, f.type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)}

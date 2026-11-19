@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..core.permissions import user_has
 from ..core.secrets import encrypt
 from ..database import get_db
 from ..models import GoogleCalendarAccount, Tenant
@@ -69,8 +70,12 @@ def _require_tenant_configured(tenant: Tenant):
 
 
 def _require_owner(ctx: TenantContext):
-    if not (ctx.membership.is_owner or ctx.user.is_platform_admin):
-        raise HTTPException(403, "Только владелец компании может менять эти настройки")
+    if not (
+        ctx.membership.is_owner
+        or ctx.user.is_platform_admin
+        or user_has(ctx.user, ["settings.system"], tenant_id=ctx.tenant.id)
+    ):
+        raise HTTPException(403, "Эти настройки меняет владелец компании или администратор")
 
 
 def _config_out(t: Tenant) -> TenantConfigOut:

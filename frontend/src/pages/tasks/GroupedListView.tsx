@@ -4,6 +4,7 @@
  * внутри группы и между группами, быстрое добавление задачи и подзадачи.
  */
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { DateCalendar } from "@/components/DatePicker";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -563,7 +564,7 @@ function Row({
           assignee={t.assignee}
           users={users}
           disabled={!perms.assign}
-          onChange={(u) => onPatch({ body: { assignee_id: u?.id ?? null }, optimistic: { assignee: u } })}
+          onChange={(u) => onPatch({ body: { assignee_id: u?.id ?? null }, optimistic: { assignee: u, assignees: u ? [u] : [] } })}
         />
       </div>
       <div className="hidden sm:block">
@@ -716,9 +717,7 @@ function AssigneeCell({
             <span className="truncate">{assignee.name.split(" ")[0]}</span>
           </>
         ) : (
-          <span className="grid h-[22px] w-[22px] place-items-center rounded-full border border-dashed border-zinc-300 text-zinc-400 dark:border-zinc-600">
-            <UserRound size={12} />
-          </span>
+          <span className="text-zinc-400">—</span>
         )}
       </button>
       <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={240}>
@@ -798,21 +797,17 @@ function DueCell({
       {requestTaskId ? (
         <DeadlineRequestPopover anchorRef={ref} open={open} onClose={() => setOpen(false)} taskId={requestTaskId} currentDeadline={deadline} />
       ) : (
-      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={220}>
+      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} width={272}>
         <PopoverItem onClick={() => set(inDays(0))}>Сегодня</PopoverItem>
         <PopoverItem onClick={() => set(inDays(1))}>Завтра</PopoverItem>
         <PopoverItem onClick={() => set(nextMonday())}>В понедельник</PopoverItem>
         <PopoverItem onClick={() => set(inDays(7))}>Через неделю</PopoverItem>
         <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
-        <label className="block px-2 py-1 text-[12px] text-zinc-500">
-          Дата
-          <input
-            type="date"
-            value={deadline ? toLocalDate(deadline) : ""}
-            onChange={(e) => e.target.value && set(endOfDayISO(new Date(`${e.target.value}T12:00:00`)))}
-            className="mt-1 h-8 w-full rounded-md border border-zinc-200 bg-transparent px-2 text-[13px] text-zinc-800 outline-none focus:border-brand-400 dark:border-zinc-700 dark:text-zinc-100"
-          />
-        </label>
+        <DateCalendar
+          quick={false}
+          value={deadline ? toLocalDate(deadline) : ""}
+          onPick={(iso) => set(endOfDayISO(new Date(`${iso}T12:00:00`)))}
+        />
         {deadline && (
           <PopoverItem onClick={() => set(null)}>
             <X size={14} className="text-zinc-400" /> Убрать срок

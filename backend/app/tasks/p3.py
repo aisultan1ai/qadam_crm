@@ -62,6 +62,7 @@ def generate_recurring_tasks() -> dict:
                 priority=master.priority,
                 project_id=master.project_id,
                 assignee_id=master.assignee_id,
+                assignees=list(master.assignees),
                 author_id=master.author_id,
                 deadline=master.recurrence_next_at,
                 recurrence_parent_id=master.id,

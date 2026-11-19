@@ -2,7 +2,7 @@ import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRe
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Plus, LayoutGrid, List as ListIcon, Table as TableIcon, CalendarDays, Search, Trash2,
@@ -19,7 +19,7 @@ import type { TaskListItem, TaskStatus, TaskStatusDef, Project, User, Page } fro
 import { STATUS_LABEL, STATUS_ORDER, PRIORITY_LABEL } from "@/types";
 import { Avatar, EmptyState, FieldError, FormError, Modal, PriorityChip, StatusChip } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
-import { SkeletonKanban, SkeletonTable, SkeletonCard } from "@/components/Skeleton";
+import { Skeleton, SkeletonKanban, SkeletonTable, SkeletonCard } from "@/components/Skeleton";
 import { taskSchema, type TaskForm } from "@/lib/validation";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/components/Toast";
@@ -32,6 +32,7 @@ import { GroupByButton, GroupedListView, GROUP_PILL, type ListPerms } from "./ta
 import { GROUP_BY_OPTIONS, type GroupBy } from "./tasks/grouping";
 import { TaskDrawer } from "./tasks/TaskDrawer";
 import { fetchAllUsers } from "@/lib/users";
+import { DatePicker } from "@/components/DatePicker";
 
 // Открыть задачу в боковой панели (null — вне страницы задач: обычный переход).
 const OpenTaskContext = createContext<((id: number) => void) | null>(null);
@@ -246,7 +247,10 @@ export default function Tasks() {
           <h1 className="page-title flex items-baseline gap-2">
             {overdue ? "Просроченные" : activeScopeTab && activeScopeTab.key !== "all" ? activeScopeTab.label : "Все задачи"}
             <span className="text-[13px] font-medium tabular-nums text-zinc-400">
-              {(tasks?.length ?? 0) >= TASKS_LIMIT ? `${TASKS_LIMIT}+` : tasks?.length ?? 0}
+              {/* Пока API не ответил — заглушка, а не «0». */}
+              {tasks === undefined ? (
+                <Skeleton as="span" className="inline-block h-3 w-5 align-middle" />
+              ) : tasks.length >= TASKS_LIMIT ? `${TASKS_LIMIT}+` : tasks.length}
             </span>
           </h1>
           {(tasks?.length ?? 0) >= TASKS_LIMIT && (
@@ -708,7 +712,7 @@ const KanbanCard = memo(function KanbanCard({
         <div className="mb-1.5 h-3 w-3/4 rounded bg-brand-200/60 dark:bg-brand-500/20" />
         <div className="flex items-center justify-between opacity-30">
           <PriorityChip priority={task.priority} />
-          {task.assignee && <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} />}
+          {task.assignee ? <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} /> : <span className="text-neutral-400">—</span>}
         </div>
       </div>
     );
@@ -744,7 +748,7 @@ const KanbanCard = memo(function KanbanCard({
       <div className="mb-1.5 pr-6 text-sm font-medium leading-snug">{task.title}</div>
       <div className="flex items-center justify-between">
         <PriorityChip priority={task.priority} />
-        {task.assignee && <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} />}
+        {task.assignee ? <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} /> : <span className="text-neutral-400">—</span>}
       </div>
       {task.deadline && (
         <div className="mt-2 text-[11px] text-neutral-500">
@@ -768,7 +772,7 @@ function KanbanCardGhost({ task }: { task: TaskListItem }) {
       <div className="mb-1.5 pr-6 text-sm font-medium leading-snug">{task.title}</div>
       <div className="flex items-center justify-between">
         <PriorityChip priority={task.priority} />
-        {task.assignee && <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} />}
+        {task.assignee ? <Avatar name={task.assignee.name} size={22} url={task.assignee.avatar_url} /> : <span className="text-neutral-400">—</span>}
       </div>
       {task.deadline && (
         <div className="mt-2 text-[11px] text-neutral-500">
@@ -889,7 +893,7 @@ function TableView({
                       <Avatar name={t.assignee.name} size={22} url={t.assignee.avatar_url} />
                       <span className="truncate">{t.assignee.name}</span>
                     </div>
-                  ) : "—"}
+                  ) : <span className="text-neutral-400">—</span>}
                 </div>
                 <div className="text-neutral-500">
                   {t.deadline ? new Date(t.deadline).toLocaleDateString("ru-RU") : "—"}
@@ -999,6 +1003,7 @@ export function TaskFormModal({
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<TaskForm>({
@@ -1087,10 +1092,16 @@ export function TaskFormModal({
               <option value="critical">{PRIORITY_LABEL.critical}</option>
             </select>
           </label>
-          <label className="block">
+          <div className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Дедлайн</span>
-            <input className="input" type="datetime-local" {...register("deadline")} />
-          </label>
+            <Controller
+              control={control}
+              name="deadline"
+              render={({ field }) => (
+                <DatePicker withTime defaultTime="18:00" value={field.value} onChange={field.onChange} onBlur={field.onBlur} aria-label="Дедлайн" />
+              )}
+            />
+          </div>
         </div>
         <FormError msg={formError} />
         <div className="flex justify-end gap-2 pt-2">
@@ -1548,17 +1559,11 @@ function BulkPatchModal({
         )}
 
         {action === "deadline" && (
-          <label className="block">
+          <div className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Новый дедлайн</span>
-            <input
-              className="input"
-              type="datetime-local"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              autoFocus
-            />
-            <div className="mt-1 text-[11px] text-neutral-500">Пусто = снять дедлайн</div>
-          </label>
+            <DatePicker withTime defaultTime="18:00" value={deadline} onChange={setDeadline} autoFocus aria-label="Новый дедлайн" />
+            <div className="mt-1 text-[11px] text-neutral-500">Оставьте поле пустым, чтобы снять дедлайн</div>
+          </div>
         )}
 
         <div className="flex justify-end gap-2">

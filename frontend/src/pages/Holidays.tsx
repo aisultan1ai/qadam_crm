@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
+import { DatePicker } from "@/components/DatePicker";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
@@ -142,6 +143,7 @@ function NewHolidayModal({ onClose }: { onClose: () => void }) {
   const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<HolidayFullForm>({
@@ -164,7 +166,13 @@ function NewHolidayModal({ onClose }: { onClose: () => void }) {
     <Modal open onClose={onClose} title="Новый день" size="sm">
       <form onSubmit={onSubmit} className="space-y-3" noValidate>
         <FormField label="Дата" required error={errors.date?.message}>
-          <input type="date" className="input" {...register("date")} />
+          <Controller
+            control={control}
+            name="date"
+            render={({ field }) => (
+              <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} aria-label="Дата" />
+            )}
+          />
         </FormField>
         <FormField label="Название" required error={errors.name?.message}>
           <input className="input" placeholder="Название праздника" {...register("name")} />

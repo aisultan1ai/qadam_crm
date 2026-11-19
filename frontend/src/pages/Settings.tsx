@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DatePicker } from "@/components/DatePicker";
 import { Link, NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -2029,32 +2030,26 @@ function ManagerAvailabilitySettings() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
+                  <div className="block">
                     <span className="mb-1 block text-xs font-medium text-neutral-500">
                       Отпуск с
                     </span>
-                    <input
-                      type="date"
-                      className="input"
+                    <DatePicker
                       value={row.vacation_from ?? ""}
-                      onChange={(e) =>
-                        updateDraft(row.user_id, { vacation_from: e.target.value || null })
-                      }
+                      onChange={(v) => updateDraft(row.user_id, { vacation_from: v || null })}
+                      aria-label="Отпуск с"
                     />
-                  </label>
-                  <label className="block">
+                  </div>
+                  <div className="block">
                     <span className="mb-1 block text-xs font-medium text-neutral-500">
                       Отпуск до
                     </span>
-                    <input
-                      type="date"
-                      className="input"
+                    <DatePicker
                       value={row.vacation_until ?? ""}
-                      onChange={(e) =>
-                        updateDraft(row.user_id, { vacation_until: e.target.value || null })
-                      }
+                      onChange={(v) => updateDraft(row.user_id, { vacation_until: v || null })}
+                      aria-label="Отпуск до"
                     />
-                  </label>
+                  </div>
                 </div>
               </fieldset>
             </div>
@@ -3700,8 +3695,9 @@ function IntegrationsSettings() {
   const toast = useToast();
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const { me } = useAuth();
-  const isOwner = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin;
+  const { me, can } = useAuth();
+  // Свои ключи Google — только владелец компании и администраторы (settings.system).
+  const canManageKeys = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin || can("settings.system");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -3714,7 +3710,7 @@ function IntegrationsSettings() {
         access_denied: "Вы не дали доступ в окне Google",
         state: "Ссылка подключения устарела — нажмите «Подключить Google» ещё раз",
         exchange_failed: "Google не подтвердил подключение — попробуйте ещё раз",
-        tenant_not_configured: "Подключение Google в компании не настроено",
+        tenant_not_configured: "Подключение Google скоро будет доступно",
       };
       toast.error("Не удалось подключить Google", text[code] ?? "Попробуйте ещё раз");
       window.history.replaceState({}, "", window.location.pathname);
@@ -3778,12 +3774,8 @@ function IntegrationsSettings() {
               Синхронизация автоматически каждые 15 минут.
             </p>
 
-            {s && !s.configured && (
-              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                {isOwner
-                  ? "Подключение Google пока недоступно: общее приложение Qadam не включено на сервере. Можно указать ключи своей компании ниже."
-                  : "Подключение Google пока недоступно в вашей компании. Обратитесь к владельцу компании."}
-              </div>
+            {s && !s.configured && !s.connected && (
+              <p className="mt-3 text-sm text-neutral-500">Подключение Google скоро будет доступно</p>
             )}
 
             {s?.connected && (
@@ -3842,7 +3834,17 @@ function IntegrationsSettings() {
         </div>
       </div>
 
-      {isOwner && <GoogleTenantConfig onSaved={() => qc.invalidateQueries({ queryKey: ["integrations", "google", "status"] })} />}
+      {canManageKeys && (
+        <details className="group rounded-lg">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
+            <ChevronRight size={14} className="transition-transform group-open:rotate-90" />
+            Дополнительно
+          </summary>
+          <div className="mt-3">
+            <GoogleTenantConfig onSaved={() => qc.invalidateQueries({ queryKey: ["integrations", "google", "status"] })} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -3873,8 +3875,8 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
   useEffect(() => {
     if (cfgQ.data && !initialized) {
       setClientId(cfgQ.data.client_id ?? "");
-      // Нет общего приложения Qadam или уже свои ключи — показываем форму сразу.
-      setOpen(!cfgQ.data.platform_available || cfgQ.data.using === "tenant");
+      // Блок уже спрятан в «Дополнительно» — форму раскрываем, только если свои ключи уже заданы.
+      setOpen(cfgQ.data.using === "tenant");
       setInitialized(true);
     }
   }, [cfgQ.data, initialized]);
@@ -3960,7 +3962,7 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
                 className="input font-mono text-xs"
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
-                placeholder="123456789-abc.apps.googleusercontent.com"
+                placeholder="Client ID из Google Cloud Console"
               />
             </label>
             <label className="block">
@@ -3972,7 +3974,7 @@ function GoogleTenantConfig({ onSaved }: { onSaved: () => void }) {
                 type="password"
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
-                placeholder={hasSecret ? "Оставьте пустым, чтобы не менять" : "GOCSPX-..."}
+                placeholder={hasSecret ? "Оставьте пустым, чтобы не менять" : "Client secret из Google Cloud Console"}
                 autoComplete="new-password"
               />
             </label>

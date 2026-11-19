@@ -12,6 +12,7 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import ConfirmEmailChange from "@/pages/ConfirmEmailChange";
 import { Loader } from "@/components/ui";
+import { SkeletonWeekGrid } from "@/components/Skeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NoCompany from "@/components/NoCompany";
 import { usePublicPageMeta } from "@/lib/pageTitle";
@@ -37,7 +38,9 @@ const AutomationEditor = lazy(() => import("@/pages/AutomationEditor"));
 const Inbox = lazy(() => import("@/pages/Inbox"));
 const Mail = lazy(() => import("@/pages/Mail"));
 const Wiki = lazy(() => import("@/pages/Wiki"));
-const CalendarPage = lazy(() => import("@/pages/Calendar"));
+// Чанк календаря тяжёлый (react-big-calendar) — подгружаем заранее, чтобы сетка открывалась сразу.
+const loadCalendarPage = () => import("@/pages/Calendar");
+const CalendarPage = lazy(loadCalendarPage);
 const BookingPublic = lazy(() => import("@/pages/BookingPublic"));
 const TimeTracking = lazy(() => import("@/pages/TimeTracking"));
 const People = lazy(() => import("@/pages/People"));
@@ -81,12 +84,20 @@ function HomeGate() {
 }
 
 export default function App() {
-  const { fetchMe, ready } = useAuth();
+  const { fetchMe, ready, me } = useAuth();
   const location = useLocation();
   usePublicPageMeta();
   useEffect(() => {
     fetchMe();
   }, []);
+
+  useEffect(() => {
+    if (!me) return;
+    const t = window.setTimeout(() => {
+      void loadCalendarPage().catch(() => undefined);
+    }, 2500);
+    return () => window.clearTimeout(t);
+  }, [!!me]);
 
   useEffect(() => {
     trackPageview(location.pathname + location.search, document.title);
@@ -180,7 +191,14 @@ export default function App() {
         <Route path="mail" element={<Mail />} />
         <Route path="wiki" element={<Wiki />} />
         <Route path="wiki/:slug" element={<Wiki />} />
-        <Route path="calendar" element={<CalendarPage />} />
+        <Route
+          path="calendar"
+          element={
+            <Suspense fallback={<SkeletonWeekGrid />}>
+              <CalendarPage />
+            </Suspense>
+          }
+        />
         <Route path="time" element={<TimeTracking />} />
         <Route path="people" element={<People />} />
         <Route path="people/:id" element={<Profile />} />

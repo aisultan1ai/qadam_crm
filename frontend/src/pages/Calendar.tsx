@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calendar as BigCalendar, dateFnsLocalizer, View, Views, type Formats } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -16,6 +16,7 @@ import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 import { fetchAllUsers } from "@/lib/users";
+import { DatePicker } from "@/components/DatePicker";
 
 const locales = { ru };
 const localizer = dateFnsLocalizer({
@@ -132,7 +133,7 @@ export default function CalendarPage() {
   const [editorOpen, setEditorOpen] = useState<{ mode: "create" | "edit"; initial?: Partial<EventDetail> } | null>(null);
   const [detailsFor, setDetailsFor] = useState<EventOcc | null>(null);
 
-  const { data: calendars } = useQuery({
+  const { data: calendars, isPending: calendarsPending } = useQuery({
     queryKey: ["calendars"],
     queryFn: async () => (await api.get<CalendarRow[]>("/api/calendar/calendars")).data,
     staleTime: 30_000,
@@ -168,8 +169,10 @@ export default function CalendarPage() {
     [calendars],
   );
 
+  // Сетка рисуется сразу, события подгружаются в неё; при листании недель старые не мигают.
   const { data: events, isFetching } = useQuery({
     enabled: !!calendars,
+    placeholderData: keepPreviousData,
     queryKey: ["calendar-events", range.start.toISOString(), range.end.toISOString(), visibleCalIds],
     queryFn: async () => {
       const params: Record<string, unknown> = {
@@ -251,10 +254,13 @@ export default function CalendarPage() {
           }}
         />
 
-        <div className="relative min-h-0 overflow-hidden card p-3">
-          {isFetching && (
-            <div className="absolute right-3 top-3 z-10">
-              <Loader2 size={14} className="animate-spin text-neutral-400" />
+        <div className="relative min-h-[520px] overflow-hidden card p-3 md:min-h-0">
+          {(calendarsPending || isFetching) && (
+            <div
+              role="status"
+              className="pointer-events-none absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-xs text-neutral-500 shadow-soft ring-1 ring-neutral-200 dark:bg-neutral-900/90 dark:ring-neutral-700"
+            >
+              <Loader2 size={13} className="animate-spin" /> Загружаем события…
             </div>
           )}
           <BigCalendar
@@ -540,26 +546,14 @@ function EventEditor({
         )}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">
+          <div className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-500">Начало</span>
-            <input
-              type="datetime-local"
-              className="input"
-              value={startAt}
-              onChange={(e) => setStartAt(e.target.value)}
-              disabled={allDay}
-            />
-          </label>
-          <label className="block">
+            <DatePicker withTime clearable={false} value={startAt} onChange={setStartAt} disabled={allDay} aria-label="Начало" />
+          </div>
+          <div className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-500">Конец</span>
-            <input
-              type="datetime-local"
-              className="input"
-              value={endAt}
-              onChange={(e) => setEndAt(e.target.value)}
-              disabled={allDay}
-            />
-          </label>
+            <DatePicker withTime clearable={false} value={endAt} onChange={setEndAt} disabled={allDay} aria-label="Конец" />
+          </div>
         </div>
 
         <label className="flex items-center gap-2 text-sm">

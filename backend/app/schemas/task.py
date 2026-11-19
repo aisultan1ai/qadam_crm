@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Any, List, Optional
 from datetime import datetime
 
@@ -180,7 +180,10 @@ class TaskListItem(BaseModel):
     status: TaskStatus
     priority: TaskPriority
     project_id: Optional[int] = None
+    # «Исполнитель» в списке/канбане/таблице — основной из task.assignees.
+    # Если исполнителей нет — None (UI покажет «—»), никаких фолбэков.
     assignee: Optional[UserBrief] = None
+    assignees: List[UserBrief] = []
     start_date: Optional[datetime] = None
     deadline: Optional[datetime] = None
     created_at: datetime
@@ -192,6 +195,13 @@ class TaskListItem(BaseModel):
     author: Optional[UserBrief] = None  # постановщик — для колонки в списке задач
     auditor_ids: List[int] = []
 
+    @model_validator(mode="after")
+    def _assignee_from_assignees(self):
+        ids = {u.id for u in self.assignees}
+        if self.assignee is None or self.assignee.id not in ids:
+            self.assignee = self.assignees[0] if self.assignees else None
+        return self
+
 
 class TaskOut(TaskListItem):
     description: Optional[str] = None
@@ -200,8 +210,7 @@ class TaskOut(TaskListItem):
     comments: List[CommentOut] = []
     attachments: List[AttachmentOut] = []
     activities: List[ActivityOut] = []
-    # Planfix-style роли (множественные)
-    assignees: List[UserBrief] = []
+    # Planfix-style роли (множественные); assignees — в TaskListItem
     auditors: List[UserBrief] = []
     participants: List[UserBrief] = []
     reminders: List[TaskReminderOut] = []

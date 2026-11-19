@@ -33,7 +33,7 @@ from ..models import (
     Automation, AutomationAction, AutomationActionStatus, AutomationRun,
     AutomationRunStatus, Channel, ChannelMember, Message, Notification, Task, TenantLead, User,
 )
-from ..models.task import TaskPriority, TaskStatus
+from ..models.task import TaskPriority, TaskStatus, set_primary_assignee
 from ..core.ssrf import UnsafeUrl, assert_public_url
 from ..core.ws_hub import publish_to_channel, publish_to_tenant, publish_to_user
 
@@ -344,7 +344,7 @@ def _action_assign_user(db: Session, tenant_id: int, config: dict, context: dict
         task = db.get(Task, entity_id)
         if not task or task.tenant_id != tenant_id:
             raise ActionError("assign_user: задача не найдена")
-        task.assignee_id = user_id
+        set_primary_assignee(db, task, user_id)
         db.flush()
         publish_to_user(tenant_id, user_id, "task.assigned", {"task_id": entity_id})
         return {"task_id": entity_id, "assignee_id": user_id}

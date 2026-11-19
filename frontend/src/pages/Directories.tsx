@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DatePicker } from "@/components/DatePicker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -288,12 +289,16 @@ function NewEntryModal({ dir, onClose }: { dir: Dir; onClose: () => void }) {
         </FormField>
         {dir.fields.map((f: any) => (
           <FormField key={f.name} label={f.label}>
-            <input
-              className="input"
-              type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
-              value={values[f.name] ?? ""}
-              onChange={(e) => setValues({ ...values, [f.name]: f.type === "number" ? Number(e.target.value) : e.target.value })}
-            />
+            {f.type === "date" ? (
+              <DatePicker value={values[f.name] ?? ""} onChange={(v) => setValues({ ...values, [f.name]: v })} aria-label={f.label} />
+            ) : (
+              <input
+                className="input"
+                type={f.type === "number" ? "number" : "text"}
+                value={values[f.name] ?? ""}
+                onChange={(e) => setValues({ ...values, [f.name]: f.type === "number" ? Number(e.target.value) : e.target.value })}
+              />
+            )}
           </FormField>
         ))}
         <FormError msg={serverError} />

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
+import { DatePicker } from "@/components/DatePicker";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
@@ -266,6 +267,7 @@ function TimeOffModal({ onClose }: { onClose: () => void }) {
   const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<TimeOffFormValues>({
@@ -303,10 +305,22 @@ function TimeOffModal({ onClose }: { onClose: () => void }) {
         </FormField>
         <div className="grid grid-cols-2 gap-3">
           <FormField label="С" required error={errors.start_date?.message}>
-            <input type="date" className="input" {...register("start_date")} />
+            <Controller
+              control={control}
+              name="start_date"
+              render={({ field }) => (
+                <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} aria-label="Начало" />
+              )}
+            />
           </FormField>
           <FormField label="По" required error={errors.end_date?.message}>
-            <input type="date" className="input" {...register("end_date")} />
+            <Controller
+              control={control}
+              name="end_date"
+              render={({ field }) => (
+                <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} aria-label="Окончание" />
+              )}
+            />
           </FormField>
         </div>
         <FormField label="Комментарий" error={errors.note?.message}>
