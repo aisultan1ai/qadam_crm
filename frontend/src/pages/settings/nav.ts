@@ -4,6 +4,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Landmark } from "lucide-react";
+import { Factory } from "lucide-react";
 
 export type SettingsTab = {
   to: string;
@@ -32,6 +33,8 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { to: "directories", label: "Справочники", icon: BookText },
   // Читать могут все (нужно для выбора юрлица в формах), менять — с правом «Управление справочниками»
   { to: "legal-entities", label: "Юрлица", icon: Landmark },
+  // Смотреть могут все, включать offtake — «Системные настройки», продукты — «Управление справочниками»
+  { to: "offtake", label: "Продажи и offtake", icon: Factory },
 ];
 
 export function settingsTabVisible(t: SettingsTab, can: (code: string) => boolean, isOwner: boolean): boolean {
