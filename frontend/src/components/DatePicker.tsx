@@ -97,6 +97,8 @@ export type DatePickerProps = {
   withTime?: boolean;
   /** Время, которое подставляется при выборе даты без времени. */
   defaultTime?: string;
+  /** Значение со временем (для API), но поле времени не показывать — выбор только по дате. */
+  hideTime?: boolean;
   /** Границы выбора, "YYYY-MM-DD". */
   min?: string;
   max?: string;
@@ -115,6 +117,7 @@ export function DatePicker({
   onChange,
   withTime = false,
   defaultTime = "09:00",
+  hideTime = false,
   min,
   max,
   disabled,
@@ -146,7 +149,7 @@ export function DatePicker({
   const emit = (isoDate: string | null, time?: string) => {
     let next = "";
     if (isoDate) {
-      next = withTime ? `${isoDate}T${time ?? (parseTime(timeText) || defaultTime)}` : isoDate;
+      next = withTime ? `${isoDate}T${hideTime ? defaultTime : time ?? (parseTime(timeText) || defaultTime)}` : isoDate;
     }
     if (next === lastRef.current) return;
     lastRef.current = next;
@@ -249,7 +252,7 @@ export function DatePicker({
         </div>
       </div>
 
-      {withTime && (
+      {withTime && !hideTime && (
         <input
           type="text"
           inputMode="numeric"

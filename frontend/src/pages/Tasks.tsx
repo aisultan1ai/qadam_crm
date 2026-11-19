@@ -1098,7 +1098,7 @@ export function TaskFormModal({
               control={control}
               name="deadline"
               render={({ field }) => (
-                <DatePicker withTime defaultTime="18:00" value={field.value} onChange={field.onChange} onBlur={field.onBlur} aria-label="Дедлайн" />
+                <DatePicker withTime hideTime defaultTime="23:59" value={field.value} onChange={field.onChange} onBlur={field.onBlur} aria-label="Дедлайн" />
               )}
             />
           </div>
@@ -1561,7 +1561,7 @@ function BulkPatchModal({
         {action === "deadline" && (
           <div className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Новый дедлайн</span>
-            <DatePicker withTime defaultTime="18:00" value={deadline} onChange={setDeadline} autoFocus aria-label="Новый дедлайн" />
+            <DatePicker withTime hideTime defaultTime="23:59" value={deadline} onChange={setDeadline} autoFocus aria-label="Новый дедлайн" />
             <div className="mt-1 text-[11px] text-neutral-500">Оставьте поле пустым, чтобы снять дедлайн</div>
           </div>
         )}

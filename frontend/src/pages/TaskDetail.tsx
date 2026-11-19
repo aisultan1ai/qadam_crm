@@ -588,6 +588,8 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
             <SidebarField icon={<Calendar size={14} />} label="Дата начала">
               <DatePicker
                 withTime
+                hideTime
+                defaultTime="00:00"
                 inputClassName="!h-8 !py-0 text-[13px]"
                 disabled={!can("tasks.update")}
                 value={toLocalInput(task.start_date)}
@@ -600,7 +602,8 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
               {canSetDeadline(task, me) ? (
                 <DatePicker
                   withTime
-                  defaultTime="18:00"
+                  hideTime
+                  defaultTime="23:59"
                   inputClassName="!h-8 !py-0 text-[13px]"
                   disabled={!can("tasks.update")}
                   value={toLocalInput(task.deadline)}
@@ -614,7 +617,7 @@ export default function TaskDetail({ taskId: propTaskId, embedded = false }: { t
                   className="input !h-8 !py-0 flex w-full items-center text-left text-[13px] hover:border-brand-400"
                 >
                   <CalendarClock size={13} className="mr-1.5 shrink-0 text-zinc-400" />
-                  {task.deadline ? new Date(task.deadline).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Запросить срок"}
+                  {task.deadline ? new Date(task.deadline).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }) : "Запросить срок"}
                 </DeadlineRequestButton>
               )}
             </SidebarField>
