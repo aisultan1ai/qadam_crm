@@ -4,13 +4,15 @@
  */
 import { Suspense, lazy, useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle, CalendarDays, CheckCircle2, GanttChart, LayoutGrid, List as ListIcon, ListTodo,
-  MessageSquare, PieChart, Plus, Users,
+  Landmark, MessageSquare, PieChart, Plus, Users,
 } from "lucide-react";
 
-import { api } from "@/api/client";
+import { api, extractApiError } from "@/api/client";
+import { legalEntityOptions, useLegalEntities } from "@/hooks/useLegalEntities";
+import { useToast } from "@/components/Toast";
 import type { Page, Project, TaskListItem, TaskStatusDef, User } from "@/types";
 import { Avatar, EmptyState, Loader } from "@/components/ui";
 import { PageHeader, Panel, PropertyList, PropertyRow, Tabs } from "@/components/page";
@@ -261,6 +263,7 @@ function Overview({ project, stats }: { project: Project; stats: { total: number
       </Panel>
       <Panel title="О проекте">
         <PropertyList>
+          <ProjectLegalEntityRow project={project} />
           <PropertyRow icon={Users} label="Участники">
             {project.members.length === 0 ? (
               <span className="text-zinc-500">Нет</span>
@@ -279,6 +282,50 @@ function Overview({ project, stats }: { project: Project; stats: { total: number
         {project.description && <p className="mt-4 whitespace-pre-line text-sm text-zinc-600 dark:text-zinc-300">{project.description}</p>}
       </Panel>
     </div>
+  );
+}
+
+/** Юрлицо проекта — только когда у компании несколько активных юрлиц. */
+function ProjectLegalEntityRow({ project }: { project: Project }) {
+  const le = useLegalEntities();
+  const { can } = useAuth();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  if (!le.multi) return null;
+  const canEdit = can("projects.update");
+  const change = async (id: number) => {
+    setSaving(true);
+    try {
+      await api.patch(`/api/projects/${project.id}`, { legal_entity_id: id });
+      qc.invalidateQueries({ queryKey: ["project", project.id] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    } catch (e) {
+      toast.error("Не удалось сменить юрлицо", extractApiError(e).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <PropertyRow icon={Landmark} label="Юрлицо">
+      {canEdit ? (
+        <select
+          className="input !h-8 !py-0 text-[13px]"
+          value={String(project.legal_entity_id ?? le.defaultEntity?.id ?? "")}
+          disabled={saving}
+          onChange={(e) => e.target.value && change(Number(e.target.value))}
+          aria-label="Юрлицо проекта"
+        >
+          {legalEntityOptions(le.all, project.legal_entity_id).map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.short_name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span>{project.legal_entity?.short_name ?? "—"}</span>
+      )}
+    </PropertyRow>
   );
 }
 

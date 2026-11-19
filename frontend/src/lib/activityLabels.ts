@@ -40,6 +40,7 @@ export const ENTITY_LABEL: Record<string, string> = {
   comment: "комментарий",
   contact: "контакт",
   company: "компанию",
+  legal_entity: "юрлицо",
   lead: "лид",
   lead_form: "форму захвата",
   deal: "сделку",

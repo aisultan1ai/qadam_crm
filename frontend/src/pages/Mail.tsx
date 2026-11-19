@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -81,6 +81,18 @@ export default function Mail() {
   const qc = useQueryClient();
   const toast = useToast();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // /mail?thread=12 — открыть переписку по ссылке (например, из карточки контрагента)
+  const [sp, setSp] = useSearchParams();
+  const threadParam = sp.get("thread");
+  useEffect(() => {
+    if (threadParam && /^\d+$/.test(threadParam)) {
+      setSelectedId(Number(threadParam));
+      const next = new URLSearchParams(window.location.search);
+      next.delete("thread");
+      setSp(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadParam]);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [onlyUnread, setOnlyUnread] = useState(false);
@@ -121,9 +133,17 @@ export default function Mail() {
     () => threads.reduce((s, t) => s + (t.unread_count || 0), 0),
     [threads],
   );
+  const inList = threads.find((t) => t.id === selectedId) ?? null;
+  // Переписка не из первой сотни (архив, старые письма) — загружаем отдельно.
+  const { data: linkedThread } = useQuery({
+    enabled: !!mailbox && selectedId != null && !inList && !threadsLoading,
+    queryKey: ["mail-thread", selectedId],
+    queryFn: async () => (await api.get<ThreadRow>(`/api/mail/threads/${selectedId}`)).data,
+    retry: false,
+  });
   const selected = useMemo(
-    () => threads.find((t) => t.id === selectedId) ?? null,
-    [threads, selectedId],
+    () => inList ?? (linkedThread && linkedThread.id === selectedId ? linkedThread : null),
+    [inList, linkedThread, selectedId],
   );
 
   if (mbLoading) {

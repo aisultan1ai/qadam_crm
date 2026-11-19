@@ -49,3 +49,7 @@ class Project(Base):
     group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("project_groups.id", ondelete="SET NULL"), nullable=True, index=True)
     baseline_start: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     baseline_end: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # Юрлицо компании, от имени которого ведётся запись (миграция 0051)
+    legal_entity_id: Mapped[Optional[int]] = mapped_column(ForeignKey("legal_entities.id", ondelete="SET NULL"), nullable=True, index=True)
+    legal_entity: Mapped[Optional["LegalEntity"]] = relationship("LegalEntity", foreign_keys=[legal_entity_id], lazy="joined")  # type: ignore  # noqa: F821

@@ -33,6 +33,17 @@ class Company(Base):
 
     custom_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
 
+    # --- Контрагенты (миграция 0052) ---
+    country: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, default="Казахстан", server_default="Казахстан")
+    # Регистрационный номер иностранной компании; БИН казахстанской — в tax_id
+    registration_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    # Типы контрагента (несколько): buyer, epc, supplier, consultant, bank, government
+    types: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    responsible_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    responsible: Mapped[Optional["User"]] = relationship("User", foreign_keys=[responsible_user_id], lazy="joined")  # type: ignore  # noqa: F821
+    # potential | nda | active | blocked
+    status: Mapped[str] = mapped_column(String(20), default="potential", server_default="potential", index=True)
+
     contacts: Mapped[List["Contact"]] = relationship(
         "Contact", back_populates="company", lazy="selectin"
     )

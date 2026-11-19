@@ -52,6 +52,7 @@ from .api import (
     api_tokens as api_tokens_api,
     people_import as people_import_api,
     onboarding as onboarding_api,
+    legal_entities as legal_entities_api,
 )
 
 
@@ -244,6 +245,7 @@ def create_app() -> FastAPI:
         api_tokens_api.router,
         people_import_api.router,
         onboarding_api.router,
+        legal_entities_api.router,
     ):
         app.include_router(r)
 

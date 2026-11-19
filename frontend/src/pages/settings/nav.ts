@@ -3,6 +3,7 @@ import {
   BookText, CalendarClock, Clock, CreditCard, Hash, KeyRound, Link2, Mail, MessageCircle, Palette, Puzzle, Save, Shield, Zap,
   type LucideIcon,
 } from "lucide-react";
+import { Landmark } from "lucide-react";
 
 export type SettingsTab = {
   to: string;
@@ -29,6 +30,8 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { to: "api", label: "API", icon: KeyRound, perm: "settings.system" },
   { to: "task-statuses", label: "Статусы задач", icon: Hash, perm: "settings.dictionaries" },
   { to: "directories", label: "Справочники", icon: BookText },
+  // Читать могут все (нужно для выбора юрлица в формах), менять — с правом «Управление справочниками»
+  { to: "legal-entities", label: "Юрлица", icon: Landmark },
 ];
 
 export function settingsTabVisible(t: SettingsTab, can: (code: string) => boolean, isOwner: boolean): boolean {

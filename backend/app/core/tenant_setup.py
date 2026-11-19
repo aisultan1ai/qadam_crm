@@ -73,6 +73,9 @@ def create_tenant_with_owner(
 
     copy_system_roles_to_tenant(db, tenant.id)
 
+    from .legal_entities import ensure_default_legal_entity
+    ensure_default_legal_entity(db, tenant)
+
     admin_role = (
         db.query(Role)
         .filter(Role.tenant_id == tenant.id, Role.name == "Администратор")

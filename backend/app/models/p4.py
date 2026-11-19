@@ -134,6 +134,14 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Юрлицо компании, от имени которого ведётся запись (миграция 0051)
+    legal_entity_id: Mapped[Optional[int]] = mapped_column(ForeignKey("legal_entities.id", ondelete="SET NULL"), nullable=True, index=True)
+    legal_entity: Mapped[Optional["LegalEntity"]] = relationship("LegalEntity", foreign_keys=[legal_entity_id], lazy="joined")  # type: ignore  # noqa: F821
+
+    # Контрагент, к которому относится документ (миграция 0052)
+    company_id: Mapped[Optional[int]] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
+    company: Mapped[Optional["Company"]] = relationship("Company", foreign_keys=[company_id], lazy="joined")  # type: ignore  # noqa: F821
+
 
 class DocumentVersion(Base):
     __tablename__ = "document_versions"

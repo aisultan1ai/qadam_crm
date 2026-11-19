@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..core.secrets import encrypt
+from ..core.legal_entities import resolve_legal_entity_id
 from ..database import get_db
 from ..models import Document, DocumentVersion, StorageAccount, Tenant
 from ..schemas.common import Message
@@ -342,6 +343,7 @@ async def import_file(
         file_path=stored_path,
         version_count=1,
         created_by=ctx.user.id,
+        legal_entity_id=resolve_legal_entity_id(db, ctx.tenant.id, None),
     )
     db.add(row)
     db.flush()

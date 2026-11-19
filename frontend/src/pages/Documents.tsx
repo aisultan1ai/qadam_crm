@@ -6,8 +6,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, extractApiError } from "@/api/client";
 import {
-  FolderPlus, Folder, FileText, Upload, Trash2, Share2, Eye, Download, ChevronLeft,
+  FolderPlus, Folder, FileText, Upload, Trash2, Share2, Eye, Download, ChevronLeft, Pencil,
 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useLegalEntities } from "@/hooks/useLegalEntities";
+import { DocumentMetaModal } from "@/components/DocumentMetaModal";
 import { EmptyState, Modal, FormError } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
@@ -30,6 +33,10 @@ type Doc = {
   created_at: string;
   updated_at: string;
   created_by?: number | null;
+  legal_entity_id?: number | null;
+  legal_entity?: { id: number; short_name: string } | null;
+  company_id?: number | null;
+  company?: { id: number; name: string } | null;
 };
 
 const folderSchema = z.object({
@@ -56,6 +63,9 @@ export default function DocumentsPage() {
   const [openNewFolder, setOpenNewFolder] = useState(false);
   const [openPreview, setOpenPreview] = useState<Doc | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const le = useLegalEntities();
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [editDoc, setEditDoc] = useState<Doc | null>(null);
 
   const { data: folders } = useQuery({
     queryKey: ["doc-folders", folderId],
@@ -132,6 +142,33 @@ export default function DocumentsPage() {
         </div>
       ),
     },
+    ...(le.multi
+      ? [
+          {
+            key: "legal",
+            header: "Юрлицо",
+            width: 160,
+            render: (d: Doc) => <span className="truncate text-xs text-neutral-500">{d.legal_entity?.short_name ?? "—"}</span>,
+          } as Column<Doc>,
+        ]
+      : []),
+    ...((docs ?? []).some((d) => d.company)
+      ? [
+          {
+            key: "company",
+            header: "Контрагент",
+            width: 180,
+            render: (d: Doc) =>
+              d.company ? (
+                <Link to={`/contacts/companies/${d.company.id}`} className="truncate text-xs text-brand-700 hover:underline dark:text-brand-300">
+                  {d.company.name}
+                </Link>
+              ) : (
+                <span className="text-xs text-neutral-400">—</span>
+              ),
+          } as Column<Doc>,
+        ]
+      : []),
     {
       key: "size",
       header: "Размер",
@@ -158,7 +195,7 @@ export default function DocumentsPage() {
       key: "actions",
       header: "",
       align: "right",
-      width: 160,
+      width: 190,
       render: (d) => (
         <div className="flex items-center justify-end gap-1">
           <Button variant="ghost" size="icon" onClick={() => setOpenPreview(d)} title="Просмотр" aria-label="Просмотр">
@@ -174,6 +211,11 @@ export default function DocumentsPage() {
             >
               <Download size={13} />
             </a>
+          )}
+          {canManage(d) && (
+            <Button variant="ghost" size="icon" onClick={() => setEditDoc(d)} title="Свойства" aria-label="Свойства документа">
+              <Pencil size={13} />
+            </Button>
           )}
           {!canManage(d) ? null : d.is_public ? (
             <Button
@@ -236,7 +278,10 @@ export default function DocumentsPage() {
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) upload.mutate(f);
+              if (f) {
+                if (le.multi) setPendingFile(f);
+                else upload.mutate(f);
+              }
               e.target.value = "";
             }}
           />
@@ -312,6 +357,15 @@ export default function DocumentsPage() {
         <NewFolderModal parentId={folderId} onClose={() => setOpenNewFolder(false)} />
       )}
       {openPreview && <PreviewModal doc={openPreview} onClose={() => setOpenPreview(null)} />}
+      {pendingFile && (
+        <DocumentMetaModal
+          file={pendingFile}
+          folderId={folderId}
+          onClose={() => setPendingFile(null)}
+          onDone={() => toast.success("Файл загружен")}
+        />
+      )}
+      {editDoc && <DocumentMetaModal doc={editDoc} onClose={() => setEditDoc(null)} />}
     </div>
   );
 }

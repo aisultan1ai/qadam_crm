@@ -150,6 +150,8 @@ def create_tenant(
         db.add(tenant)
         db.flush()
         copy_system_roles_to_tenant(db, tenant.id)
+        from ..core.legal_entities import ensure_default_legal_entity
+        ensure_default_legal_entity(db, tenant)
         admin_role = db.query(Role).filter(Role.tenant_id == tenant.id, Role.name == "Администратор").first()
         token = secrets.token_urlsafe(32)
         db.add(Invitation(

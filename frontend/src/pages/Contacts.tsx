@@ -10,35 +10,25 @@ import { EmptyState, Modal, Avatar, FormError } from "@/components/ui";
 import { Pagination } from "@/components/lib/Pagination";
 import { Button } from "@/components/lib/Button";
 import { FormField } from "@/components/lib/FormField";
-import { contactSchema, companySchema, type ContactForm, type CompanyForm } from "@/lib/validation";
+import { contactSchema, type ContactForm } from "@/lib/validation";
 import { SkeletonCard } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import type { Page } from "@/types";
 import { useOpenParam } from "@/hooks/useOpenParam";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { SearchInput, Tabs } from "@/components/page";
+import { FilterSelect, SearchInput, Tabs, Toolbar } from "@/components/page";
+import {
+  COMPANY_STATUSES, COMPANY_TYPES, CompanyModal, CompanyStatusBadge, CompanyTypeBadges, useTeamMembers,
+  type Company,
+} from "./contacts/companyShared";
 // ============================================================================
 // Types
 // ============================================================================
 
 type UserBrief = { id: number; name: string; email: string; avatar_url?: string | null };
 type CompanyBrief = { id: number; name: string };
-
-type Company = {
-  id: number;
-  name: string;
-  industry?: string | null;
-  website?: string | null;
-  phone?: string | null;
-  email?: string | null;
-  tax_id?: string | null;
-  address?: string | null;
-  note?: string | null;
-  owner?: UserBrief | null;
-  contacts_count: number;
-  created_at: string;
-};
 
 type Contact = {
   id: number;
@@ -72,12 +62,18 @@ export default function Contacts() {
   const [q, setQ] = useState("");
   const [openContact, setOpenContact] = useState<Contact | "new" | null>(null);
   const [openCompany, setOpenCompany] = useState<Company | "new" | null>(null);
+  const nav = useNavigate();
+  const [sp] = useSearchParams();
 
   const canCreate = can("contacts.create");
   const canRead = can("contacts.view");
   // Ссылки из связей Объектов: /contacts?contact=12, /contacts?company=5
   useOpenParam<Contact>("contact", (id) => `/api/contacts/${id}`, setOpenContact, canRead);
-  useOpenParam<Company>("company", (id) => `/api/companies/${id}`, (c) => { setTab("companies"); setOpenCompany(c); }, canRead);
+  // /contacts?company=5 (ссылки из связей, превью записей) — открывает карточку контрагента
+  const companyParam = sp.get("company");
+  useEffect(() => {
+    if (canRead && companyParam && /^\d+$/.test(companyParam)) nav(`/contacts/companies/${companyParam}`, { replace: true });
+  }, [companyParam, canRead, nav]);
 
   if (!canRead) {
     return (
@@ -110,10 +106,10 @@ export default function Contacts() {
 
       <Tabs label="Разделы контактов" value={tab} onChange={setTab} items={TABS} />
 
-      <SearchInput value={q} onChange={setQ} placeholder="Поиск" />
+      {tab !== "companies" && <SearchInput value={q} onChange={setQ} placeholder="Поиск" />}
 
       {tab === "companies" ? (
-        <CompaniesList q={q} onEdit={setOpenCompany} />
+        <CompaniesList q={q} setQ={setQ} onEdit={setOpenCompany} />
       ) : (
         <ContactsList q={q} scope={tab === "mine" ? "mine" : "all"} onEdit={setOpenContact} />
       )}
@@ -128,6 +124,9 @@ export default function Contacts() {
         <CompanyModal
           initial={openCompany === "new" ? null : openCompany}
           onClose={() => setOpenCompany(null)}
+          onSaved={(c) => {
+            if (openCompany === "new") nav(`/contacts/companies/${c.id}`);
+          }}
         />
       )}
     </div>
@@ -279,20 +278,35 @@ function ContactsList({
 // Companies list
 // ============================================================================
 
-function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void }) {
+function CompaniesList({ q, setQ, onEdit }: { q: string; setQ: (v: string) => void; onEdit: (c: Company) => void }) {
   const { can } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const nav = useNavigate();
+  const { data: users } = useTeamMembers();
 
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
-  useEffect(() => { setPage(1); }, [q, perPage]);
+  const [type, setType] = useState("");
+  const [status, setStatus] = useState("");
+  const [responsible, setResponsible] = useState("");
+  useEffect(() => { setPage(1); }, [q, perPage, type, status, responsible]);
+  const filtered = !!(q || type || status || responsible);
 
   const { data, isPending } = useQuery({
-    queryKey: ["companies", q, page, perPage],
+    queryKey: ["companies", q, page, perPage, type, status, responsible],
     queryFn: async () =>
-      (await api.get<Page<Company>>("/api/companies", { params: { q: q || undefined, per_page: perPage, page } })).data,
+      (await api.get<Page<Company>>("/api/companies", {
+        params: {
+          q: q || undefined,
+          type: type || undefined,
+          status: status || undefined,
+          responsible_user_id: responsible || undefined,
+          per_page: perPage,
+          page,
+        },
+      })).data,
   });
   const items = data?.items;
   const total = data?.total ?? 0;
@@ -310,45 +324,93 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
   const canDelete = can("contacts.delete");
   const canUpdate = can("contacts.update");
 
+  const toolbar = (
+    <Toolbar>
+      <SearchInput value={q} onChange={setQ} placeholder="Название, отрасль, БИН или рег. номер" />
+      <FilterSelect label="Тип" value={type} onChange={setType}>
+        <option value="">Все типы</option>
+        {COMPANY_TYPES.map((t) => (
+          <option key={t.key} value={t.key}>{t.label}</option>
+        ))}
+      </FilterSelect>
+      <FilterSelect label="Статус" value={status} onChange={setStatus}>
+        <option value="">Все статусы</option>
+        {COMPANY_STATUSES.map((s) => (
+          <option key={s.key} value={s.key}>{s.label}</option>
+        ))}
+      </FilterSelect>
+      <FilterSelect label="Ответственный" value={responsible} onChange={setResponsible}>
+        <option value="">Все ответственные</option>
+        {users?.map((u) => (
+          <option key={u.id} value={String(u.id)}>{u.name}</option>
+        ))}
+      </FilterSelect>
+      {filtered && (
+        <Button variant="ghost" size="sm" onClick={() => { setQ(""); setType(""); setStatus(""); setResponsible(""); }}>
+          Сбросить
+        </Button>
+      )}
+    </Toolbar>
+  );
+
   if (isPending) {
     return (
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <SkeletonCard key={i} />
-        ))}
+      <div className="space-y-3">
+        {toolbar}
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!items || items.length === 0) {
     return (
-      <EmptyState
-        icon={<Building2 size={32} />}
-        title={q ? "По запросу ничего не найдено" : "Компаний пока нет"}
-        description={q ? "Попробуйте другой запрос" : "Клиенты, поставщики и подрядчики с БИН. Список можно загрузить из Excel или выгрузки 1С."}
-        help={q ? undefined : "contacts"}
-      />
+      <div className="space-y-3">
+        {toolbar}
+        <EmptyState
+          icon={<Building2 size={32} />}
+          title={filtered ? "По фильтру ничего не найдено" : "Компаний пока нет"}
+          description={filtered ? "Измените запрос или сбросьте фильтры" : "Клиенты, поставщики, подрядчики, банки и госорганы с БИН. Список можно загрузить из Excel или выгрузки 1С."}
+          help={filtered ? undefined : "contacts"}
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-3">
+    {toolbar}
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
       {items.map((c) => (
-        <div key={c.id} className="card-interactive group flex flex-col gap-2 p-4">
+        <div
+          key={c.id}
+          className="card-interactive group flex cursor-pointer flex-col gap-2 p-4"
+          onClick={() => nav(`/contacts/companies/${c.id}`)}
+        >
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
                 <Building2 size={20} />
               </div>
               <div className="min-w-0">
-                <div className="truncate font-semibold">{c.name}</div>
-                {c.industry && (
-                  <div className="truncate text-xs text-neutral-500">{c.industry}</div>
+                <Link
+                  to={`/contacts/companies/${c.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="block truncate font-semibold hover:text-brand-700 dark:hover:text-brand-300"
+                >
+                  {c.name}
+                </Link>
+                {(c.industry || c.tax_id || c.registration_number) && (
+                  <div className="truncate text-xs text-neutral-500">
+                    {[c.industry, c.tax_id ? `БИН ${c.tax_id}` : c.registration_number].filter(Boolean).join(" · ")}
+                  </div>
                 )}
               </div>
             </div>
-            <div className="flex opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="flex opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
               {canUpdate && (
                 <Button variant="ghost" size="icon" onClick={() => onEdit(c)} title="Редактировать">
                   <Pencil size={14} />
@@ -375,7 +437,11 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
               )}
             </div>
           </div>
-          <div className="space-y-0.5 text-sm">
+          <div className="flex flex-wrap gap-1">
+            <CompanyStatusBadge status={c.status} />
+            <CompanyTypeBadges types={c.types} />
+          </div>
+          <div className="space-y-0.5 text-sm" onClick={(e) => e.stopPropagation()}>
             {c.website && (
               <a href={c.website.startsWith("http") ? c.website : `https://${c.website}`} target="_blank" rel="noreferrer" className="block truncate text-brand-700 hover:underline dark:text-brand-300">
                 {c.website}
@@ -392,7 +458,15 @@ function CompaniesList({ q, onEdit }: { q: string; onEdit: (c: Company) => void 
               </a>
             )}
           </div>
-          <div className="mt-auto text-xs text-neutral-500">{c.contacts_count} контактов</div>
+          <div className="mt-auto flex items-center justify-between gap-2 text-xs text-neutral-500">
+            <span>{c.contacts_count} контактов</span>
+            {c.responsible && (
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <Avatar name={c.responsible.name} url={c.responsible.avatar_url} size={18} />
+                <span className="truncate">{c.responsible.name}</span>
+              </span>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -490,93 +564,6 @@ function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: 
               </option>
             ))}
           </select>
-        </FormField>
-        <FormField label="Заметка" error={errors.note?.message}>
-          <textarea className="input min-h-[80px]" {...register("note")} />
-        </FormField>
-        <FormError msg={serverError} />
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose}>Отмена</Button>
-          <Button type="submit" variant="primary" isLoading={isSubmitting}>
-            {initial ? "Сохранить" : "Создать"}
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function CompanyModal({ initial, onClose }: { initial: Company | null; onClose: () => void }) {
-  const qc = useQueryClient();
-  const [serverError, setServerError] = useState<string | null>(null);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<CompanyForm>({
-    resolver: zodResolver(companySchema),
-    defaultValues: {
-      name: initial?.name || "",
-      industry: initial?.industry || "",
-      website: initial?.website || "",
-      email: initial?.email || "",
-      phone: initial?.phone || "",
-      tax_id: initial?.tax_id || "",
-      address: initial?.address || "",
-      note: initial?.note || "",
-    },
-  });
-
-  const onSubmit = handleSubmit(async (data) => {
-    setServerError(null);
-    const body = {
-      name: data.name,
-      industry: data.industry || null,
-      website: data.website || null,
-      email: data.email || null,
-      phone: data.phone || null,
-      tax_id: data.tax_id || null,
-      address: data.address || null,
-      note: data.note || null,
-    };
-    try {
-      if (initial) await api.patch(`/api/companies/${initial.id}`, body);
-      else await api.post(`/api/companies`, body);
-      qc.invalidateQueries({ queryKey: ["companies"] });
-      onClose();
-    } catch (e) {
-      setServerError(extractApiError(e).message);
-    }
-  });
-
-  return (
-    <Modal open onClose={onClose} title={initial ? "Редактировать компанию" : "Новая компания"} size="md">
-      <form onSubmit={onSubmit} className="space-y-3" noValidate>
-        <FormField label="Название" required error={errors.name?.message}>
-          <input className="input" autoFocus {...register("name")} />
-        </FormField>
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Отрасль" error={errors.industry?.message}>
-            <input className="input" {...register("industry")} />
-          </FormField>
-          <FormField label="Сайт" error={errors.website?.message}>
-            <input className="input" placeholder="Адрес сайта" {...register("website")} />
-          </FormField>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Email" error={errors.email?.message}>
-            <input className="input" type="email" {...register("email")} />
-          </FormField>
-          <FormField label="Телефон" error={errors.phone?.message}>
-            <input className="input" {...register("phone")} />
-          </FormField>
-        </div>
-        <FormField label="БИН / Tax ID" error={errors.tax_id?.message}>
-          <input className="input" {...register("tax_id")} />
-        </FormField>
-        <FormField label="Адрес" error={errors.address?.message}>
-          <input className="input" {...register("address")} />
         </FormField>
         <FormField label="Заметка" error={errors.note?.message}>
           <textarea className="input min-h-[80px]" {...register("note")} />

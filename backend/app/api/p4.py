@@ -39,6 +39,7 @@ from ..models import (
     Contact, Company, User, TotpBackupCode,
 )
 from ..schemas.common import Message
+from ..schemas.legal_entity import LegalEntityBrief
 from .deps import TenantContext, get_current_context, log_action, require
 
 
@@ -406,6 +407,12 @@ def create_folder(payload: FolderCreate, ctx: TenantContext = Depends(require("f
     return row
 
 
+class DocCompanyBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
 class DocOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -419,27 +426,81 @@ class DocOut(BaseModel):
     created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    legal_entity_id: Optional[int] = None
+    legal_entity: Optional[LegalEntityBrief] = None
+    company_id: Optional[int] = None
+    company: Optional[DocCompanyBrief] = None
 
 
 @router.get("/api/documents", response_model=list[DocOut])
-def list_documents(folder_id: Optional[int] = None, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def list_documents(
+    folder_id: Optional[int] = None,
+    company_id: Optional[int] = None,
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
     q = db.query(Document).filter(Document.tenant_id == ctx.tenant.id)
-    if folder_id is not None:
+    if company_id is not None:
+        # Документы контрагента — из всех папок
+        q = q.filter(Document.company_id == company_id)
+    elif folder_id is not None:
         q = q.filter(Document.folder_id == folder_id)
     else:
         q = q.filter(Document.folder_id.is_(None))
     return q.order_by(Document.updated_at.desc()).limit(500).all()
 
 
+class DocPatch(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=300)
+    folder_id: Optional[int] = None
+    legal_entity_id: Optional[int] = None
+    company_id: Optional[int] = None  # 0 — отвязать от контрагента
+
+
+@router.patch("/api/documents/{did}", response_model=DocOut)
+def update_document(did: int, payload: DocPatch, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    row = db.get(Document, did)
+    if not row or row.tenant_id != ctx.tenant.id:
+        raise HTTPException(404, "Документ не найден")
+    _require_doc_manager(ctx, row)
+    from ..core.legal_entities import resolve_legal_entity_id
+    from ..core.tenant_refs import ensure_owned
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("name") is not None:
+        name = data["name"].strip()
+        if not name:
+            raise HTTPException(400, "Укажите название документа")
+        row.name = name
+    if "folder_id" in data:
+        ensure_owned(db, DocumentFolder, data["folder_id"], ctx.tenant.id, "Папка")
+        row.folder_id = data["folder_id"] or None
+    if data.get("legal_entity_id") is not None:
+        row.legal_entity_id = resolve_legal_entity_id(db, ctx.tenant.id, data["legal_entity_id"], current_id=row.legal_entity_id)
+    if "company_id" in data:
+        ensure_owned(db, Company, data["company_id"], ctx.tenant.id, "Контрагент")
+        row.company_id = data["company_id"] or None
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="document", entity_id=row.id, detail=row.name)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 @router.post("/api/documents/upload", response_model=DocOut, status_code=201)
 async def upload_document(
     file: UploadFile = File(...),
     folder_id: Optional[int] = Form(None),
+    legal_entity_id: Optional[int] = Form(None),
+    company_id: Optional[int] = Form(None),
     ctx: TenantContext = Depends(require("files.upload")),
     db: Session = Depends(get_db),
 ):
     from ..config import settings
+    from ..core.legal_entities import resolve_legal_entity_id
+    from ..core.tenant_refs import ensure_owned
     import os
+    ensure_owned(db, DocumentFolder, folder_id, ctx.tenant.id, "Папка")
+    ensure_owned(db, Company, company_id, ctx.tenant.id, "Контрагент")
+    le_id = resolve_legal_entity_id(db, ctx.tenant.id, legal_entity_id)
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"tenant_{ctx.tenant.id}", "documents")
     os.makedirs(upload_dir, exist_ok=True)
     safe_name = re.sub(r"[^\w.\-]", "_", file.filename or "unnamed")
@@ -458,6 +519,8 @@ async def upload_document(
         file_path=path,
         version_count=1,
         created_by=ctx.user.id,
+        legal_entity_id=le_id,
+        company_id=company_id or None,
     )
     db.add(row)
     db.flush()

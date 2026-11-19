@@ -9,6 +9,8 @@ from ..database import get_db
 from ..models import Company, Contact, Deal, DealStage, DealStatus
 from ..models.deal import STAGE_PROBABILITY
 from ..core.tenant_refs import ensure_member, ensure_owned
+from ..core.legal_entities import resolve_legal_entity_id
+from ..schemas.legal_entity import LegalEntityBrief
 from ..schemas.common import Message, Page, PageParams, page_params, paginate
 from .deps import TenantContext, require, log_action
 
@@ -31,6 +33,12 @@ class RelBrief(BaseModel):
     last_name: Optional[str] = None
 
 
+class DealCompanyBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
 class DealOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -47,6 +55,9 @@ class DealOut(BaseModel):
     owner: Optional[UserBrief] = None
     contact_id: Optional[int] = None
     company_id: Optional[int] = None
+    company: Optional["DealCompanyBrief"] = None
+    legal_entity_id: Optional[int] = None
+    legal_entity: Optional[LegalEntityBrief] = None
 
 
 class DealCreate(BaseModel):
@@ -60,6 +71,7 @@ class DealCreate(BaseModel):
     company_id: Optional[int] = None
     owner_id: Optional[int] = None
     note: Optional[str] = None
+    legal_entity_id: Optional[int] = None  # пусто — юрлицо по умолчанию
 
 
 class DealUpdate(BaseModel):
@@ -74,6 +86,7 @@ class DealUpdate(BaseModel):
     owner_id: Optional[int] = None
     note: Optional[str] = None
     order_index: Optional[int] = None
+    legal_entity_id: Optional[int] = None
 
 
 class ForecastOut(BaseModel):
@@ -93,6 +106,8 @@ def list_deals(
     stage: Optional[DealStage] = None,
     owner_id: Optional[int] = None,
     status: Optional[DealStatus] = None,
+    company_id: Optional[int] = None,
+    legal_entity_id: Optional[int] = None,
     pagination: PageParams = Depends(page_params),
     ctx: TenantContext = Depends(require("deals.view")),
     db: Session = Depends(get_db),
@@ -104,6 +119,10 @@ def list_deals(
         q = q.filter(Deal.owner_id == owner_id)
     if status is not None:
         q = q.filter(Deal.status == status.value)
+    if company_id is not None:
+        q = q.filter(Deal.company_id == company_id)
+    if legal_entity_id is not None:
+        q = q.filter(Deal.legal_entity_id == legal_entity_id)
     q = q.order_by(Deal.order_index.asc(), Deal.created_at.desc())
     return paginate(q, pagination)
 
@@ -168,10 +187,11 @@ def create_deal(
         status=status_v,
         probability=prob,
         close_date=payload.close_date,
-        contact_id=payload.contact_id,
-        company_id=payload.company_id,
+        contact_id=payload.contact_id or None,
+        company_id=payload.company_id or None,
         owner_id=payload.owner_id or ctx.user.id,
         note=payload.note,
+        legal_entity_id=resolve_legal_entity_id(db, ctx.tenant.id, payload.legal_entity_id),
     )
     db.add(row)
     db.flush()
@@ -205,9 +225,14 @@ def update_deal(
     ensure_owned(db, Company, payload.company_id, ctx.tenant.id, "Компания")
     ensure_member(db, ctx.tenant.id, payload.owner_id, "Ответственный")
 
+    if payload.legal_entity_id is not None:
+        row.legal_entity_id = resolve_legal_entity_id(db, ctx.tenant.id, payload.legal_entity_id, current_id=row.legal_entity_id)
+
     for f in ("title", "amount_cents", "currency", "close_date", "contact_id", "company_id", "owner_id", "note", "order_index"):
         v = getattr(payload, f)
         if v is not None:
+            if f in ("contact_id", "company_id") and v == 0:
+                v = None  # 0 — снять связь
             setattr(row, f, v)
 
     if changed_stage:

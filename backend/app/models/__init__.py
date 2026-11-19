@@ -73,6 +73,7 @@ from .channel import (
     Channel, ChannelMember, Message, MessageAttachment, MessageReaction,
     Poll, PollOption, PollVote,
 )
+from .legal_entity import LegalEntity
 
 __all__ = [
     "Tenant",
@@ -225,4 +226,5 @@ __all__ = [
     "Poll",
     "PollOption",
     "PollVote",
+    "LegalEntity",
 ]

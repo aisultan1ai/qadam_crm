@@ -19,6 +19,7 @@ import IntegrationsPage from "./Integrations";
 import ApiTokens from "./ApiTokens";
 import Directories from "./Directories";
 import TaskStatuses from "./TaskStatuses";
+import LegalEntities from "./LegalEntities";
 import { SETTINGS_TABS, settingsTabVisible } from "./settings/nav";
 import { fetchAllUsers } from "@/lib/users";
 
@@ -71,6 +72,7 @@ export default function Settings() {
         <Route path="api" element={can("settings.system") || isOwner ? <ApiTokens /> : <Forbid />} />
         <Route path="task-statuses" element={can("settings.dictionaries") || isOwner ? <TaskStatuses /> : <Forbid />} />
         <Route path="directories" element={<Directories />} />
+        <Route path="legal-entities" element={<LegalEntities />} />
       </Routes>
     </SettingsRouteLayout>
   );

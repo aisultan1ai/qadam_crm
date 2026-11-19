@@ -107,7 +107,7 @@ def _query(db: Session, user: User, tenant_id: int, target: str):
     if target == "company":
         q = db.query(Company).filter(Company.tenant_id == tenant_id)
         def to_ref(c: Company) -> Ref:
-            return Ref(c.id, c.name, f"БИН {c.tax_id}" if c.tax_id else (c.email or c.phone), f"/contacts?company={c.id}",
+            return Ref(c.id, c.name, f"БИН {c.tax_id}" if c.tax_id else (c.email or c.phone), f"/contacts/companies/{c.id}",
                        [(k, v) for k, v in (("БИН/ИИН", c.tax_id), ("Телефон", c.phone), ("Email", c.email)) if v])
         search = lambda s: or_(Company.name.ilike(s), Company.email.ilike(s), Company.tax_id.ilike(s))
         return q, to_ref, search, Company

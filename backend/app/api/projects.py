@@ -8,6 +8,7 @@ from ..models import Project, User, Task, TenantMembership
 from ..models.project import project_members
 from ..core.events import fire_event, serialize_project
 from ..core.plans import check_project_limit
+from ..core.legal_entities import resolve_legal_entity_id
 from ..schemas.project import ProjectOut, ProjectCreate, ProjectUpdate
 from ..schemas.common import Message, Page, PageParams, page_params
 from .deps import TenantContext, require, log_action
@@ -138,6 +139,7 @@ def create_project(payload: ProjectCreate, ctx: TenantContext = Depends(require(
         color=payload.color,
         start_date=payload.start_date,
         owner_id=owner_id,
+        legal_entity_id=resolve_legal_entity_id(db, ctx.tenant.id, payload.legal_entity_id),
     )
     if payload.member_ids:
         allowed_ids = _tenant_member_ids(db, ctx.tenant.id, payload.member_ids)
@@ -235,6 +237,8 @@ def update_project(project_id: int, payload: ProjectUpdate, ctx: TenantContext =
         project.members = db.query(User).filter(User.id.in_(allowed_ids)).all() if allowed_ids else []
     if payload.is_archived is not None:
         project.is_archived = payload.is_archived
+    if payload.legal_entity_id is not None:
+        project.legal_entity_id = resolve_legal_entity_id(db, ctx.tenant.id, payload.legal_entity_id, current_id=project.legal_entity_id)
     _sync_project_channel_members(db, project)
     log_action(db, tenant_id=ctx.tenant.id, user_id=actor.id, action="update", entity="project", entity_id=project.id)
     db.commit()

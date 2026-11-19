@@ -17,6 +17,8 @@ import type { Page } from "@/types";
 import { FilterSelect, PageHeader, SearchInput, Segmented, Tabs, Toolbar } from "@/components/page";
 import { useNewParam } from "@/hooks/useNewParam";
 import { useOpenParam } from "@/hooks/useOpenParam";
+import { legalEntityOptions, useLegalEntities, type LegalEntityBrief } from "@/hooks/useLegalEntities";
+import { RecordPicker } from "@/components/RecordPicker";
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
 
 type DealStage = "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
@@ -35,6 +37,9 @@ type Deal = {
   owner?: UserBrief | null;
   contact_id?: number | null;
   company_id?: number | null;
+  company?: { id: number; name: string } | null;
+  legal_entity_id?: number | null;
+  legal_entity?: LegalEntityBrief | null;
   order_index: number;
   created_at: string;
 };
@@ -147,6 +152,8 @@ export default function DealsPage() {
   const [statusTab, setStatusTab] = useState<"all" | "open" | "won" | "lost">("all");
   const [q, setQ] = useState("");
   const [owner, setOwner] = useState("");
+  const [legal, setLegal] = useState("");
+  const le = useLegalEntities();
 
   const owners = useMemo(() => {
     const m = new Map<number, string>();
@@ -172,10 +179,11 @@ export default function DealsPage() {
       if (statusTab === "won" && d.stage !== "won") return false;
       if (statusTab === "lost" && d.stage !== "lost") return false;
       if (owner && String(d.owner?.id ?? "") !== owner) return false;
+      if (legal && le.multi && String(d.legal_entity_id ?? "") !== legal) return false;
       if (needle && !d.title.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [deals, statusTab, owner, q]);
+  }, [deals, statusTab, owner, q, legal, le.multi]);
 
   const grouped = useMemo(() => {
     const map: Record<DealStage, Deal[]> = {
@@ -267,8 +275,19 @@ export default function DealsPage() {
             </option>
           ))}
         </FilterSelect>
-        {(q || owner) && (
-          <Button variant="ghost" size="sm" onClick={() => { setQ(""); setOwner(""); }}>
+        {le.multi && (
+          <FilterSelect label="Юрлицо" value={legal} onChange={setLegal}>
+            <option value="">Все юрлица</option>
+            {le.all.map((e) => (
+              <option key={e.id} value={String(e.id)}>
+                {e.short_name}
+                {e.is_active ? "" : " (отключено)"}
+              </option>
+            ))}
+          </FilterSelect>
+        )}
+        {(q || owner || legal) && (
+          <Button variant="ghost" size="sm" onClick={() => { setQ(""); setOwner(""); setLegal(""); }}>
             Сбросить
           </Button>
         )}
@@ -341,6 +360,12 @@ export default function DealsPage() {
                           <span className="font-semibold text-brand-700 dark:text-brand-300 tabular-nums">{fmtMoney(d.amount_cents, d.currency)}</span>
                           <span className="text-neutral-500">{d.probability}%</span>
                         </div>
+                        {(d.company || (le.multi && d.legal_entity)) && (
+                          <div className="mt-1 space-y-0.5 text-xs text-neutral-500">
+                            {d.company && <div className="truncate">{d.company.name}</div>}
+                            {le.multi && d.legal_entity && <div className="truncate">Юрлицо: {d.legal_entity.short_name}</div>}
+                          </div>
+                        )}
                         <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
                           {d.owner && <Avatar name={d.owner.name} url={d.owner.avatar_url} size={18} />}
                           {d.close_date && <span className="tabular-nums">{new Date(d.close_date).toLocaleDateString("ru-RU")}</span>}
@@ -377,6 +402,7 @@ export default function DealsPage() {
                 <th className="table-head-cell">Сделка</th>
                 <th className="table-head-cell">Этап</th>
                 <th className="table-head-cell">Ответственный</th>
+                {le.multi && <th className="table-head-cell">Юрлицо</th>}
                 <th className="table-head-cell text-right">Сумма</th>
                 <th className="table-head-cell text-right">Вероятность</th>
                 <th className="table-head-cell">Срок</th>
@@ -413,6 +439,9 @@ export default function DealsPage() {
                         <span className="text-zinc-400">—</span>
                       )}
                     </td>
+                    {le.multi && (
+                      <td className="table-cell text-zinc-600 dark:text-zinc-300">{d.legal_entity?.short_name ?? "—"}</td>
+                    )}
                     <td className="table-cell text-right font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
                       {fmtMoney(d.amount_cents, d.currency)}
                     </td>
@@ -478,7 +507,12 @@ type DealModalForm = z.infer<typeof dealModalSchema>;
 
 function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => void }) {
   const qc = useQueryClient();
+  const { can } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
+  const le = useLegalEntities();
+  const [legalId, setLegalId] = useState<number | null>(initial?.legal_entity_id ?? null);
+  const [companyId, setCompanyId] = useState<number | null>(initial?.company_id ?? null);
+  const legalValue = legalId ?? le.defaultEntity?.id ?? "";
 
   const {
     register,
@@ -510,6 +544,10 @@ function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => 
       probability: data.probability,
       close_date: data.close_date || null,
       note: data.note || null,
+      // Юрлицо: пусто — сервер возьмёт юрлицо по умолчанию
+      ...(le.multi && legalId ? { legal_entity_id: legalId } : {}),
+      // Контрагент: 0 — отвязать (при редактировании)
+      ...(companyId ? { company_id: companyId } : initial?.company_id ? { company_id: 0 } : {}),
     };
     try {
       if (initial) await api.patch(`/api/deals/${initial.id}`, body);
@@ -569,6 +607,33 @@ function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => 
             />
           </FormField>
         </div>
+        {can("contacts.view") && (
+          <FormField label="Контрагент">
+            <RecordPicker
+              target="company"
+              value={companyId}
+              known={initial?.company ? [{ id: initial.company.id, label: initial.company.name }] : []}
+              onChange={(v) => setCompanyId(typeof v === "number" ? v : null)}
+              placeholder="Найдите компанию по названию"
+            />
+          </FormField>
+        )}
+        {le.multi && (
+          <FormField label="Юрлицо">
+            <select
+              className="input"
+              value={String(legalValue)}
+              onChange={(e) => setLegalId(e.target.value ? Number(e.target.value) : null)}
+            >
+              {legalEntityOptions(le.all, initial?.legal_entity_id).map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.short_name}
+                  {e.is_default ? " — по умолчанию" : ""}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        )}
         <FormField label="Дата закрытия" error={errors.close_date?.message}>
           <input className="input" type="date" {...register("close_date")} />
         </FormField>

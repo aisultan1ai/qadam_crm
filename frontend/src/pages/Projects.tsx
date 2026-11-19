@@ -18,6 +18,7 @@ import { projectSchema, type ProjectForm } from "@/lib/validation";
 import { SearchInput } from "@/components/page";
 import { useNewParam } from "@/hooks/useNewParam";
 import { fetchAllUsers } from "@/lib/users";
+import { useLegalEntities } from "@/hooks/useLegalEntities";
 type ProjectScope = "all" | "participating" | "made_by_me" | "audited_by_me";
 
 // Область задаёт панель модуля (?scope=…); заголовок страницы — по ней.
@@ -36,6 +37,7 @@ export default function Projects() {
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [openNew, setOpenNew] = useState(false);
+  const le = useLegalEntities();
   useNewParam(() => setOpenNew(true), can("projects.create"));
   const [sp] = useSearchParams();
   const nav = useNavigate();
@@ -144,6 +146,9 @@ export default function Projects() {
                             {p.name}
                           </Link>
                           {p.description && <div className="truncate text-[12px] text-zinc-500">{p.description}</div>}
+                          {le.multi && p.legal_entity && (
+                            <div className="truncate text-[12px] text-zinc-500">Юрлицо: {p.legal_entity.short_name}</div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -252,6 +257,8 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
     defaultValues: { name: "", description: "", color: "#2A52C4", member_ids: [] },
   });
   const memberIds = watch("member_ids");
+  const le = useLegalEntities();
+  const [legalId, setLegalId] = useState<number | null>(null);
 
   const { data: users } = useQuery({
     queryKey: ["users-brief"],
@@ -265,6 +272,7 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
         description: data.description || null,
         color: data.color,
         member_ids: data.member_ids,
+        ...(le.multi && legalId ? { legal_entity_id: legalId } : {}),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -303,6 +311,23 @@ function ProjectFormModal({ onClose }: { onClose: () => void }) {
             <FieldError msg={errors.color?.message} />
           </label>
         </div>
+        {le.multi && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Юрлицо</span>
+            <select
+              className="input"
+              value={String(legalId ?? le.defaultEntity?.id ?? "")}
+              onChange={(e) => setLegalId(e.target.value ? Number(e.target.value) : null)}
+            >
+              {le.active.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.short_name}
+                  {e.is_default ? " — по умолчанию" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div>
           <span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Участники</span>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">

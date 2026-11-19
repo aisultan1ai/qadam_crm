@@ -65,6 +65,8 @@ export type Project = {
   owner?: UserBrief | null;
   members: UserBrief[];
   tasks_count: number;
+  legal_entity_id?: number | null;
+  legal_entity?: { id: number; short_name: string } | null;
 };
 
 export type TaskStatus = "new" | "in_progress" | "review" | "done" | "cancelled";
