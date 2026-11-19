@@ -430,17 +430,31 @@ class DocOut(BaseModel):
     legal_entity: Optional[LegalEntityBrief] = None
     company_id: Optional[int] = None
     company: Optional[DocCompanyBrief] = None
+    deal_id: Optional[int] = None
+    doc_kind: Optional[str] = None
+
+
+def _check_doc_kind(kind: Optional[str]) -> Optional[str]:
+    from ..models.deal import DEAL_DOC_KINDS
+    kind = (kind or "").strip() or None
+    if kind is not None and kind not in DEAL_DOC_KINDS:
+        raise HTTPException(400, "Неизвестный вид документа")
+    return kind
 
 
 @router.get("/api/documents", response_model=list[DocOut])
 def list_documents(
     folder_id: Optional[int] = None,
     company_id: Optional[int] = None,
+    deal_id: Optional[int] = None,
     ctx: TenantContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
     q = db.query(Document).filter(Document.tenant_id == ctx.tenant.id)
-    if company_id is not None:
+    if deal_id is not None:
+        # Документы сделки — из всех папок
+        q = q.filter(Document.deal_id == deal_id)
+    elif company_id is not None:
         # Документы контрагента — из всех папок
         q = q.filter(Document.company_id == company_id)
     elif folder_id is not None:
@@ -455,6 +469,8 @@ class DocPatch(BaseModel):
     folder_id: Optional[int] = None
     legal_entity_id: Optional[int] = None
     company_id: Optional[int] = None  # 0 — отвязать от контрагента
+    deal_id: Optional[int] = None  # 0 — отвязать от сделки
+    doc_kind: Optional[str] = None  # nda | loi | mou | term_sheet | agreement | other; "" — снять
 
 
 @router.patch("/api/documents/{did}", response_model=DocOut)
@@ -479,6 +495,12 @@ def update_document(did: int, payload: DocPatch, ctx: TenantContext = Depends(ge
     if "company_id" in data:
         ensure_owned(db, Company, data["company_id"], ctx.tenant.id, "Контрагент")
         row.company_id = data["company_id"] or None
+    if "deal_id" in data:
+        from ..models import Deal
+        ensure_owned(db, Deal, data["deal_id"], ctx.tenant.id, "Сделка")
+        row.deal_id = data["deal_id"] or None
+    if "doc_kind" in data:
+        row.doc_kind = _check_doc_kind(data["doc_kind"])
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="document", entity_id=row.id, detail=row.name)
     db.commit()
     db.refresh(row)
@@ -491,16 +513,28 @@ async def upload_document(
     folder_id: Optional[int] = Form(None),
     legal_entity_id: Optional[int] = Form(None),
     company_id: Optional[int] = Form(None),
+    deal_id: Optional[int] = Form(None),
+    doc_kind: Optional[str] = Form(None),
     ctx: TenantContext = Depends(require("files.upload")),
     db: Session = Depends(get_db),
 ):
     from ..config import settings
     from ..core.legal_entities import resolve_legal_entity_id
     from ..core.tenant_refs import ensure_owned
+    from ..models import Deal
     import os
     ensure_owned(db, DocumentFolder, folder_id, ctx.tenant.id, "Папка")
     ensure_owned(db, Company, company_id, ctx.tenant.id, "Контрагент")
-    le_id = resolve_legal_entity_id(db, ctx.tenant.id, legal_entity_id)
+    ensure_owned(db, Deal, deal_id, ctx.tenant.id, "Сделка")
+    doc_kind = _check_doc_kind(doc_kind)
+    if deal_id:
+        # Документ сделки по умолчанию наследует её контрагента и юрлицо
+        deal = db.get(Deal, deal_id)
+        if not company_id:
+            company_id = deal.company_id
+        if not legal_entity_id:
+            legal_entity_id = deal.legal_entity_id
+    le_id = resolve_legal_entity_id(db, ctx.tenant.id, legal_entity_id, current_id=deal.legal_entity_id if deal_id else None)
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"tenant_{ctx.tenant.id}", "documents")
     os.makedirs(upload_dir, exist_ok=True)
     safe_name = re.sub(r"[^\w.\-]", "_", file.filename or "unnamed")
@@ -521,6 +555,8 @@ async def upload_document(
         created_by=ctx.user.id,
         legal_entity_id=le_id,
         company_id=company_id or None,
+        deal_id=deal_id or None,
+        doc_kind=doc_kind,
     )
     db.add(row)
     db.flush()

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
 import { DatePicker } from "@/components/DatePicker";
@@ -20,6 +20,8 @@ import { useNewParam } from "@/hooks/useNewParam";
 import { useOpenParam } from "@/hooks/useOpenParam";
 import { legalEntityOptions, useLegalEntities, type LegalEntityBrief } from "@/hooks/useLegalEntities";
 import { RecordPicker } from "@/components/RecordPicker";
+import { useOfftakeSettings } from "@/hooks/useOfftake";
+import { OfftakeDealModal, OfftakeView, type OfftakeDeal } from "./deals/Offtake";
 type UserBrief = { id: number; name: string; avatar_url?: string | null };
 
 type DealStage = "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
@@ -43,7 +45,11 @@ type Deal = {
   legal_entity?: LegalEntityBrief | null;
   order_index: number;
   created_at: string;
+  /** "sales" — обычная воронка, "offtake" — воронка offtake (если включена в настройках) */
+  pipeline?: string;
 };
+
+type Pipeline = "sales" | "offtake";
 
 type Forecast = {
   currency: string;
@@ -102,22 +108,30 @@ export default function DealsPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const [openDeal, setOpenDeal] = useState<Deal | "new" | null>(null);
+  const offtake = useOfftakeSettings();
+  const [pipelineView, setPipelineView] = useState<Pipeline>("sales");
+  const [newPipeline, setNewPipeline] = useState<Pipeline>("sales");
+  const isOfftake = offtake.enabled && pipelineView === "offtake";
+  const startNew = () => {
+    setNewPipeline(isOfftake ? "offtake" : "sales");
+    setOpenDeal("new");
+  };
 
   const canView = can("deals.view");
   const canCreate = can("deals.create");
-  useNewParam(() => setOpenDeal("new"), canCreate);
+  useNewParam(() => startNew(), canCreate);
   useOpenParam<Deal>("deal", (id) => `/api/deals/${id}`, setOpenDeal, canView);
   const canUpdate = can("deals.update");
   const canDelete = can("deals.delete");
 
   const { data: deals, isPending } = useQuery({
-    queryKey: ["deals"],
-    queryFn: async () => (await api.get<Page<Deal>>("/api/deals", { params: { per_page: 200 } })).data.items,
+    queryKey: ["deals", "sales"],
+    queryFn: async () => (await api.get<Page<Deal>>("/api/deals", { params: { per_page: 200, pipeline: "sales" } })).data.items,
     enabled: canView,
   });
   const { data: forecast } = useQuery({
     queryKey: ["deals-forecast"],
-    queryFn: async () => (await api.get<Forecast>("/api/deals/forecast")).data,
+    queryFn: async () => (await api.get<Forecast>("/api/deals/forecast", { params: { pipeline: "sales" } })).data,
     enabled: canView,
   });
 
@@ -125,12 +139,12 @@ export default function DealsPage() {
     mutationFn: ({ id, stage }: { id: number; stage: DealStage }) => api.patch(`/api/deals/${id}`, { stage }),
     onMutate: async ({ id, stage }) => {
       await qc.cancelQueries({ queryKey: ["deals"] });
-      const snap = qc.getQueryData<Deal[]>(["deals"]);
-      qc.setQueryData<Deal[]>(["deals"], (prev) => (prev || []).map((d) => (d.id === id ? { ...d, stage, probability: STAGE_PROBABILITY[stage] } : d)));
+      const snap = qc.getQueryData<Deal[]>(["deals", "sales"]);
+      qc.setQueryData<Deal[]>(["deals", "sales"], (prev) => (prev || []).map((d) => (d.id === id ? { ...d, stage, probability: STAGE_PROBABILITY[stage] } : d)));
       return { snap };
     },
     onError: (e, _v, ctx) => {
-      if (ctx?.snap) qc.setQueryData(["deals"], ctx.snap);
+      if (ctx?.snap) qc.setQueryData(["deals", "sales"], ctx.snap);
       toast.error("Не удалось перевести", extractApiError(e).message);
     },
     onSettled: () => {
@@ -225,13 +239,31 @@ export default function DealsPage() {
         eyebrow="CRM"
         title="Сделки"
         actions={
-          canCreate && (
-            <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>
-              Новая сделка
-            </Button>
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            {offtake.enabled && (
+              <Segmented
+                label="Воронка"
+                value={pipelineView}
+                onChange={setPipelineView}
+                items={[
+                  { key: "sales", label: "Продажи" },
+                  { key: "offtake", label: "Offtake" },
+                ]}
+              />
+            )}
+            {canCreate && (
+              <Button variant="primary" leftIcon={<Plus size={16} />} onClick={startNew}>
+                Новая сделка
+              </Button>
+            )}
+          </div>
         }
       />
+
+      {isOfftake ? (
+        <OfftakeView onOpen={(d) => setOpenDeal(d as unknown as Deal)} onCreate={startNew} />
+      ) : (
+      <>
 
       {forecast && (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-200 bg-zinc-200 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-800">
@@ -305,7 +337,7 @@ export default function DealsPage() {
             help={deals && deals.length > 0 ? undefined : "deals"}
             action={
               canCreate && !(deals && deals.length > 0) ? (
-                <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenDeal("new")}>
+                <Button variant="primary" leftIcon={<Plus size={16} />} onClick={startNew}>
                   Новая сделка
                 </Button>
               ) : undefined
@@ -472,12 +504,46 @@ export default function DealsPage() {
         </div>
       )}
 
-      {openDeal && (
-        <DealModal
-          initial={openDeal === "new" ? null : openDeal}
-          onClose={() => setOpenDeal(null)}
-        />
+      </>
       )}
+
+      {openDeal &&
+        (openDeal === "new" ? (
+          offtake.enabled && newPipeline === "offtake" ? (
+            <OfftakeDealModal
+              initial={null}
+              onClose={() => setOpenDeal(null)}
+              pipelineSwitch={<PipelineSwitch value={newPipeline} onChange={setNewPipeline} />}
+            />
+          ) : (
+            <DealModal
+              initial={null}
+              onClose={() => setOpenDeal(null)}
+              pipelineSwitch={offtake.enabled ? <PipelineSwitch value={newPipeline} onChange={setNewPipeline} /> : undefined}
+            />
+          )
+        ) : openDeal.pipeline === "offtake" ? (
+          <OfftakeDealModal initial={openDeal as unknown as OfftakeDeal} onClose={() => setOpenDeal(null)} />
+        ) : (
+          <DealModal initial={openDeal} onClose={() => setOpenDeal(null)} />
+        ))}
+    </div>
+  );
+}
+
+function PipelineSwitch({ value, onChange }: { value: Pipeline; onChange: (v: Pipeline) => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-sm font-medium">Воронка</span>
+      <Segmented
+        label="Воронка"
+        value={value}
+        onChange={onChange}
+        items={[
+          { key: "sales", label: "Продажи" },
+          { key: "offtake", label: "Offtake" },
+        ]}
+      />
     </div>
   );
 }
@@ -506,7 +572,7 @@ const dealModalSchema = z.object({
 });
 type DealModalForm = z.infer<typeof dealModalSchema>;
 
-function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => void }) {
+function DealModal({ initial, onClose, pipelineSwitch }: { initial: Deal | null; onClose: () => void; pipelineSwitch?: ReactNode }) {
   const qc = useQueryClient();
   const { can } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -565,6 +631,7 @@ function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => 
   return (
     <Modal open onClose={onClose} title={initial ? "Редактировать сделку" : "Новая сделка"} size="md">
       <form onSubmit={onSubmit} className="space-y-3" noValidate>
+        {pipelineSwitch}
         <FormField label="Название" required error={errors.title?.message}>
           <input className="input" autoFocus {...register("title")} />
         </FormField>

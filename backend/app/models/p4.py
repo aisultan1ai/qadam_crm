@@ -142,6 +142,10 @@ class Document(Base):
     company_id: Mapped[Optional[int]] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     company: Mapped[Optional["Company"]] = relationship("Company", foreign_keys=[company_id], lazy="joined")  # type: ignore  # noqa: F821
 
+    # Документ сделки и его вид: nda | loi | mou | term_sheet | agreement | other (миграция 0055)
+    deal_id: Mapped[Optional[int]] = mapped_column(ForeignKey("deals.id", ondelete="SET NULL"), nullable=True, index=True)
+    doc_kind: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
 
 class DocumentVersion(Base):
     __tablename__ = "document_versions"
