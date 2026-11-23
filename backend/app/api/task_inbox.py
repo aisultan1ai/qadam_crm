@@ -19,7 +19,7 @@ from ..database import get_db
 from ..config import settings
 from ..models import Task, Project, Comment
 from ..schemas.common import Message
-from .deps import TenantContext, get_current_context, log_action
+from .deps import TenantContext, get_current_context, require, log_action
 
 
 router = APIRouter(prefix="/api/inbox", tags=["task-inbox"])
@@ -124,7 +124,7 @@ def enable_task_inbox(task_id: int, ctx: TenantContext = Depends(get_current_con
 
 
 @router.post("/project/{project_id}/enable", response_model=InboxAddress)
-def enable_project_inbox(project_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+def enable_project_inbox(project_id: int, ctx: TenantContext = Depends(require("projects.update")), db: Session = Depends(get_db)):
     proj = db.get(Project, project_id)
     if not proj or proj.tenant_id != ctx.tenant.id:
         raise HTTPException(404, "Проект не найден")
@@ -138,7 +138,8 @@ def enable_project_inbox(project_id: int, ctx: TenantContext = Depends(get_curre
 @router.delete("/task/{task_id}/disable", response_model=Message)
 def disable_task_inbox(task_id: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
-    if not task or task.tenant_id != ctx.tenant.id:
+    from ..core.task_scope import can_view_task
+    if not task or task.tenant_id != ctx.tenant.id or not can_view_task(ctx.user, task, db):
         raise HTTPException(404, "Задача не найдена")
     task.inbox_token = None
     db.commit()

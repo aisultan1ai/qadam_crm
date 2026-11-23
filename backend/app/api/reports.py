@@ -294,7 +294,7 @@ def compute_report(
     # --- Deals metrics ---
     if metric in ("deals_amount", "deals_weighted", "deals_count"):
         rows: list[ReportRow] = []
-        base = db.query(Deal).filter(Deal.tenant_id == tenant_id)
+        base = db.query(Deal).filter(Deal.tenant_id == tenant_id, Deal.pipeline == "sales")
         base = _apply_date_range(base, Deal.created_at, from_date, to_date)
 
         if group_by == "stage":
@@ -305,7 +305,9 @@ def compute_report(
                     func.coalesce(func.sum(Deal.amount_cents), 0),
                     func.coalesce(func.sum(Deal.amount_cents * Deal.probability / 100), 0),
                 )
-                .filter(Deal.tenant_id == tenant_id)
+                # Только воронка «Продажи»: у offtake суммы в другой валюте (USD) и свой график объёмов —
+                # их сложение с тенге дало бы бессмысленный итог.
+                .filter(Deal.tenant_id == tenant_id, Deal.pipeline == "sales")
             )
             data = _apply_date_range(data, Deal.created_at, from_date, to_date)
             data = data.group_by(Deal.stage).order_by(Deal.stage)
@@ -326,7 +328,9 @@ def compute_report(
                     func.coalesce(func.sum(Deal.amount_cents * Deal.probability / 100), 0),
                 )
                 .join(Deal, Deal.owner_id == User.id)
-                .filter(Deal.tenant_id == tenant_id)
+                # Только воронка «Продажи»: у offtake суммы в другой валюте (USD) и свой график объёмов —
+                # их сложение с тенге дало бы бессмысленный итог.
+                .filter(Deal.tenant_id == tenant_id, Deal.pipeline == "sales")
             )
             data = _apply_date_range(data, Deal.created_at, from_date, to_date)
             data = data.group_by(User.id, User.name).order_by(func.sum(Deal.amount_cents).desc())
@@ -347,7 +351,9 @@ def compute_report(
                     func.coalesce(func.sum(Deal.amount_cents), 0),
                     func.coalesce(func.sum(Deal.amount_cents * Deal.probability / 100), 0),
                 )
-                .filter(Deal.tenant_id == tenant_id)
+                # Только воронка «Продажи»: у offtake суммы в другой валюте (USD) и свой график объёмов —
+                # их сложение с тенге дало бы бессмысленный итог.
+                .filter(Deal.tenant_id == tenant_id, Deal.pipeline == "sales")
             )
             data = _apply_date_range(data, Deal.created_at, from_date, to_date)
             data = data.group_by("period").order_by("period")
