@@ -8,7 +8,8 @@ import { api, extractApiError } from "@/api/client";
 import {
   FolderPlus, Folder, FileText, Upload, Trash2, Share2, Eye, Download, ChevronLeft, Pencil, History,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { DocumentCard } from "@/components/DocumentCard";
 import { useLegalEntities } from "@/hooks/useLegalEntities";
 import { DocumentMetaModal } from "@/components/DocumentMetaModal";
 import { EmptyState, Modal, FormError } from "@/components/ui";
@@ -37,6 +38,13 @@ type Doc = {
   legal_entity?: { id: number; short_name: string } | null;
   company_id?: number | null;
   company?: { id: number; name: string } | null;
+  doc_number?: string | null;
+  doc_date?: string | null;
+  doc_status?: string | null;
+};
+
+const DOC_STATUS_LABEL: Record<string, string> = {
+  draft: "Черновик", review: "На согласовании", approved: "Утверждён", signed: "Подписан", archived: "В архиве",
 };
 
 const folderSchema = z.object({
@@ -69,6 +77,17 @@ export default function DocumentsPage() {
   const le = useLegalEntities();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [editDoc, setEditDoc] = useState<Doc | null>(null);
+  // Карточка документа; /documents?doc=12 — открыть по ссылке (например, из записи Объектов)
+  const [sp, setSp] = useSearchParams();
+  const [cardId, setCardId] = useState<number | null>(() => (/^\d+$/.test(sp.get("doc") ?? "") ? Number(sp.get("doc")) : null));
+  const closeCard = () => {
+    setCardId(null);
+    if (sp.has("doc")) {
+      const next = new URLSearchParams(sp);
+      next.delete("doc");
+      setSp(next, { replace: true });
+    }
+  };
 
   const { data: folders } = useQuery({
     queryKey: ["doc-folders", folderId],
@@ -135,8 +154,16 @@ export default function DocumentsPage() {
       sortAccessor: (d) => d.name,
       render: (d) => (
         <div className="flex items-center gap-2">
-          <FileText size={14} className="text-neutral-400" />
-          <span className="truncate font-medium">{d.name}</span>
+          <FileText size={14} className="shrink-0 text-neutral-400" />
+          <button type="button" className="truncate text-left font-medium hover:text-brand-700 hover:underline dark:hover:text-brand-300" onClick={() => setCardId(d.id)}>
+            {d.name}
+          </button>
+          {d.doc_number && <span className="shrink-0 text-xs text-neutral-500">№ {d.doc_number}</span>}
+          {d.doc_status && (
+            <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[10.5px] font-medium text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
+              {DOC_STATUS_LABEL[d.doc_status] ?? d.doc_status}
+            </span>
+          )}
           {d.is_public && (
             <span className="rounded bg-emerald-200 px-1.5 py-0.5 text-[10px] font-medium text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
               public
@@ -184,7 +211,11 @@ export default function DocumentsPage() {
       key: "versions",
       header: "Версий",
       width: 80,
-      render: (d) => <span className="text-xs text-neutral-500 tabular-nums">v{d.version_count}</span>,
+      render: (d) => (
+        <button type="button" className="text-xs tabular-nums text-neutral-500 hover:text-brand-700 hover:underline" onClick={() => setCardId(d.id)} title="Версии документа">
+          v{d.version_count}
+        </button>
+      ),
     },
     {
       key: "updated",
@@ -375,6 +406,13 @@ export default function DocumentsPage() {
       )}
       {editDoc && <DocumentMetaModal doc={editDoc} onClose={() => setEditDoc(null)} />}
       {openViews && <ViewsModal doc={openViews} onClose={() => setOpenViews(null)} />}
+      {cardId != null && (
+        <DocumentCard
+          docId={cardId}
+          canManageAll={canManageAll}
+          onClose={closeCard}
+        />
+      )}
     </div>
   );
 }

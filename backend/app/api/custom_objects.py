@@ -291,6 +291,19 @@ def backlinks(target: str, id: int, ctx: TenantContext = Depends(get_current_con
                     record=RefOut(id=r.id, label=r.title or f"{schema.label} #{r.id}",
                                   url=f"/objects?code={schema.code}&record={r.id}"),
                 ))
+    # Документы, привязанные к записи в своей карточке
+    from ..core.permissions import user_has
+    from ..models import Document
+    dq = db.query(Document).filter(
+        Document.tenant_id == ctx.tenant.id, Document.links.contains([{"target": target, "id": id}]),
+    )
+    if not ctx.membership.is_owner and not user_has(ctx.user, ["contracts.view"], tenant_id=ctx.tenant.id):
+        dq = dq.filter(Document.contract_id.is_(None))
+    for d in dq.order_by(Document.updated_at.desc()).limit(50):
+        out.append(BacklinkOut(
+            schema_code="documents", schema_label="Документы", field_label="связь",
+            record=RefOut(id=d.id, label=d.name, url=f"/documents?doc={d.id}"),
+        ))
     return out
 
 

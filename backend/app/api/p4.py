@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import csv
 import re
@@ -431,6 +432,36 @@ class DocOut(BaseModel):
     company: Optional[DocCompanyBrief] = None
     deal_id: Optional[int] = None
     doc_kind: Optional[str] = None
+    doc_number: Optional[str] = None
+    doc_date: Optional[date] = None
+    doc_status: Optional[str] = None
+    links: list[dict[str, Any]] = []
+
+
+DOC_STATUSES = {"draft": "Черновик", "review": "На согласовании", "approved": "Утверждён", "signed": "Подписан", "archived": "В архиве"}
+MAX_DOC_LINKS = 20
+
+
+def _clean_links(db: Session, tenant_id: int, links: list[Any]) -> list[dict[str, Any]]:
+    """Связи документа с записями (проекты, задачи, сделки, записи Объектов…): только записи этой компании."""
+    from ..core import record_refs
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for item in links or []:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), int):
+            raise HTTPException(400, "Неверная связь")
+        target = record_refs.validate_target(db, tenant_id, item.get("target"))
+        if target == "user":
+            raise HTTPException(400, "Документ связывается с записями, а не с сотрудниками")
+        key = (target, item["id"])
+        if key in seen:
+            continue
+        record_refs.ensure_exists(db, tenant_id, target, item["id"])
+        seen.add(key)
+        out.append({"target": target, "id": item["id"]})
+    if len(out) > MAX_DOC_LINKS:
+        raise HTTPException(400, f"Не больше {MAX_DOC_LINKS} связей у документа")
+    return out
 
 
 def _check_doc_kind(kind: Optional[str]) -> Optional[str]:
@@ -471,6 +502,10 @@ class DocPatch(BaseModel):
     company_id: Optional[int] = None  # 0 — отвязать от контрагента
     deal_id: Optional[int] = None  # 0 — отвязать от сделки
     doc_kind: Optional[str] = None  # nda | loi | mou | term_sheet | agreement | other; "" — снять
+    doc_number: Optional[str] = Field(default=None, max_length=100)  # "" — снять
+    doc_date: Optional[date] = None
+    doc_status: Optional[str] = None  # draft | review | approved | signed | archived; "" — снять
+    links: Optional[list[dict[str, Any]]] = None
 
 
 @router.patch("/api/documents/{did}", response_model=DocOut)
@@ -501,6 +536,17 @@ def update_document(did: int, payload: DocPatch, ctx: TenantContext = Depends(ge
         row.deal_id = data["deal_id"] or None
     if "doc_kind" in data:
         row.doc_kind = _check_doc_kind(data["doc_kind"])
+    if "doc_number" in data:
+        row.doc_number = (data["doc_number"] or "").strip() or None
+    if "doc_date" in data:
+        row.doc_date = data["doc_date"]
+    if "doc_status" in data:
+        st = (data["doc_status"] or "").strip() or None
+        if st is not None and st not in DOC_STATUSES:
+            raise HTTPException(400, "Неизвестный статус документа")
+        row.doc_status = st
+    if data.get("links") is not None:
+        row.links = _clean_links(db, ctx.tenant.id, data["links"])
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="document", entity_id=row.id, detail=row.name)
     db.commit()
     db.refresh(row)
@@ -560,10 +606,212 @@ async def upload_document(
     )
     db.add(row)
     db.flush()
-    db.add(DocumentVersion(document_id=row.id, version_no=1, file_path=path, size=len(content), uploaded_by=ctx.user.id))
+    db.add(DocumentVersion(document_id=row.id, version_no=1, file_path=path, size=len(content), uploaded_by=ctx.user.id,
+                           filename=row.name, mime=row.mime, sha256=hashlib.sha256(content).hexdigest()))
     db.commit()
     db.refresh(row)
     return row
+
+
+# ---- Карточка и версии документа -------------------------------------------------
+
+MAX_DOC_BYTES = 50 * 1024 * 1024
+
+
+class DocLinkOut(BaseModel):
+    target: str
+    id: int
+    kind: str
+    label: str
+    url: Optional[str] = None
+    accessible: bool = True
+
+
+class DocVersionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    version_no: int
+    filename: Optional[str] = None
+    size: int
+    sha256: Optional[str] = None
+    comment: Optional[str] = None
+    uploaded_by: Optional[int] = None
+    uploaded_by_name: Optional[str] = None
+    created_at: datetime
+    is_current: bool = False
+
+
+class DocCardOut(BaseModel):
+    document: DocOut
+    links: list[DocLinkOut]
+    versions: list[DocVersionOut]
+    statuses: dict[str, str]
+    can_upload_version: bool
+
+
+def _get_doc(db: Session, ctx: TenantContext, did: int) -> Document:
+    row = db.get(Document, did)
+    if not row or row.tenant_id != ctx.tenant.id:
+        raise HTTPException(404, "Документ не найден")
+    _require_contract_file_access(ctx, row)
+    return row
+
+
+def _can_upload_version(ctx: TenantContext, row: Document) -> bool:
+    """Новую версию загружает тот, кому можно загружать файлы; файл договора — ещё и с правом на договоры."""
+    from ..core.permissions import user_has
+    if ctx.membership.is_owner:
+        return True
+    if not user_has(ctx.user, ["files.upload"], tenant_id=ctx.tenant.id):
+        return False
+    return not row.contract_id or user_has(ctx.user, ["contracts.update"], tenant_id=ctx.tenant.id)
+
+
+def _require_doc_upload(ctx: TenantContext, row: Document) -> None:
+    if not _can_upload_version(ctx, row):
+        raise HTTPException(403, "Нет права загружать новые версии этого документа")
+
+
+def _versions_out(db: Session, row: Document) -> list[DocVersionOut]:
+    from ..models import User
+    vs = (
+        db.query(DocumentVersion)
+        .filter(DocumentVersion.document_id == row.id)
+        .order_by(DocumentVersion.version_no.desc())
+        .all()
+    )
+    uids = {v.uploaded_by for v in vs if v.uploaded_by}
+    names = {u.id: u.name for u in db.query(User).filter(User.id.in_(uids))} if uids else {}
+    out = []
+    current_marked = False
+    for v in vs:
+        o = DocVersionOut.model_validate(v)
+        o.uploaded_by_name = names.get(v.uploaded_by)
+        # Текущая — самая свежая версия с файлом документа (после отката файл повторяется)
+        if not current_marked and v.file_path == row.file_path:
+            o.is_current = current_marked = True
+        out.append(o)
+    return out
+
+
+@router.get("/api/documents/{did}/card", response_model=DocCardOut)
+def document_card(did: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    from ..core import record_refs
+    row = _get_doc(db, ctx, did)
+    links: list[DocLinkOut] = []
+    by_target: dict[str, list[int]] = {}
+    for ln in row.links or []:
+        by_target.setdefault(ln["target"], []).append(ln["id"])
+    for target, ids in by_target.items():
+        try:
+            record_refs.validate_target(db, ctx.tenant.id, target)
+            kind = record_refs.target_label(db, ctx.tenant.id, target)
+        except HTTPException:
+            continue  # реестр удалён
+        refs = record_refs.resolve(db, ctx.user, ctx.tenant.id, ctx.membership.is_owner, target, ids)
+        for i in ids:
+            ref = refs.get(i)
+            links.append(DocLinkOut(target=target, id=i, kind=kind, label=ref.label if ref else f"#{i}",
+                                    url=ref.url if ref else None, accessible=ref is not None))
+    return DocCardOut(
+        document=DocOut.model_validate(row), links=links, versions=_versions_out(db, row),
+        statuses=DOC_STATUSES, can_upload_version=_can_upload_version(ctx, row),
+    )
+
+
+@router.post("/api/documents/{did}/versions", response_model=DocOut, status_code=201)
+async def upload_document_version(
+    did: int,
+    file: UploadFile = File(...),
+    comment: Optional[str] = Form(None),
+    ctx: TenantContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    from ..config import settings
+    import os
+    row = _get_doc(db, ctx, did)
+    _require_doc_upload(ctx, row)
+    content = await file.read(MAX_DOC_BYTES + 1)
+    if len(content) > MAX_DOC_BYTES:
+        raise HTTPException(400, "Файл больше 50 МБ")
+    if not content:
+        raise HTTPException(400, "Файл пустой")
+    upload_dir = os.path.join(settings.UPLOAD_DIR, f"tenant_{ctx.tenant.id}", "documents")
+    os.makedirs(upload_dir, exist_ok=True)
+    safe_name = re.sub(r"[^\w.\-]", "_", file.filename or "unnamed")
+    path = os.path.join(upload_dir, f"{secrets.token_hex(8)}_{safe_name}")
+    with open(path, "wb") as f:
+        f.write(content)
+    last = db.query(func.max(DocumentVersion.version_no)).filter(DocumentVersion.document_id == row.id).scalar() or 0
+    db.add(DocumentVersion(
+        document_id=row.id, version_no=last + 1, file_path=path, size=len(content), uploaded_by=ctx.user.id,
+        comment=(comment or "").strip()[:2000] or None, filename=file.filename or row.name, mime=file.content_type,
+        sha256=hashlib.sha256(content).hexdigest(),
+    ))
+    row.file_path, row.size, row.mime = path, len(content), file.content_type or row.mime
+    row.version_count = last + 1
+    row.updated_at = datetime.now(timezone.utc)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="document", entity_id=row.id,
+               detail=f"{row.name}: версия {last + 1}")
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.post("/api/documents/{did}/versions/{vid}/restore", response_model=DocOut)
+def restore_document_version(did: int, vid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    """Откат: выбранная версия становится новой текущей. История не теряется."""
+    row = _get_doc(db, ctx, did)
+    _require_doc_upload(ctx, row)
+    v = db.get(DocumentVersion, vid)
+    if not v or v.document_id != row.id:
+        raise HTTPException(404, "Версия не найдена")
+    if v.file_path == row.file_path:
+        raise HTTPException(400, "Эта версия и так текущая")
+    last = db.query(func.max(DocumentVersion.version_no)).filter(DocumentVersion.document_id == row.id).scalar() or 0
+    db.add(DocumentVersion(
+        document_id=row.id, version_no=last + 1, file_path=v.file_path, size=v.size, uploaded_by=ctx.user.id,
+        comment=f"Возврат к версии {v.version_no}", filename=v.filename, mime=v.mime, sha256=v.sha256,
+    ))
+    row.file_path, row.size, row.mime = v.file_path, v.size, v.mime or row.mime
+    row.version_count = last + 1
+    row.updated_at = datetime.now(timezone.utc)
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="document", entity_id=row.id,
+               detail=f"{row.name}: возврат к версии {v.version_no}")
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get("/api/documents/{did}/versions/{vid}/download")
+def download_document_version(did: int, vid: int, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    import os
+    from urllib.parse import quote
+    from ..core.view_log import log_view
+    row = _get_doc(db, ctx, did)
+    v = db.get(DocumentVersion, vid)
+    if not v or v.document_id != row.id or not v.file_path or not os.path.exists(v.file_path):
+        raise HTTPException(404, "Файл версии не найден")
+    if not v.sha256:
+        # У версий, загруженных до появления хэшей, считаем его при первой выгрузке
+        h = hashlib.sha256()
+        with open(v.file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        v.sha256 = h.hexdigest()
+    log_view(db, ctx, "document", row.id)
+    db.commit()
+    file_path, mime = v.file_path, v.mime or row.mime
+    fname = v.filename or row.name
+
+    def gen():
+        with open(file_path, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+    return StreamingResponse(
+        gen(), media_type=mime or "application/octet-stream",
+        headers={"Content-Disposition": "attachment; filename*=UTF-8''" + quote(fname)},
+    )
 
 
 @router.post("/api/documents/{did}/publish", response_model=DocOut)

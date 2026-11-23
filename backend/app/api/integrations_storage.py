@@ -351,6 +351,7 @@ async def import_file(
         document_id=row.id, version_no=1, file_path=stored_path,
         size=len(content), uploaded_by=ctx.user.id,
         comment=f"Импорт из {provider}",
+        filename=row.name, mime=mime, sha256=__import__("hashlib").sha256(content).hexdigest(),
     ))
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id,
                action="import", entity="document", entity_id=row.id, detail=f"from {provider}: {name}")

@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import secrets
@@ -659,7 +660,8 @@ async def upload_file(
     )
     db.add(doc)
     db.flush()
-    db.add(DocumentVersion(document_id=doc.id, version_no=1, file_path=path, size=len(content), uploaded_by=ctx.user.id))
+    db.add(DocumentVersion(document_id=doc.id, version_no=1, file_path=path, size=len(content), uploaded_by=ctx.user.id,
+                           filename=doc.name, mime=doc.mime, sha256=hashlib.sha256(content).hexdigest()))
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="contract",
                entity_id=row.id, detail=f"№ {row.number}: файл «{doc.name}»")
     db.commit()

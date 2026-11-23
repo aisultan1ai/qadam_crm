@@ -148,6 +148,14 @@ class Document(Base):
     # Договор, к которому приложен файл (миграция 0056)
     contract_id: Mapped[Optional[int]] = mapped_column(ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # Карточка документа (миграция 0058)
+    doc_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    doc_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # draft | review | approved | signed | archived
+    doc_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # Связи с записями: [{"target": "project" | "object:acts" | …, "id": 12}]
+    links: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+
 
 class DocumentVersion(Base):
     __tablename__ = "document_versions"
@@ -162,6 +170,9 @@ class DocumentVersion(Base):
     size: Mapped[int] = mapped_column(Integer, default=0)
     uploaded_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    filename: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    mime: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
