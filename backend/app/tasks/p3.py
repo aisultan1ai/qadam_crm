@@ -334,7 +334,8 @@ def run_scheduled_reports() -> dict:
 
 @shared_task(name="p4.purge_old_logs")
 def purge_old_logs() -> dict:
-    """Удаляем ActivityLog старше retention_days для каждой пары (tenant, entity_type)."""
+    """Удаляем записи журналов старше retention_days: «*» — журнал действий целиком,
+    «record_view» — журнал просмотров, иначе — действия по конкретной сущности."""
     db = SessionLocal()
     purged = 0
     try:
@@ -342,14 +343,14 @@ def purge_old_logs() -> dict:
         rules = db.query(TenantLogRetention).filter(TenantLogRetention.retention_days.isnot(None)).all()
         for rule in rules:
             cutoff = now - timedelta(days=rule.retention_days)
-            q = (
-                db.query(ActivityLog)
-                .filter(
-                    ActivityLog.tenant_id == rule.tenant_id,
-                    ActivityLog.entity == rule.entity_type,
-                    ActivityLog.created_at < cutoff,
-                )
-            )
+            if rule.entity_type == "record_view":
+                # Журнал «Кто открывал»
+                from ..models.record_view import RecordView
+                q = db.query(RecordView).filter(RecordView.tenant_id == rule.tenant_id, RecordView.viewed_at < cutoff)
+            else:
+                q = db.query(ActivityLog).filter(ActivityLog.tenant_id == rule.tenant_id, ActivityLog.created_at < cutoff)
+                if rule.entity_type != "*":  # «*» — весь журнал действий
+                    q = q.filter(ActivityLog.entity == rule.entity_type)
             n = q.count()
             if n:
                 q.delete(synchronize_session=False)

@@ -32,7 +32,6 @@ const TITLES: Record<string, string> = {
   automations: "Автоматизации",
   calls: "Звонки",
   objects: "Объекты",
-  holidays: "Праздники",
   settings: "Настройки",
   admin: "Администрирование",
 };

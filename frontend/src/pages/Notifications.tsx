@@ -3,7 +3,7 @@
  * Непрочитанные / Упоминания / Все / Отложенные, с «прочитано», «отложить» и открытием задачи в панели.
  */
 import { useCallback, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -60,6 +60,7 @@ export default function Notifications() {
   const qc = useQueryClient();
   const toast = useToast();
   const [sp, setSp] = useSearchParams();
+  const navigate = useNavigate();
   const rawTab = sp.get("tab") as Tab | null;
   const tab: Tab = rawTab && TABS.includes(rawTab) ? rawTab : "unread";
   const [limit, setLimit] = useState(PAGE);
@@ -120,6 +121,7 @@ export default function Notifications() {
   const open = (n: Notification) => {
     if (!n.is_read) setRead.mutate({ id: n.id, read: true });
     if (n.task_id) openTask(n.task_id);
+    else if (n.link?.startsWith("/")) navigate(n.link);
   };
 
   return (

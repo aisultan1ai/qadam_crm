@@ -20,6 +20,8 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(300))
     body: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    # Куда вести по клику, если уведомление не про задачу (например, /contracts/12).
+    link: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     # «Отложить»: до этого момента уведомление скрыто из «Входящих».
     snoozed_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

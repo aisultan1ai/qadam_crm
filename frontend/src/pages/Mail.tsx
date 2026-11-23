@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   Mail as MailIcon, Send, Loader2, Archive, ArchiveRestore, ArrowLeft, AlertTriangle,
-  Paperclip, Link2, RefreshCw, Plus, PenSquare,
+  Paperclip, Link2, RefreshCw, Plus, PenSquare, Filter,
 } from "lucide-react";
+import { MailRulesModal, TemplatePicker } from "./mail/MailRulesModal";
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
@@ -97,6 +98,7 @@ export default function Mail() {
   const [showArchived, setShowArchived] = useState(false);
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const { data: mailbox, isLoading: mbLoading } = useQuery({
     queryKey: ["my-mailbox"],
@@ -206,12 +208,15 @@ export default function Mail() {
                   { key: "archive", label: "Архив" },
                 ]}
                 right={
+                  <>
+                  <IconAction icon={Filter} label="Правила и шаблоны" onClick={() => setRulesOpen(true)} />
                   <IconAction
                     icon={RefreshCw}
                     label={mailbox.last_sync_at ? `Синхронизировать (последняя: ${formatWhen(mailbox.last_sync_at)})` : "Синхронизировать"}
                     onClick={() => syncMut.mutate()}
                     disabled={syncMut.isPending}
                   />
+                  </>
                 }
               />
             </ListHeader>
@@ -287,6 +292,7 @@ export default function Mail() {
         )}
       </Workspace>
 
+      {rulesOpen && <MailRulesModal mailboxId={mailbox.id} onClose={() => setRulesOpen(false)} />}
       {composeOpen && (
         <ComposeModal
           onClose={() => setComposeOpen(false)}
@@ -385,6 +391,9 @@ function ThreadView({ thread, onBack, onChanged }: { thread: ThreadRow; onBack: 
         onSubmit={() => reply.mutate()}
         sending={reply.isPending}
         placeholder="Ответить в этой цепочке…"
+        tools={<TemplatePicker onPick={(t) => setReplyText((v) => (v.trim() ? `${v}
+
+${t.body}` : t.body))} />}
       />
 
       {linkOpen && (
@@ -547,6 +556,14 @@ function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: () => 
   return (
     <Modal open onClose={onClose} title="Новое письмо" size="lg">
       <div className="space-y-3">
+        <div className="flex justify-end">
+          <TemplatePicker
+            onPick={(t) => {
+              if (t.subject) setSubject(t.subject);
+              setBody(t.body);
+            }}
+          />
+        </div>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-neutral-500">Кому (через запятую)</span>
           <input className="input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="Email получателя" />

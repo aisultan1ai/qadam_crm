@@ -166,11 +166,6 @@ export const profileSettingsSchema = z
   );
 export type ProfileSettingsForm = z.infer<typeof profileSettingsSchema>;
 
-export const holidaySchema = z.object({
-  name: z.string().trim().min(2, "Минимум 2 символа").max(200),
-  date: z.string().min(1, "Выберите дату"),
-});
-export type HolidayForm = z.infer<typeof holidaySchema>;
 
 export const directoryItemSchema = z.object({
   name: z.string().trim().min(1, "Введите название").max(200),

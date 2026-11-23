@@ -89,7 +89,7 @@ def _recipients(db, c: Contract) -> list[User]:
 
 def _send(db, c: Contract, kind: str, title: str, body: str, outbox: list) -> None:
     for u in _recipients(db, c):
-        db.add(Notification(tenant_id=c.tenant_id, user_id=u.id, kind=kind, title=title[:300], body=body[:1000]))
+        db.add(Notification(tenant_id=c.tenant_id, user_id=u.id, kind=kind, title=title[:300], body=body[:1000], link=f"/contracts/{c.id}"))
         outbox.append((c.tenant_id, u.id, u.email, title, body, c.id))
 
 

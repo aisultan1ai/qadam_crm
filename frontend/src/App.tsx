@@ -62,7 +62,6 @@ const Whiteboard = lazy(() => import("@/pages/Whiteboard"));
 const Calls = lazy(() => import("@/pages/Calls"));
 const ObjectsPage = lazy(() => import("@/pages/Objects"));
 const Documents = lazy(() => import("@/pages/Documents"));
-const Holidays = lazy(() => import("@/pages/Holidays"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function HomeGate() {
@@ -223,7 +222,6 @@ export default function App() {
         <Route path="objects" element={<ObjectsPage />} />
         <Route path="documents" element={<Documents />} />
         <Route path="directories" element={<Navigate to="/settings/directories" replace />} />
-        <Route path="holidays" element={<Holidays />} />
         <Route path="integrations" element={<Navigate to="/settings/services" replace />} />
         {/* 404 внутри Layout — авторизованный юзер видит sidebar/header */}
         <Route path="*" element={<NotFound />} />

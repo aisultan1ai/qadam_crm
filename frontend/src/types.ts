@@ -166,6 +166,8 @@ export type Notification = {
   title: string;
   body?: string | null;
   task_id?: number | null;
+  /** Куда вести по клику, если уведомление не про задачу */
+  link?: string | null;
   is_read: boolean;
   snoozed_until?: string | null;
   created_at: string;

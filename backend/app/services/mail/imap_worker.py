@@ -326,6 +326,11 @@ def _ingest_one(db: Session, mb: Mailbox, uid: int, raw: bytes) -> None:
     thread.last_message_preview = preview or None
     db.flush()
 
+    if direction == MailDirection.inbound:
+        from .rules import apply_rules
+        apply_rules(db, mb, thread, m)
+        db.flush()
+
     # Realtime + event
     publish_to_tenant(
         mb.tenant_id,

@@ -60,6 +60,34 @@ def _own_rule(db: Session, ctx: TenantContext, rid: int) -> MailRule:
     return row
 
 
+def _clean_rule(conditions: Optional[list[dict[str, Any]]], actions: Optional[list[dict[str, Any]]]):
+    """Оставляем только то, что движок умеет применять (services/mail/rules.py)."""
+    from ..services.mail.rules import ACTIONS, FIELDS, OPS
+    if conditions is not None:
+        conditions = [
+            {"field": c.get("field"), "op": c.get("op") or "contains", "value": str(c.get("value") or "").strip()[:500]}
+            for c in conditions
+            if isinstance(c, dict) and c.get("field") in FIELDS and (c.get("op") or "contains") in OPS and str(c.get("value") or "").strip()
+        ]
+        if not conditions:
+            raise HTTPException(400, "Добавьте хотя бы одно условие")
+    if actions is not None:
+        cleaned = []
+        for a in actions:
+            if not isinstance(a, dict) or a.get("type") not in ACTIONS:
+                continue
+            params = a.get("params") if isinstance(a.get("params"), dict) else {}
+            if a["type"] == "create_task":
+                params = {k: params[k] for k in ("project_id", "assignee_id") if isinstance(params.get(k), int)}
+            else:
+                params = {}
+            cleaned.append({"type": a["type"], "params": params})
+        if not cleaned:
+            raise HTTPException(400, "Добавьте хотя бы одно действие")
+        actions = cleaned
+    return conditions, actions
+
+
 def _template_editor(ctx: TenantContext, row) -> None:
     from ..core.permissions import user_has
     if row.created_by == ctx.user.id or ctx.membership.is_owner:
@@ -80,7 +108,9 @@ def list_rules(mailbox_id: Optional[int] = None, ctx: TenantContext = Depends(ge
 def create_rule(payload: RuleCreate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     if payload.mailbox_id not in _my_mailbox_ids(db, ctx):
         raise HTTPException(400, "Правила настраиваются только для своего почтового ящика")
-    row = MailRule(tenant_id=ctx.tenant.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["conditions"], data["actions"] = _clean_rule(payload.conditions, payload.actions)
+    row = MailRule(tenant_id=ctx.tenant.id, **data)
     db.add(row)
     db.flush()
     log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="create", entity="mail_rule", entity_id=row.id, detail=payload.name)
@@ -92,6 +122,7 @@ def create_rule(payload: RuleCreate, ctx: TenantContext = Depends(get_current_co
 @router.patch("/rules/{rid}", response_model=RuleOut)
 def update_rule(rid: int, payload: RuleUpdate, ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
     row = _own_rule(db, ctx, rid)
+    payload.conditions, payload.actions = _clean_rule(payload.conditions, payload.actions)
     for f in ("name", "is_active", "order_index", "stop_on_match", "conditions", "actions"):
         v = getattr(payload, f)
         if v is not None:
@@ -118,6 +149,7 @@ class TemplateOut(BaseModel):
     subject: str
     body: str
     variables: Optional[list[str]] = None
+    created_by: Optional[int] = None
     created_at: datetime
 
 

@@ -141,7 +141,6 @@ const MODULES: Module[] = [
       { to: "/calendar", label: "Календарь", icon: CalendarIcon, code: "calendar.use" },
       { to: "/time", label: "Учёт времени", icon: TimerIcon, code: "time.use" },
       { to: "/timeoff", label: "Отпуска", icon: Palmtree },
-      { to: "/holidays", label: "Праздники", icon: CalendarClock },
     ],
   },
   {
@@ -872,6 +871,7 @@ function NotificationsButton({ online }: { online: boolean }) {
                   setOpen(false);
                   invalidate();
                   if (n.task_id) navigate(`/tasks/${n.task_id}`);
+                  else if (n.link?.startsWith("/")) navigate(n.link);
                 } catch (e) {
                   toast.error("Не удалось открыть уведомление", extractApiError(e).message);
                 }

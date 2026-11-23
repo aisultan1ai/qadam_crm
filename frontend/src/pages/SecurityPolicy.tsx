@@ -129,7 +129,73 @@ export default function SecurityPolicyPage() {
         </Button>
       </div>
 
+      <RetentionSection />
+
       <AuditLogSection />
+    </div>
+  );
+}
+
+const RETENTION_LOGS: { key: string; label: string; hint: string }[] = [
+  { key: "*", label: "Журнал действий", hint: "Кто что создал, изменил или удалил" },
+  { key: "record_view", label: "Журнал просмотров", hint: "«Кто открывал» договоры, документы и карточки" },
+];
+const RETENTION_OPTIONS: { days: number | null; label: string }[] = [
+  { days: null, label: "Бессрочно" },
+  { days: 90, label: "3 месяца" },
+  { days: 180, label: "6 месяцев" },
+  { days: 365, label: "1 год" },
+  { days: 730, label: "2 года" },
+  { days: 1095, label: "3 года" },
+  { days: 1825, label: "5 лет" },
+];
+
+function RetentionSection() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data } = useQuery({
+    queryKey: ["log-retention"],
+    queryFn: async () => (await api.get<{ entity_type: string; retention_days: number | null }[]>("/api/log-retention")).data,
+  });
+  const save = useMutation({
+    mutationFn: (v: { entity_type: string; retention_days: number | null }) => api.post("/api/log-retention", v),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["log-retention"] });
+      toast.success("Срок хранения сохранён");
+    },
+    onError: (e) => toast.error("Не удалось сохранить", extractApiError(e).message),
+  });
+  const current = (key: string) => data?.find((r) => r.entity_type === key)?.retention_days ?? null;
+
+  return (
+    <div className="card p-4 space-y-3">
+      <h2 className="text-lg font-semibold">Хранение журналов</h2>
+      <p className="text-xs text-neutral-500">
+        Записи старше выбранного срока удаляются автоматически раз в сутки. Удалённые записи восстановить нельзя.
+      </p>
+      {RETENTION_LOGS.map((l) => {
+        const value = current(l.key);
+        const known = RETENTION_OPTIONS.some((o) => o.days === value);
+        return (
+          <label key={l.key} className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              <span className="block text-sm font-medium">{l.label}</span>
+              <span className="block text-xs text-neutral-500">{l.hint}</span>
+            </span>
+            <select
+              className="input max-w-[180px]"
+              value={value ?? ""}
+              disabled={!data || save.isPending}
+              onChange={(e) => save.mutate({ entity_type: l.key, retention_days: e.target.value ? Number(e.target.value) : null })}
+            >
+              {!known && value != null && <option value={value}>{value} дн.</option>}
+              {RETENTION_OPTIONS.map((o) => (
+                <option key={o.label} value={o.days ?? ""}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
     </div>
   );
 }

@@ -10,6 +10,7 @@ class NotificationOut(BaseModel):
     title: str
     body: Optional[str] = None
     task_id: Optional[int] = None
+    link: Optional[str] = None
     is_read: bool
     snoozed_until: Optional[datetime] = None
     created_at: datetime

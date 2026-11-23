@@ -20,6 +20,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { DocumentMetaModal } from "@/components/DocumentMetaModal";
 import { useLegalEntities } from "@/hooks/useLegalEntities";
+import { useOfftakeSettings } from "@/hooks/useOfftake";
 import { activityText } from "@/lib/activityLabels";
 import { formatDateTime, fromNow } from "@/lib/date";
 import type { Page } from "@/types";
@@ -45,6 +46,8 @@ type DealRow = {
   amount_cents: number;
   currency: string;
   stage: string;
+  pipeline?: string;
+  offtake_stage?: string | null;
   close_date?: string | null;
   owner?: { id: number; name: string; avatar_url?: string | null } | null;
   legal_entity?: { id: number; short_name: string } | null;
@@ -334,6 +337,8 @@ function ContactsTab({ companyId }: { companyId: number }) {
 
 function DealsTab({ companyId }: { companyId: number }) {
   const le = useLegalEntities();
+  const { settings: offtakeSettings } = useOfftakeSettings();
+  const offtakeLabels: Record<string, string> = Object.fromEntries((offtakeSettings?.stages ?? []).map((s) => [s.key, s.label]));
   const { data, isPending } = useQuery({
     queryKey: ["deals", "company", companyId],
     queryFn: async () =>
@@ -369,7 +374,16 @@ function DealsTab({ companyId }: { companyId: number }) {
                   {d.title}
                 </Link>
               </td>
-              <td className="table-cell">{STAGE_LABEL[d.stage] ?? d.stage}</td>
+              <td className="table-cell">
+                {d.pipeline === "offtake" ? (
+                  <>
+                    <span className="mr-1.5 rounded bg-zinc-100 px-1 py-0.5 text-[10.5px] font-semibold uppercase text-zinc-500 dark:bg-white/10">Offtake</span>
+                    {offtakeLabels[d.offtake_stage ?? ""] ?? d.offtake_stage ?? "—"}
+                  </>
+                ) : (
+                  STAGE_LABEL[d.stage] ?? d.stage
+                )}
+              </td>
               {le.multi && <td className="table-cell text-zinc-600 dark:text-zinc-300">{d.legal_entity?.short_name ?? "—"}</td>}
               <td className="table-cell text-right tabular-nums">{fmtMoney(d.amount_cents, d.currency)}</td>
               <td className="table-cell">{d.owner?.name ?? <span className="text-zinc-400">—</span>}</td>

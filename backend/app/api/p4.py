@@ -5,7 +5,6 @@
 - /api/projects/{id}/roles
 - /api/directories (schemas + entries)
 - /api/documents (folders + files + versions)
-- /api/holidays
 - /api/security-policy
 - /api/log-retention
 - /api/integrations (витрина)
@@ -683,57 +682,7 @@ def download_internal(did: int, ctx: TenantContext = Depends(get_current_context
     return StreamingResponse(gen(), media_type=mime or "application/octet-stream")
 
 
-# =============================================================================
-# 6. Holidays
-# =============================================================================
-
-class HolidayOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    date: date
-    name: str
-    is_workday: bool
-
-
-class HolidayCreate(BaseModel):
-    date: date
-    name: str
-    is_workday: bool = False
-
-
-@router.get("/api/holidays", response_model=list[HolidayOut])
-def list_holidays(
-    year: Optional[int] = None,
-    ctx: TenantContext = Depends(get_current_context),
-    db: Session = Depends(get_db),
-):
-    q = db.query(TenantHoliday).filter(TenantHoliday.tenant_id == ctx.tenant.id)
-    if year:
-        q = q.filter(func.extract("year", TenantHoliday.date) == year)
-    return q.order_by(TenantHoliday.date).all()
-
-
-@router.post("/api/holidays", response_model=HolidayOut, status_code=201)
-def create_holiday(payload: HolidayCreate, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
-    row = TenantHoliday(tenant_id=ctx.tenant.id, **payload.model_dump())
-    db.add(row)
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise HTTPException(409, "На эту дату уже есть запись")
-    db.refresh(row)
-    return row
-
-
-@router.delete("/api/holidays/{hid}", response_model=Message)
-def delete_holiday(hid: int, ctx: TenantContext = Depends(require("settings.dictionaries")), db: Session = Depends(get_db)):
-    row = db.get(TenantHoliday, hid)
-    if not row or row.tenant_id != ctx.tenant.id:
-        raise HTTPException(404, "Не найдено")
-    db.delete(row)
-    db.commit()
-    return Message(message="Удалено")
+# 6. Праздники убраны из продукта (таблица tenant_holidays оставлена, данные попадают в полный экспорт).
 
 
 # =============================================================================
@@ -867,8 +816,8 @@ class RetentionOut(BaseModel):
 
 
 class RetentionSet(BaseModel):
-    entity_type: str
-    retention_days: Optional[int] = None  # None = ∞
+    entity_type: str = Field(min_length=1, max_length=50)  # «*» — весь журнал действий, «record_view» — просмотры
+    retention_days: Optional[int] = Field(default=None, ge=30, le=3650)  # None — хранить бессрочно
 
 
 @router.get("/api/log-retention", response_model=list[RetentionOut])
