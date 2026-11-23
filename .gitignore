@@ -56,3 +56,5 @@ backups/
 
 # === Claude / AI tooling artifacts ===
 .claude/
+
+frontend/tsconfig.tsbuildinfo
