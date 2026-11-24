@@ -15,6 +15,7 @@ Allow: /favicon
 Allow: /apple-touch-icon.png
 Allow: /logo-512.png
 Allow: /og-image.png
+Allow: /sitemap.xml
 # Всё остальное — рабочие страницы за входом и служебные пути
 Disallow: /
 
