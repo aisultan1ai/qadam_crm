@@ -11,7 +11,9 @@ Allow: /book/
 Allow: /assets/
 Allow: /landing/
 Allow: /theme-init.js
-Allow: /favicon.svg
+Allow: /favicon
+Allow: /apple-touch-icon.png
+Allow: /logo-512.png
 Allow: /og-image.png
 # Всё остальное — рабочие страницы за входом и служебные пути
 Disallow: /
