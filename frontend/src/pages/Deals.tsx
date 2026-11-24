@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
 import { DatePicker } from "@/components/DatePicker";
@@ -49,7 +49,6 @@ type Deal = {
   pipeline?: string;
 };
 
-type Pipeline = "sales" | "offtake";
 
 type Forecast = {
   currency: string;
@@ -109,13 +108,10 @@ export default function DealsPage() {
   const confirm = useConfirm();
   const [openDeal, setOpenDeal] = useState<Deal | "new" | null>(null);
   const offtake = useOfftakeSettings();
-  const [pipelineView, setPipelineView] = useState<Pipeline>("sales");
-  const [newPipeline, setNewPipeline] = useState<Pipeline>("sales");
-  const isOfftake = offtake.enabled && pipelineView === "offtake";
-  const startNew = () => {
-    setNewPipeline(isOfftake ? "offtake" : "sales");
-    setOpenDeal("new");
-  };
+  // Включённый offtake заменяет обычную воронку продаж целиком; пока настройка грузится — ничего не показываем
+  const isOfftake = offtake.enabled;
+  const salesMode = !offtake.isPending && !offtake.enabled;
+  const startNew = () => setOpenDeal("new");
 
   const canView = can("deals.view");
   const canCreate = can("deals.create");
@@ -127,12 +123,12 @@ export default function DealsPage() {
   const { data: deals, isPending } = useQuery({
     queryKey: ["deals", "sales"],
     queryFn: async () => (await api.get<Page<Deal>>("/api/deals", { params: { per_page: 200, pipeline: "sales" } })).data.items,
-    enabled: canView,
+    enabled: canView && salesMode,
   });
   const { data: forecast } = useQuery({
     queryKey: ["deals-forecast"],
     queryFn: async () => (await api.get<Forecast>("/api/deals/forecast", { params: { pipeline: "sales" } })).data,
-    enabled: canView,
+    enabled: canView && salesMode,
   });
 
   const changeStage = useMutation({
@@ -240,18 +236,7 @@ export default function DealsPage() {
         title="Сделки"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {offtake.enabled && (
-              <Segmented
-                label="Воронка"
-                value={pipelineView}
-                onChange={setPipelineView}
-                items={[
-                  { key: "sales", label: "Продажи" },
-                  { key: "offtake", label: "Offtake" },
-                ]}
-              />
-            )}
-            {canCreate && (
+            {canCreate && !offtake.isPending && (
               <Button variant="primary" leftIcon={<Plus size={16} />} onClick={startNew}>
                 Новая сделка
               </Button>
@@ -260,7 +245,7 @@ export default function DealsPage() {
         }
       />
 
-      {isOfftake ? (
+      {offtake.isPending ? null : isOfftake ? (
         <OfftakeView onOpen={(d) => setOpenDeal(d as unknown as Deal)} onCreate={startNew} />
       ) : (
       <>
@@ -509,41 +494,16 @@ export default function DealsPage() {
 
       {openDeal &&
         (openDeal === "new" ? (
-          offtake.enabled && newPipeline === "offtake" ? (
-            <OfftakeDealModal
-              initial={null}
-              onClose={() => setOpenDeal(null)}
-              pipelineSwitch={<PipelineSwitch value={newPipeline} onChange={setNewPipeline} />}
-            />
+          isOfftake ? (
+            <OfftakeDealModal initial={null} onClose={() => setOpenDeal(null)} />
           ) : (
-            <DealModal
-              initial={null}
-              onClose={() => setOpenDeal(null)}
-              pipelineSwitch={offtake.enabled ? <PipelineSwitch value={newPipeline} onChange={setNewPipeline} /> : undefined}
-            />
+            <DealModal initial={null} onClose={() => setOpenDeal(null)} />
           )
         ) : openDeal.pipeline === "offtake" ? (
           <OfftakeDealModal initial={openDeal as unknown as OfftakeDeal} onClose={() => setOpenDeal(null)} />
         ) : (
           <DealModal initial={openDeal} onClose={() => setOpenDeal(null)} />
         ))}
-    </div>
-  );
-}
-
-function PipelineSwitch({ value, onChange }: { value: Pipeline; onChange: (v: Pipeline) => void }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm font-medium">Воронка</span>
-      <Segmented
-        label="Воронка"
-        value={value}
-        onChange={onChange}
-        items={[
-          { key: "sales", label: "Продажи" },
-          { key: "offtake", label: "Offtake" },
-        ]}
-      />
     </div>
   );
 }
@@ -572,7 +532,7 @@ const dealModalSchema = z.object({
 });
 type DealModalForm = z.infer<typeof dealModalSchema>;
 
-function DealModal({ initial, onClose, pipelineSwitch }: { initial: Deal | null; onClose: () => void; pipelineSwitch?: ReactNode }) {
+function DealModal({ initial, onClose }: { initial: Deal | null; onClose: () => void }) {
   const qc = useQueryClient();
   const { can } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -631,7 +591,6 @@ function DealModal({ initial, onClose, pipelineSwitch }: { initial: Deal | null;
   return (
     <Modal open onClose={onClose} title={initial ? "Редактировать сделку" : "Новая сделка"} size="md">
       <form onSubmit={onSubmit} className="space-y-3" noValidate>
-        {pipelineSwitch}
         <FormField label="Название" required error={errors.title?.message}>
           <input className="input" autoFocus {...register("title")} />
         </FormField>

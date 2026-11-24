@@ -8,7 +8,7 @@
  * Правила стадий проверяет сервер: в «NDA подписан» и дальше — только с файлом NDA,
  * в «Term Sheet согласован» и дальше — с файлом Term Sheet; «Отказ» — с причиной.
  */
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
@@ -762,12 +762,9 @@ const num = (s: string) => (s.trim() === "" ? null : Number(s.replace(",", ".").
 export function OfftakeDealModal({
   initial,
   onClose,
-  pipelineSwitch,
 }: {
   initial: OfftakeDeal | null;
   onClose: () => void;
-  /** Переключатель воронки в форме новой сделки. */
-  pipelineSwitch?: ReactNode;
 }) {
   const qc = useQueryClient();
   const { can } = useAuth();
@@ -872,7 +869,6 @@ export function OfftakeDealModal({
   return (
     <Modal open onClose={onClose} title={initial ? "Offtake-сделка" : "Новая сделка"} size="xl">
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        {pipelineSwitch}
         <fieldset disabled={!canEdit} className="space-y-4">
           <FormField label="Название" required error={errors.title ? "Название — от 2 до 200 символов" : null}>
             <input className="input" autoFocus {...register("title", { required: true, minLength: 2, maxLength: 200 })} />

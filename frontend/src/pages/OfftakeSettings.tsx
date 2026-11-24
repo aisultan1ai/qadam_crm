@@ -45,7 +45,7 @@ export default function OfftakeSettings() {
       >
         <SettingsRow
           label="Использовать offtake"
-          hint="На странице «Сделки» появится переключатель «Продажи / Offtake». Обычная воронка продаж не меняется."
+          hint="Раздел «Сделки» переключится на воронку offtake вместо обычной воронки продаж. Уже созданные сделки продаж не удаляются: если выключить offtake, они снова появятся."
         >
           <label className={clsx("inline-flex items-center gap-2 text-sm", !canSystem && "opacity-60")}>
             <input
