@@ -15,6 +15,7 @@ import { api } from "@/api/client";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useDealsTitle } from "@/hooks/useOfftake";
 
 type Hit = {
   tasks: { id: number; title: string; project_id?: number | null }[];
@@ -48,6 +49,7 @@ export default function GlobalSearch({
   const [active, setActive] = useState(0);
   const nav = useNavigate();
   const { can } = useAuth();
+  const dealsTitle = useDealsTitle();
   const { toggle: toggleTheme } = useTheme();
   const { favorites } = useFavorites();
   const listRef = useRef<HTMLDivElement>(null);
@@ -109,7 +111,7 @@ export default function GlobalSearch({
       { id: "p-calendar", group: "Перейти", label: "Календарь", icon: Calendar, shortcut: "G C", run: go("/calendar"), show: can("calendar.use") },
       { id: "p-messenger", group: "Перейти", label: "Мессенджер", icon: MessageSquare, run: go("/messenger"), show: can("messenger.use") },
       { id: "p-mail", group: "Перейти", label: "Почта", icon: Mail, run: go("/mail"), show: can("mail.use") },
-      { id: "p-deals", group: "Перейти", label: "Сделки", icon: Coins, run: go("/deals"), show: can("deals.view") },
+      { id: "p-deals", group: "Перейти", label: dealsTitle, icon: Coins, keywords: "сделки offtake контракты", run: go("/deals"), show: can("deals.view") },
       { id: "p-wiki", group: "Перейти", label: "База знаний", icon: BookOpen, keywords: "wiki", run: go("/wiki"), show: can("wiki.use") },
       { id: "p-settings", group: "Перейти", label: "Настройки", icon: Settings, run: go("/settings"), show: can(["roles.manage", "settings.dictionaries", "settings.system"]) },
     ];
@@ -141,7 +143,7 @@ export default function GlobalSearch({
       : [];
     // При поиске сначала найденное, затем подходящие команды.
     return needle ? [...found, ...base] : base;
-  }, [q, hit, favorites, can, nav, onClose, toggleTheme, onShowShortcuts]);
+  }, [q, hit, favorites, can, nav, onClose, toggleTheme, onShowShortcuts, dealsTitle]);
 
   useEffect(() => setActive(0), [q, hit]);
   useEffect(() => {

@@ -36,9 +36,9 @@ const TITLES: Record<string, string> = {
   admin: "Администрирование",
 };
 
-export function titleFor(pathname: string): string {
+export function titleFor(pathname: string, overrides?: Record<string, string>): string {
   const seg = pathname.split("/").filter(Boolean)[0] ?? "";
-  const name = TITLES[seg];
+  const name = overrides?.[seg] ?? TITLES[seg];
   return name ? `${name} — ${BASE}` : BASE;
 }
 
@@ -66,9 +66,10 @@ export function usePublicPageMeta() {
 }
 
 /** Название вкладки по текущему разделу (чтобы вкладки в браузере различались). */
-export function usePageTitle() {
+export function usePageTitle(overrides?: Record<string, string>) {
   const { pathname } = useLocation();
+  const key = JSON.stringify(overrides ?? {});
   useEffect(() => {
-    document.title = titleFor(pathname);
-  }, [pathname]);
+    document.title = titleFor(pathname, JSON.parse(key));
+  }, [pathname, key]);
 }

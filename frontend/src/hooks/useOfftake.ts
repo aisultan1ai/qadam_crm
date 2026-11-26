@@ -32,6 +32,12 @@ export function useOfftakeSettings() {
   return { settings: data ?? null, enabled: !!data?.enabled, isPending };
 }
 
+/** Название раздела /deals: при включённом offtake он целиком становится «Offtake контракты». */
+export function useDealsTitle() {
+  const { enabled } = useOfftakeSettings();
+  return enabled ? "Offtake контракты" : "Сделки";
+}
+
 export function useOfftakeProducts(enabled = true) {
   return useQuery({
     queryKey: ["offtake-products"],

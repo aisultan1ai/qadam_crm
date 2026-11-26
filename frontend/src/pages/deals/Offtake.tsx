@@ -1,9 +1,9 @@
 /**
- * Воронка offtake на странице «Сделки» (видна, только когда offtake включён в настройках компании).
+ * Раздел «Offtake контракты» (/deals при включённом offtake вместо обычной воронки продаж).
  *
- * - график «Законтрактованный объём по годам» (подписанные сделки, т/год по годам поставки);
+ * - график «Законтрактованный объём по годам» (подписанные контракты, т/год по годам поставки);
  * - канбан из 8 стадий с перетаскиванием и таблица;
- * - карточка offtake-сделки: продукт, объёмы, цена, Incoterms, документы сделки.
+ * - карточка offtake-контракта: продукт, объёмы, цена, Incoterms, документы.
  *
  * Правила стадий проверяет сервер: в «NDA подписан» и дальше — только с файлом NDA,
  * в «Term Sheet согласован» и дальше — с файлом Term Sheet; «Отказ» — с причиной.
@@ -157,7 +157,7 @@ export function OfftakeView({ onOpen, onCreate }: { onOpen: (d: OfftakeDeal) => 
       return api.patch(`/api/deals/${id}`, rest);
     },
     onSuccess: () => invalidateDeals(qc),
-    onError: (e) => toast.error("Не удалось перевести сделку", extractApiError(e).message),
+    onError: (e) => toast.error("Не удалось перевести контракт", extractApiError(e).message),
   });
 
   const del = useMutation({
@@ -206,7 +206,7 @@ export function OfftakeView({ onOpen, onCreate }: { onOpen: (d: OfftakeDeal) => 
 
   const askDelete = (d: OfftakeDeal) =>
     confirm({
-      title: "Удалить сделку?",
+      title: "Удалить контракт?",
       message: `«${d.title}» будет удалена.`,
       danger: true,
       confirmLabel: "Удалить",
@@ -230,7 +230,7 @@ export function OfftakeView({ onOpen, onCreate }: { onOpen: (d: OfftakeDeal) => 
           />
         }
       >
-        <SearchInput value={q} onChange={setQ} placeholder="Поиск по сделке или покупателю" />
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по контракту или покупателю" />
         <FilterSelect label="Ответственный" value={owner} onChange={setOwner}>
           <option value="">Все ответственные</option>
           {owners.map((o) => (
@@ -263,7 +263,7 @@ export function OfftakeView({ onOpen, onCreate }: { onOpen: (d: OfftakeDeal) => 
         <div className="card">
           <EmptyState
             icon={<FileSignature size={20} />}
-            title={deals && deals.length > 0 ? "По фильтру ничего не найдено" : "Offtake-сделок пока нет"}
+            title={deals && deals.length > 0 ? "По фильтру ничего не найдено" : "Offtake-контрактов пока нет"}
             description={
               deals && deals.length > 0
                 ? "Измените поиск или сбросьте фильтры."
@@ -272,7 +272,7 @@ export function OfftakeView({ onOpen, onCreate }: { onOpen: (d: OfftakeDeal) => 
             action={
               canCreate && !(deals && deals.length > 0) ? (
                 <Button variant="primary" leftIcon={<Plus size={16} />} onClick={onCreate}>
-                  Новая сделка
+                  Новый контракт
                 </Button>
               ) : undefined
             }
@@ -379,11 +379,11 @@ export function OfftakeView({ onOpen, onCreate }: { onOpen: (d: OfftakeDeal) => 
                   <td className="table-cell text-right tabular-nums">{d.probability}%</td>
                   <td className="table-cell text-right">
                     <div className="flex justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                      <Button variant="ghost" size="icon" onClick={() => onOpen(d)} aria-label="Открыть сделку">
+                      <Button variant="ghost" size="icon" onClick={() => onOpen(d)} aria-label="Открыть контракт">
                         <Pencil size={14} />
                       </Button>
                       {canDelete && (
-                        <Button variant="ghost" size="icon" className="text-rose-600" onClick={() => askDelete(d)} aria-label="Удалить сделку">
+                        <Button variant="ghost" size="icon" className="text-rose-600" onClick={() => askDelete(d)} aria-label="Удалить контракт">
                           <Trash2 size={14} />
                         </Button>
                       )}
@@ -446,7 +446,7 @@ function OfftakeCard({
           {d.title}
         </button>
         {canDelete && (
-          <Button variant="ghost" size="icon" className="text-rose-500 opacity-0 transition-opacity group-hover:opacity-100" onClick={onDelete} aria-label="Удалить сделку">
+          <Button variant="ghost" size="icon" className="text-rose-500 opacity-0 transition-opacity group-hover:opacity-100" onClick={onDelete} aria-label="Удалить контракт">
             <Trash2 size={12} />
           </Button>
         )}
@@ -617,8 +617,8 @@ function ContractedVolumeChart() {
         <div>
           <h2 className="card-title">Законтрактованный объём по годам</h2>
           <p className="mt-0.5 text-[13px] text-zinc-500 dark:text-zinc-400">
-            Подписанные offtake-сделки: тонны в год за каждый год поставки
-            {data ? ` · сделок: ${data.deals_count}` : ""}
+            Подписанные offtake-контракты: тонны в год за каждый год поставки
+            {data ? ` · контрактов: ${data.deals_count}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -645,7 +645,7 @@ function ContractedVolumeChart() {
           <div className="h-48 animate-pulse rounded-lg bg-zinc-100 dark:bg-[#23262D]" />
         ) : !data || data.years.length === 0 ? (
           <div className="py-8 text-center text-sm text-zinc-500">
-            Здесь появится объём, когда сделка перейдёт в «Подписан» и в ней будут указаны объём в год, срок и год начала поставок.
+            Здесь появится объём, когда контракт перейдёт в «Подписан» и в нём будут указаны объём в год, срок и год начала поставок.
           </div>
         ) : (
           <>
@@ -732,7 +732,7 @@ function ContractedVolumeChart() {
 }
 
 // ---------------------------------------------------------------------------
-// Карточка offtake-сделки
+// Карточка offtake-контракта
 // ---------------------------------------------------------------------------
 
 type FormValues = {
@@ -867,7 +867,7 @@ export function OfftakeDealModal({
   });
 
   return (
-    <Modal open onClose={onClose} title={initial ? "Offtake-сделка" : "Новая сделка"} size="xl">
+    <Modal open onClose={onClose} title={initial ? "Offtake-контракт" : "Новый контракт"} size="xl">
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <fieldset disabled={!canEdit} className="space-y-4">
           <FormField label="Название" required error={errors.title ? "Название — от 2 до 200 символов" : null}>
@@ -875,7 +875,7 @@ export function OfftakeDealModal({
           </FormField>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <FormField label="Стадия" hint={!initial ? "Дальше второй стадии сделка переходит после прикрепления документов" : undefined}>
+            <FormField label="Стадия" hint={!initial ? "Дальше второй стадии контракт переходит после прикрепления документов" : undefined}>
               <select className="input" {...register("offtake_stage")}>
                 {stageOptions.map((s, i) => (
                   <option key={s.key} value={s.key}>
@@ -1115,7 +1115,7 @@ export function OfftakeDealModal({
 }
 
 // ---------------------------------------------------------------------------
-// Документы сделки
+// Документы контракта
 // ---------------------------------------------------------------------------
 
 function DealDocuments({ deal, settings }: { deal: OfftakeDeal; settings: OfftakeSettings | null }) {
@@ -1175,7 +1175,7 @@ function DealDocuments({ deal, settings }: { deal: OfftakeDeal; settings: Offtak
   const remove = (d: DealDoc) =>
     confirm({
       title: "Удалить документ?",
-      message: `«${d.name}» будет удалён из сделки и из раздела «Документы».`,
+      message: `«${d.name}» будет удалён из контракта и из раздела «Документы».`,
       danger: true,
       confirmLabel: "Удалить",
       onConfirm: async () => {
@@ -1193,7 +1193,7 @@ function DealDocuments({ deal, settings }: { deal: OfftakeDeal; settings: Offtak
   return (
     <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Документы сделки</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Документы контракта</div>
         {canUpload && (
           <div className="flex items-center gap-2">
             <select className="input !py-1 text-xs" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Вид документа">

@@ -233,12 +233,12 @@ export default function DealsPage() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="CRM"
-        title="Сделки"
+        title={isOfftake ? "Offtake контракты" : "Сделки"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {canCreate && !offtake.isPending && (
               <Button variant="primary" leftIcon={<Plus size={16} />} onClick={startNew}>
-                Новая сделка
+                {isOfftake ? "Новый контракт" : "Новая сделка"}
               </Button>
             )}
           </div>

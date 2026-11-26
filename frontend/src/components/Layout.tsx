@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/store/auth";
 import { usePageTitle } from "@/lib/pageTitle";
+import { useDealsTitle } from "@/hooks/useOfftake";
 import { useTheme } from "@/store/theme";
 import { useSidebar } from "@/store/sidebar";
 import { api, extractApiError, onApiEvent } from "@/api/client";
@@ -226,7 +227,8 @@ function useVisible(me: ReturnType<typeof useAuth.getState>["me"], can: Can) {
 }
 
 export default function Layout() {
-  usePageTitle();
+  const dealsTitle = useDealsTitle();
+  usePageTitle({ deals: dealsTitle });
   // Внутренние страницы — только для вошедших пользователей, в поиске им делать нечего.
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -563,7 +565,9 @@ function ModulePanel({
 
 function PanelLink({ item: i, active }: { item: PanelItem; active: boolean }) {
   const tr = useT();
+  const dealsTitle = useDealsTitle();
   const Icon = i.icon;
+  const label = i.to === "/deals" ? dealsTitle : i.label;
   return (
     <NavLink
       to={i.to}
@@ -577,7 +581,7 @@ function PanelLink({ item: i, active }: { item: PanelItem; active: boolean }) {
       )}
     >
       <Icon size={15} className={active ? "text-brand-600 dark:text-brand-300" : "text-zinc-400 group-hover:text-zinc-600 dark:text-zinc-500 dark:group-hover:text-zinc-300"} />
-      <span className="min-w-0 flex-1 truncate">{tr(i.label)}</span>
+      <span className="min-w-0 flex-1 truncate">{tr(label)}</span>
       {i.badge && <PanelBadge kind={i.badge} active={active} />}
     </NavLink>
   );
