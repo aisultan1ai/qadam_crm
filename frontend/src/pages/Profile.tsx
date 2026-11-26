@@ -3,7 +3,7 @@ import { DatePicker } from "@/components/DatePicker";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/store/auth";
-import { Avatar, Modal } from "@/components/ui";
+import { Avatar, Loader, Modal } from "@/components/ui";
 import { Button } from "@/components/lib/Button";
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
@@ -101,7 +101,7 @@ export default function Profile() {
   useNewParam(() => setGoalOpen("new"), canManageGoals);
 
   if (!user && !isSelf && otherUserQ.isPending) {
-    return <div className="text-sm text-neutral-500">Загрузка…</div>;
+    return <Loader />;
   }
   if (!user) return null;
 

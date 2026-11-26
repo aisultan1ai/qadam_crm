@@ -302,7 +302,7 @@ def backlinks(target: str, id: int, ctx: TenantContext = Depends(get_current_con
     for d in dq.order_by(Document.updated_at.desc()).limit(50):
         out.append(BacklinkOut(
             schema_code="documents", schema_label="Документы", field_label="связь",
-            record=RefOut(id=d.id, label=d.name, url=f"/documents?doc={d.id}"),
+            record=RefOut(id=d.id, label=d.name, url=f"/documents/{d.id}"),
         ))
     return out
 

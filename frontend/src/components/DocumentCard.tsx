@@ -67,7 +67,18 @@ export async function downloadDocumentVersion(docId: number, v: { id: number; fi
 }
 
 /** canManageAll — право менять любые документы; автор свой документ меняет всегда (как и на сервере). */
-export function DocumentCard({ docId, canManageAll, onClose }: { docId: number; canManageAll: boolean; onClose: () => void }) {
+export function DocumentCard({
+  docId,
+  canManageAll,
+  onClose,
+  variant = "modal",
+}: {
+  docId: number;
+  canManageAll: boolean;
+  onClose: () => void;
+  /** page — отдельная страница /documents/:id (сравнение версий открывается единственным окном поверх). */
+  variant?: "modal" | "page";
+}) {
   const qc = useQueryClient();
   const myId = useAuth((s) => s.me?.id);
   const { data, isPending, error } = useQuery({
@@ -79,6 +90,35 @@ export function DocumentCard({ docId, canManageAll, onClose }: { docId: number; 
     qc.invalidateQueries({ queryKey: ["docs"] });
     qc.invalidateQueries({ queryKey: ["company-docs"] });
   };
+
+  if (variant === "page") {
+    return (
+      <div className="space-y-4">
+        <div className="page-header">
+          <div className="min-w-0">
+            <Link to="/documents" className="mb-0.5 inline-block text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+              Документы /
+            </Link>
+            <h1 className="page-title truncate">{data?.document.name ?? "Документ"}</h1>
+          </div>
+        </div>
+        {isPending ? (
+          <div className="h-48 animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800/60" />
+        ) : error || !data ? (
+          <FormError msg={extractApiError(error).message} />
+        ) : (
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <section className="card p-5">
+              <Properties card={data} canEdit={canManageAll || data.document.created_by === myId} onSaved={refresh} onNavigate={() => {}} />
+            </section>
+            <section className="card p-5">
+              <Versions card={data} onChanged={refresh} />
+            </section>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <Modal open onClose={onClose} title={data?.document.name ?? "Документ"} size="lg">

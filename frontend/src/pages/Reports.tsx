@@ -83,7 +83,10 @@ export default function ReportsPage() {
   return (
     <div className="space-y-5">
       <div className="page-header">
-        <h1 className="page-title">Отчёты</h1>
+        <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Аналитика</div>
+          <h1 className="page-title">Отчёты</h1>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">

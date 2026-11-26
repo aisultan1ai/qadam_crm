@@ -114,6 +114,7 @@ export default function Automations() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Настройки компании</div>
           <h1 className="page-title">Автоматизации</h1>
         </div>
         <Link to="/automations/new" className="btn-primary">

@@ -56,6 +56,7 @@ const Activity = lazy(() => import("@/pages/Activity"));
 const Notifications = lazy(() => import("@/pages/Notifications"));
 const AllIncoming = lazy(() => import("@/pages/AllIncoming"));
 const TimeOff = lazy(() => import("@/pages/TimeOff"));
+const DocumentPage = lazy(() => import("@/pages/DocumentPage"));
 const Deals = lazy(() => import("@/pages/Deals"));
 const DealPage = lazy(() => import("@/pages/deals/DealPage"));
 const Reports = lazy(() => import("@/pages/Reports"));
@@ -225,6 +226,7 @@ export default function App() {
         <Route path="calls" element={<Calls />} />
         <Route path="objects" element={<ObjectsPage />} />
         <Route path="documents" element={<Documents />} />
+        <Route path="documents/:id" element={<DocumentPage />} />
         <Route path="directories" element={<Navigate to="/settings/directories" replace />} />
         <Route path="integrations" element={<Navigate to="/settings/services" replace />} />
         {/* 404 внутри Layout — авторизованный юзер видит sidebar/header */}

@@ -160,6 +160,9 @@ export function PriorityChip({ priority }: { priority: TaskPriority }) {
   );
 }
 
+// Открытые окна по порядку: Esc и Tab обрабатывает только верхнее (окно поверх окна закрывается по одному).
+const openModals: object[] = [];
+
 export function Modal({
   open,
   onClose,
@@ -174,6 +177,10 @@ export function Modal({
   size?: "sm" | "md" | "lg" | "xl";
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  // onClose часто передают стрелкой — держим в ref, чтобы эффект не перезапускался на каждом рендере
+  // (иначе фокус прыгал бы на первое поле при каждой перерисовке страницы под окном)
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const titleId = useId();
   const contentId = useId();
 
@@ -203,11 +210,14 @@ export function Modal({
 
     const first = focusables()[0];
     (first ?? dialogRef.current)?.focus();
+    const token = {};
+    openModals.push(token);
 
     const onKey = (e: KeyboardEvent) => {
+      if (openModals[openModals.length - 1] !== token) return;
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -235,9 +245,11 @@ export function Modal({
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
+      const i = openModals.indexOf(token);
+      if (i >= 0) openModals.splice(i, 1);
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   const width = { sm: "max-w-md", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" }[size];

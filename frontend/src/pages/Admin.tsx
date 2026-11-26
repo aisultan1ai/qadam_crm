@@ -165,6 +165,7 @@ export default function Admin() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Администрирование</div>
           <h1 className="page-title">Платформа</h1>
         </div>
         {tab === "tenants" && (

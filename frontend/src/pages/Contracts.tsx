@@ -218,6 +218,7 @@ export default function Contracts() {
   return (
     <Page>
       <PageHeader
+        eyebrow="Продажи"
         title="Договоры"
         subtitle="Реестр договоров с контрагентами: сроки, суммы, файлы и ответственные"
         actions={

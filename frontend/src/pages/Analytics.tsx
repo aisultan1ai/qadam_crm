@@ -59,7 +59,8 @@ export default function Analytics() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Аналитика</h1>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Аналитика</div>
+          <h1 className="page-title">Дашборды</h1>
         </div>
         
       </div>

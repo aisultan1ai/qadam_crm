@@ -6,6 +6,7 @@ import { Search, Users2, Award, Send, Cake, Building2 } from "lucide-react";
 import { api, extractApiError } from "@/api/client";
 import { useAuth } from "@/store/auth";
 import { Avatar, Modal, EmptyState } from "@/components/ui";
+import { Skeleton } from "@/components/Skeleton";
 import { Button } from "@/components/lib/Button";
 import { useToast } from "@/components/Toast";
 
@@ -124,7 +125,11 @@ export default function People() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {usersQ.isPending && (
-          <div className="col-span-full text-sm text-neutral-500">Загрузка…</div>
+          <>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+            ))}
+          </>
         )}
         {filtered.map((u) => (
           <PersonCard

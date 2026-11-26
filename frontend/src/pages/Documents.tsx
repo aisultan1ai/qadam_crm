@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,8 +8,7 @@ import { api, extractApiError } from "@/api/client";
 import {
   FolderPlus, Folder, FileText, Upload, Trash2, Share2, Eye, Download, ChevronLeft, Pencil, History,
 } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import { DocumentCard } from "@/components/DocumentCard";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useLegalEntities } from "@/hooks/useLegalEntities";
 import { DocumentMetaModal } from "@/components/DocumentMetaModal";
 import { EmptyState, Modal, FormError } from "@/components/ui";
@@ -77,17 +76,15 @@ export default function DocumentsPage() {
   const le = useLegalEntities();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [editDoc, setEditDoc] = useState<Doc | null>(null);
-  // Карточка документа; /documents?doc=12 — открыть по ссылке (например, из записи Объектов)
-  const [sp, setSp] = useSearchParams();
-  const [cardId, setCardId] = useState<number | null>(() => (/^\d+$/.test(sp.get("doc") ?? "") ? Number(sp.get("doc")) : null));
-  const closeCard = () => {
-    setCardId(null);
-    if (sp.has("doc")) {
-      const next = new URLSearchParams(sp);
-      next.delete("doc");
-      setSp(next, { replace: true });
-    }
-  };
+  // Карточка документа — отдельная страница /documents/:id; старые ссылки /documents?doc=12 ведут туда же
+  const [sp] = useSearchParams();
+  const navigate = useNavigate();
+  const setCardId = (id: number) => navigate(`/documents/${id}`);
+  const docParam = sp.get("doc");
+  useEffect(() => {
+    if (docParam && /^\d+$/.test(docParam)) navigate(`/documents/${docParam}`, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docParam]);
 
   const { data: folders } = useQuery({
     queryKey: ["doc-folders", folderId],
@@ -406,13 +403,6 @@ export default function DocumentsPage() {
       )}
       {editDoc && <DocumentMetaModal doc={editDoc} onClose={() => setEditDoc(null)} />}
       {openViews && <ViewsModal doc={openViews} onClose={() => setOpenViews(null)} />}
-      {cardId != null && (
-        <DocumentCard
-          docId={cardId}
-          canManageAll={canManageAll}
-          onClose={closeCard}
-        />
-      )}
     </div>
   );
 }

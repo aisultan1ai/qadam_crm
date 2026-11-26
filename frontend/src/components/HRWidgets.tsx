@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Cake, Target, Award, ArrowRight } from "lucide-react";
 import { api } from "@/api/client";
 import { Avatar } from "@/components/ui";
+import { Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/store/auth";
 import { GoalCheckinButton, GoalStreak, todayLocal } from "@/components/GoalCheckin";
 
@@ -62,7 +63,7 @@ export function BirthdaysWidget() {
         </h3>
         <Link to="/people" className="text-xs text-brand-600 hover:underline">Все</Link>
       </div>
-      {isPending && <div className="text-sm text-neutral-500 dark:text-neutral-400">Загрузка…</div>}
+      {isPending && <Skeleton className="h-10 w-full" />}
       {data && data.length === 0 && (
         <div className="text-sm text-neutral-500 dark:text-neutral-400">В ближайший месяц ни у кого нет ДР</div>
       )}
@@ -118,7 +119,7 @@ export function MyGoalsWidget() {
           Все <ArrowRight size={11} />
         </Link>
       </div>
-      {isPending && <div className="text-sm text-neutral-500 dark:text-neutral-400">Загрузка…</div>}
+      {isPending && <Skeleton className="h-10 w-full" />}
       {data && active.length === 0 && (
         <div className="flex flex-col items-center py-3 text-center">
           <span className="mb-2 grid h-9 w-9 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
@@ -202,7 +203,7 @@ export function KudosFeedWidget() {
         </h3>
         <Link to="/people" className="text-xs text-brand-600 hover:underline">Отправить</Link>
       </div>
-      {isPending && <div className="text-sm text-neutral-500 dark:text-neutral-400">Загрузка…</div>}
+      {isPending && <Skeleton className="h-10 w-full" />}
       {data && data.length === 0 && (
         <div className="text-sm text-neutral-500 dark:text-neutral-400">Ещё никто не благодарил коллег</div>
       )}
