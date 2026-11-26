@@ -85,7 +85,7 @@ export default function TimeTracking() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
-          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Календарь</div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Команда</div>
           <h1 className="page-title">Учёт времени</h1>
         </div>
         <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-1 text-sm dark:border-neutral-700 dark:bg-neutral-900">

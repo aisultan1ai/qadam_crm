@@ -15,13 +15,13 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { projectSchema, type ProjectForm } from "@/lib/validation";
 
-import { SearchInput } from "@/components/page";
+import { SearchInput, Tabs } from "@/components/page";
 import { useNewParam } from "@/hooks/useNewParam";
 import { fetchAllUsers } from "@/lib/users";
 import { useLegalEntities } from "@/hooks/useLegalEntities";
 type ProjectScope = "all" | "participating" | "made_by_me" | "audited_by_me";
 
-// Область задаёт панель модуля (?scope=…); заголовок страницы — по ней.
+// Область задаётся вкладками над списком (?scope=…); заголовок страницы — по ней.
 const SCOPE_TITLE: Record<ProjectScope, string> = {
   all: "Все проекты",
   participating: "Я участвую",
@@ -39,7 +39,7 @@ export default function Projects() {
   const [openNew, setOpenNew] = useState(false);
   const le = useLegalEntities();
   useNewParam(() => setOpenNew(true), can("projects.create"));
-  const [sp] = useSearchParams();
+  const [sp, setSp] = useSearchParams();
   const nav = useNavigate();
   const rawScope = sp.get("scope") as ProjectScope | null;
   const scope: ProjectScope = rawScope && rawScope in SCOPE_TITLE ? rawScope : "all";
@@ -72,7 +72,7 @@ export default function Projects() {
     <div className="space-y-4">
       <div className="page-header">
         <div className="min-w-0">
-          <div className="mb-0.5 text-[12px] text-zinc-500">Проекты</div>
+          <div className="mb-0.5 text-[12px] text-zinc-500">Работа</div>
           <h1 className="page-title flex items-baseline gap-2">
             {SCOPE_TITLE[scope]}
             <span className="text-[13px] font-medium tabular-nums text-zinc-400">{data?.length ?? 0}</span>
@@ -84,6 +84,18 @@ export default function Projects() {
           </Button>
         )}
       </div>
+      <Tabs
+        label="Вид списка проектов"
+        size="sm"
+        value={scope}
+        onChange={(k) => {
+          const next = new URLSearchParams(sp);
+          if (k === "all") next.delete("scope");
+          else next.set("scope", k);
+          setSp(next, { replace: true });
+        }}
+        items={(Object.keys(SCOPE_TITLE) as ProjectScope[]).map((k) => ({ key: k, label: k === "all" ? "Все" : SCOPE_TITLE[k] }))}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput value={q} onChange={setQ} placeholder="Поиск проекта" />

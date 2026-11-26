@@ -1383,7 +1383,7 @@ function IntegrationDemandTab() {
   if (!data?.length) {
     return (
       <div className="card p-8 text-center text-sm text-neutral-500">
-        Заявок пока нет. Компании отмечают нужные интеграции в Настройки → Сервисы.
+        Заявок пока нет. Компании отмечают нужные интеграции в «Мои настройки» → «Сервисы и хранилища».
       </div>
     );
   }

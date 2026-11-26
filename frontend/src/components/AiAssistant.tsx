@@ -52,7 +52,7 @@ function errorText(err: unknown): string {
   const status = isAxiosError(err) ? err.response?.status : undefined;
   const msg = extractApiError(err).message;
   if (status === 429) return msg || "Исчерпан лимит запросов к ИИ на этот месяц";
-  if (status === 403) return "ИИ-помощник выключен для вашей компании. Его может включить владелец в Настройки → «ИИ-помощник»";
+  if (status === 403) return "ИИ-помощник выключен для вашей компании. Его может включить владелец в «Настройки компании» → «ИИ-помощник»";
   if (status === 402) return "ИИ-помощник недоступен на вашем тарифе";
   if (status === 422) return msg || "ИИ-помощник не может обработать этот запрос. Переформулируйте его";
   return msg || "ИИ-помощник сейчас недоступен. Попробуйте ещё раз через минуту";

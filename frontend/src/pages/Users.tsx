@@ -17,6 +17,7 @@ import { useAuth } from "@/store/auth";
 
 import { SearchInput } from "@/components/page";
 import InvitationsPanel from "./users/Invitations";
+import { TeamTabs } from "@/components/TeamTabs";
 import { fetchAllUsers } from "@/lib/users";
 const TABS = [
   { to: "list", label: "Сотрудники", icon: UsersIcon },
@@ -30,31 +31,7 @@ export default function Users() {
   const canInvite = can("users.create") || !!me?.current_tenant?.is_owner;
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Команда</div>
-          <h1 className="page-title">Пользователи</h1>
-        </div>
-        <nav className="flex gap-1 card p-1">
-          {TABS.filter((t) => !t.invite || canInvite).map((t) => (
-            <NavLink
-              key={t.to}
-              to={t.to}
-              className={({ isActive }) =>
-                clsx(
-                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
-                  isActive
-                    ? "bg-brand-600 font-medium text-white shadow-sm hover:bg-brand-700"
-                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-white",
-                )
-              }
-            >
-              <t.icon size={15} />
-              {t.label}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
+      <TeamTabs />
 
       <Routes>
         <Route index element={<Navigate to="list" replace />} />

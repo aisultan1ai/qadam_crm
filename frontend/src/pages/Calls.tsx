@@ -181,7 +181,7 @@ export default function CallsPage() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
-          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">CRM</div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Продажи</div>
           <h1 className="page-title">Звонки</h1>
         </div>
         <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setOpenLog(true)}>

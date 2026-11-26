@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNewParam } from "@/hooks/useNewParam";
 import { useNavigate } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calendar as BigCalendar, dateFnsLocalizer, View, Views, type Formats } from "react-big-calendar";
@@ -131,6 +132,7 @@ export default function CalendarPage() {
   const [view, setView] = useState<View>(Views.WEEK);
   const [date, setDate] = useState(new Date());
   const [editorOpen, setEditorOpen] = useState<{ mode: "create" | "edit"; initial?: Partial<EventDetail> } | null>(null);
+  useNewParam(() => setEditorOpen({ mode: "create" }));
   const [detailsFor, setDetailsFor] = useState<EventOcc | null>(null);
 
   const { data: calendars, isPending: calendarsPending } = useQuery({

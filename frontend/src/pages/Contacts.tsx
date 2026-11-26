@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNewParam } from "@/hooks/useNewParam";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
 import { Plus, Search, Trash2, BookUser, Building2, User as UserIcon, Pencil, Sparkles, ImageUp } from "lucide-react";
@@ -67,6 +68,11 @@ export default function Contacts() {
   const [sp] = useSearchParams();
 
   const canCreate = can("contacts.create");
+  useNewParam(() => setOpenContact("new"), canCreate);
+  useNewParam(() => {
+    setTab("companies");
+    setOpenCompany("new");
+  }, canCreate, "company");
   const canRead = can("contacts.view");
   // Ссылки из связей Объектов: /contacts?contact=12, /contacts?company=5
   useOpenParam<Contact>("contact", (id) => `/api/contacts/${id}`, setOpenContact, canRead);
@@ -90,7 +96,7 @@ export default function Contacts() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
-          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">CRM</div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Продажи</div>
           <h1 className="page-title">Контакты</h1>
         </div>
         {canCreate && (

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
 import { DatePicker } from "@/components/DatePicker";
@@ -116,7 +117,10 @@ export default function DealsPage() {
   const canView = can("deals.view");
   const canCreate = can("deals.create");
   useNewParam(() => startNew(), canCreate);
-  useOpenParam<Deal>("deal", (id) => `/api/deals/${id}`, setOpenDeal, canView);
+  const navigate = useNavigate();
+  // Offtake-контракт — отдельная страница /deals/:id; сделка продаж — окно
+  const openAny = (d: Deal) => (d.pipeline === "offtake" ? navigate(`/deals/${d.id}`) : setOpenDeal(d));
+  useOpenParam<Deal>("deal", (id) => `/api/deals/${id}`, openAny, canView);
   const canUpdate = can("deals.update");
   const canDelete = can("deals.delete");
 
@@ -232,7 +236,7 @@ export default function DealsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="CRM"
+        eyebrow="Продажи"
         title={isOfftake ? "Offtake контракты" : "Сделки"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -246,7 +250,7 @@ export default function DealsPage() {
       />
 
       {offtake.isPending ? null : isOfftake ? (
-        <OfftakeView onOpen={(d) => setOpenDeal(d as unknown as Deal)} onCreate={startNew} />
+        <OfftakeView onOpen={(d) => navigate(`/deals/${d.id}`)} onCreate={startNew} />
       ) : (
       <>
 

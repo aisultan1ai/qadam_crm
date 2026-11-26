@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
+import { TeamTabs } from "@/components/TeamTabs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Users2, Award, Send, Cake, Building2 } from "lucide-react";
 import { api, extractApiError } from "@/api/client";
@@ -90,14 +91,12 @@ export default function People() {
     });
   }, [usersQ.data, depId, skillId, usersWithSkillQ.data]);
 
+  // Без права на карточки — сразу во вкладку «Доступ и роли»
+  if (!can("hr.view_profiles")) return <Navigate to="/users/list" replace />;
+
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div>
-          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Команда</div>
-          <h1 className="page-title">Сотрудники</h1>
-        </div>
-      </div>
+      <TeamTabs />
 
       <Toolbar right={<span className="text-[13px] tabular-nums text-zinc-500">Найдено: {filtered.length} из {usersQ.data?.length ?? 0}</span>}>
         <SearchInput value={q} onChange={setQ} placeholder="Поиск по имени или email" />

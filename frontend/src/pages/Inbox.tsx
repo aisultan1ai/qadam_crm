@@ -14,7 +14,7 @@ import { Button } from "@/components/lib/Button";
 
 import { SearchInput } from "@/components/page";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Composer, DayDivider, IconAction, ListEmpty, ListHeader, ListRow, ListTabs, PaneEmpty, PaneHeader, RowTag, Workspace, dayLabel,
 } from "@/components/workspace";
@@ -122,6 +122,18 @@ export default function Inbox() {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
+  // /inbox?conversation=12 — открыть диалог по ссылке (например, из «Всех входящих»)
+  const [sp, setSp] = useSearchParams();
+  const convParam = sp.get("conversation");
+  useEffect(() => {
+    if (convParam && /^\d+$/.test(convParam)) {
+      setSelectedId(Number(convParam));
+      const next = new URLSearchParams(window.location.search);
+      next.delete("conversation");
+      setSp(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convParam]);
 
   const { data: channels } = useQuery({
     queryKey: ["messenger-channels"],

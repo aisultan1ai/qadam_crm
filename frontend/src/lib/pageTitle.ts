@@ -5,7 +5,8 @@ const BASE = "Qadam CRM";
 
 // Первый сегмент пути → название вкладки.
 const TITLES: Record<string, string> = {
-  "": "Обзор",
+  "": "Мой день",
+  incoming: "Все входящие",
   tasks: "Задачи",
   projects: "Проекты",
   deals: "Сделки",
@@ -26,7 +27,7 @@ const TITLES: Record<string, string> = {
   people: "Сотрудники",
   "org-chart": "Оргструктура",
   profile: "Профиль",
-  users: "Пользователи",
+  users: "Сотрудники",
   analytics: "Аналитика",
   reports: "Отчёты",
   automations: "Автоматизации",

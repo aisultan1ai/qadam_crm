@@ -26,7 +26,7 @@ import { useToast } from "@/components/Toast";
 import { VirtualList } from "@/components/VirtualList";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 
-import { SearchInput, Segmented } from "@/components/page";
+import { SearchInput, Segmented, Tabs } from "@/components/page";
 import { useNewParam } from "@/hooks/useNewParam";
 import { GroupByButton, GroupedListView, GROUP_PILL, type ListPerms } from "./tasks/GroupedListView";
 import { GROUP_BY_OPTIONS, type GroupBy } from "./tasks/grouping";
@@ -297,6 +297,23 @@ export default function Tasks() {
           )}
         </div>
       </div>
+      {/* Виды списка: раньше были пунктами меню модуля */}
+      <Tabs
+        label="Вид списка задач"
+        size="sm"
+        value={overdue ? "overdue" : scope}
+        onChange={(k) => {
+          const next = new URLSearchParams(sp);
+          next.delete("overdue");
+          if (k === "overdue") {
+            next.delete("scope");
+            next.set("overdue", "1");
+          } else if (k === "all") next.delete("scope");
+          else next.set("scope", k);
+          setSp(next, { replace: true });
+        }}
+        items={[...TASK_SCOPE_TABS, { key: "overdue" as const, label: "Просроченные" }]}
+      />
 
       <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
         <SearchInput value={qLocal} onChange={setQLocal} placeholder="Поиск задач" />

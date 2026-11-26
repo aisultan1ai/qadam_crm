@@ -5,11 +5,11 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Activity as ActivityIcon, AlarmClock, ArrowUpCircle, BarChart3, Bell, BookOpen, BookUser, Boxes, Calendar as CalendarIcon,
+  Activity as ActivityIcon, AlarmClock, ArrowUpCircle, BarChart3, Bell, BookOpen, BookUser, Bot, Boxes, Briefcase, Calendar as CalendarIcon,
   CalendarClock, CheckSquare, ChevronDown, Coins, Contact2, Eye, FileSignature, FileText, FolderKanban, Home, Inbox as InboxIcon,
   LayoutGrid, LifeBuoy, ListChecks, LogOut, Mail as MailIcon, Menu, MessageSquare, MessagesSquare, Moon, Network,
   Palmtree, PanelLeftClose, PanelLeftOpen, PenSquare, Phone, PieChart, Plus, Search, Settings, Shield, Star, Sun,
-  Timer as TimerIcon, User as UserIcon, UserCheck, UserPlus, Users, Workflow, X, Zap, CircleDot,
+  Timer as TimerIcon, User as UserIcon, UserCheck, UserPlus, Users, Workflow, X, Zap, CircleDot, Monitor, Globe, Link as LinkIcon,
 } from "lucide-react";
 import clsx from "clsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,7 +40,7 @@ import { TimerWidget } from "./TimerWidget";
 import { AiAssistantButton } from "./AiAssistant";
 import { LogoMark } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { SETTINGS_TABS } from "@/pages/settings/nav";
+import { SETTINGS_TABS, type SettingsPlace } from "@/pages/settings/nav";
 import { useToast } from "./Toast";
 
 type Can = ReturnType<typeof useAuth.getState>["can"];
@@ -58,6 +58,10 @@ type PanelItem = {
   /** Владельцу доступно без права code (как в настройках). */
   ownerBypass?: boolean;
   badge?: "notifications" | "messenger" | "overdue" | "feed";
+  /** Подзаголовок группы в панели модуля. */
+  group?: string;
+  /** Подсвечивать пункт и на этих путях (вкладки того же раздела). */
+  alsoActive?: string[];
 };
 
 type Module = {
@@ -71,79 +75,79 @@ type Module = {
   extra?: "favorites" | "task-projects" | "spaces";
   /** Показывать внизу полосы модулей, а не в общем списке. */
   bottom?: boolean;
+  /** Не показывать в полосе (открывается из меню аватара). */
+  hidden?: boolean;
+  /** Блок «Настройки» внизу панели: разделы настроек этого модуля. */
+  settings?: SettingsPlace;
 };
+
+const settingsItems = (place: SettingsPlace): PanelItem[] =>
+  SETTINGS_TABS.filter((t) => t.place === place).map((t) => ({
+    to: `/settings/${t.to}`,
+    label: t.label,
+    icon: t.icon,
+    code: t.perm,
+    ownerOnly: t.ownerOnly,
+    ownerBypass: true,
+    group: t.group,
+  }));
 
 const MODULES: Module[] = [
   {
     key: "home",
     label: "Главная",
     icon: Home,
-    paths: ["/profile"],
     extra: "favorites",
     items: [
-      { to: "/", label: "Обзор", icon: LayoutGrid, exact: true },
-      { to: "/notifications", label: "Входящие", icon: InboxIcon, badge: "notifications" },
+      { to: "/", label: "Мой день", icon: LayoutGrid, exact: true },
       { to: "/planner", label: "Планировщик", icon: CalendarClock },
       { to: "/activity", label: "Хроника", icon: ActivityIcon, badge: "feed" },
     ],
   },
   {
-    key: "tasks",
-    label: "Задачи",
-    icon: CheckSquare,
-    extra: "task-projects",
-    items: [
-      { to: "/tasks", label: "Все задачи", icon: ListChecks, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
-      { to: "/tasks?scope=incoming", label: "Мне назначены", icon: UserCheck, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
-      { to: "/tasks?scope=outgoing", label: "Я поставил", icon: ArrowUpCircle, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
-      { to: "/tasks?scope=audited", label: "Наблюдаю", icon: Eye, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"] },
-      { to: "/tasks?overdue=1", label: "Просроченные", icon: AlarmClock, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"], badge: "overdue" },
-    ],
-  },
-  {
-    key: "projects",
-    label: "Проекты",
-    icon: FolderKanban,
+    key: "work",
+    label: "Работа",
+    icon: Briefcase,
     extra: "spaces",
+    settings: "work",
     items: [
-      { to: "/projects", label: "Все проекты", icon: FolderKanban, code: "projects.view" },
-      { to: "/projects?scope=participating", label: "Я участвую", icon: Users, code: "projects.view" },
-      { to: "/projects?scope=made_by_me", label: "Созданы мной", icon: UserIcon, code: "projects.view" },
-      { to: "/projects?scope=audited_by_me", label: "Наблюдаю", icon: Eye, code: "projects.view" },
+      { to: "/tasks", label: "Задачи", icon: CheckSquare, code: ["tasks.view_all", "tasks.view_department", "tasks.view_own"], badge: "overdue" },
+      { to: "/projects", label: "Проекты", icon: FolderKanban, code: "projects.view" },
     ],
   },
   {
     key: "crm",
-    label: "CRM",
+    label: "Продажи",
     icon: Coins,
+    settings: "crm",
     items: [
       { to: "/deals", label: "Сделки", icon: Coins, code: "deals.view" },
       { to: "/contracts", label: "Договоры", icon: FileSignature, code: "contracts.view" },
       { to: "/leads", label: "Лиды", icon: Zap, code: "leads.view" },
-      { to: "/contacts", label: "Контакты", icon: BookUser },
+      { to: "/contacts", label: "Компании и контакты", icon: BookUser },
       { to: "/calls", label: "Звонки", icon: Phone },
       { to: "/objects", label: "Объекты", icon: Boxes },
     ],
   },
   {
-    key: "comms",
-    label: "Чаты",
-    icon: MessagesSquare,
+    key: "inbox",
+    label: "Входящие",
+    icon: InboxIcon,
+    settings: "inbox",
     items: [
-      { to: "/messenger", label: "Мессенджер", icon: MessageSquare, code: "messenger.use", badge: "messenger" },
-      { to: "/inbox", label: "Открытые линии", icon: InboxIcon, code: "messengers.reply" },
+      { to: "/incoming", label: "Все входящие", icon: InboxIcon },
+      { to: "/notifications", label: "Уведомления", icon: Bell, badge: "notifications" },
       { to: "/mail", label: "Почта", icon: MailIcon, code: "mail.use" },
+      { to: "/inbox", label: "Открытые линии", icon: MessagesSquare, code: "messengers.reply" },
+      { to: "/messenger", label: "Чат команды", icon: MessageSquare, code: "messenger.use", badge: "messenger" },
     ],
   },
   {
     key: "calendar",
     label: "Календарь",
     icon: CalendarIcon,
-    items: [
-      { to: "/calendar", label: "Календарь", icon: CalendarIcon, code: "calendar.use" },
-      { to: "/time", label: "Учёт времени", icon: TimerIcon, code: "time.use" },
-      { to: "/timeoff", label: "Отпуска", icon: Palmtree },
-    ],
+    settings: "calendar",
+    items: [{ to: "/calendar", label: "Календарь", icon: CalendarIcon, code: "calendar.use" }],
   },
   {
     key: "knowledge",
@@ -159,36 +163,52 @@ const MODULES: Module[] = [
     key: "team",
     label: "Команда",
     icon: Users,
+    paths: ["/users"],
     items: [
-      { to: "/people", label: "Сотрудники", icon: Contact2, code: "hr.view_profiles" },
+      { to: "/people", label: "Сотрудники", icon: Contact2, code: ["hr.view_profiles", "users.view"], alsoActive: ["/users"] },
       { to: "/org-chart", label: "Оргструктура", icon: Network, code: "hr.view_profiles" },
-      { to: "/users", label: "Пользователи", icon: Users, code: "users.view" },
+      { to: "/timeoff", label: "Отпуска", icon: Palmtree },
+      { to: "/time", label: "Учёт времени", icon: TimerIcon, code: "time.use" },
     ],
   },
   {
-    key: "more",
-    label: "Ещё",
-    icon: LayoutGrid,
+    key: "analytics",
+    label: "Аналитика",
+    icon: BarChart3,
     items: [
       { to: "/reports", label: "Отчёты", icon: PieChart, code: "analytics.reports" },
-      { to: "/analytics", label: "Аналитика", icon: BarChart3, code: "analytics.reports" },
-      { to: "/automations", label: "Автоматизации", icon: Workflow, code: "automations.manage" },
-      { to: "/admin", label: "Платформа", icon: Shield, platformAdminOnly: true },
+      { to: "/analytics", label: "Дашборды", icon: BarChart3, code: "analytics.reports" },
     ],
   },
   {
     key: "settings",
-    label: "Настройки",
+    label: "Настройки компании",
     icon: Settings,
     bottom: true,
-    items: SETTINGS_TABS.map((t) => ({
-      to: `/settings/${t.to}`,
-      label: t.label,
-      icon: t.icon,
-      code: t.perm,
-      ownerOnly: t.ownerOnly,
-      ownerBypass: true,
-    })),
+    items: [
+      // Автоматизации — в группе «Доступ», сразу после API
+      ...settingsItems("company").flatMap((i) =>
+        i.to === "/settings/api"
+          ? [i, { to: "/automations", label: "Автоматизации", icon: Bot, code: "automations.manage", group: "Доступ" }]
+          : [i],
+      ),
+      { to: "/admin", label: "Платформа", icon: Shield, platformAdminOnly: true, group: "Платформа" },
+    ],
+  },
+  {
+    key: "me",
+    label: "Мои настройки",
+    icon: UserIcon,
+    hidden: true,
+    items: [
+      { to: "/profile", label: "Мой профиль", icon: UserIcon, exact: true },
+      { to: "/profile/settings?tab=notifications", label: "Уведомления", icon: Bell, group: "Аккаунт" },
+      { to: "/profile/settings?tab=security", label: "Вход и защита", icon: Shield, group: "Аккаунт" },
+      { to: "/profile/settings?tab=sessions", label: "Сессии", icon: Monitor, group: "Аккаунт" },
+      { to: "/profile/settings?tab=language", label: "Язык", icon: Globe, group: "Аккаунт" },
+      { to: "/profile/settings?tab=linked", label: "Привязанные аккаунты", icon: LinkIcon, group: "Аккаунт" },
+      ...settingsItems("personal").map((i) => ({ ...i, group: "Подключения" })),
+    ],
   },
 ];
 
@@ -203,10 +223,11 @@ function pathMatches(pathname: string, path: string, exact?: boolean) {
 }
 
 function moduleOf(pathname: string): Module | undefined {
-  // Самое длинное совпадение пути: /settings → «Ещё», /tasks/12 → «Задачи».
+  // Самое длинное совпадение пути: /tasks/12 → «Работа», /settings/offtake → «Продажи» (настройки модуля).
   let best: { m: Module; len: number } | undefined;
   for (const m of MODULES) {
-    const paths = [...m.items.map((i) => splitTo(i.to).path), ...(m.paths ?? [])];
+    const own = m.settings ? settingsItems(m.settings) : [];
+    const paths = [...m.items.map((i) => splitTo(i.to).path), ...own.map((i) => i.to), ...(m.paths ?? [])];
     for (const p of paths) {
       if (pathMatches(pathname, p, p === "/") && (!best || p.length > best.len)) best = { m, len: p.length };
     }
@@ -392,7 +413,7 @@ function Rail({
   const nav = useNavigate();
   const meRef = useRef<HTMLButtonElement>(null);
   const [meOpen, setMeOpen] = useState(false);
-  const notifCount = useNotifCounts().unread + useFeedUnread();
+  const notifCount = useNotifCounts().unread + useMessengerUnread();
 
   return (
     <nav aria-label="Модули" className="flex h-full w-16 shrink-0 flex-col items-center bg-rail py-2.5 text-zinc-400">
@@ -404,7 +425,7 @@ function Rail({
         )}
       </NavLink>
       <div className="flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1 [scrollbar-width:none]">
-        {modules.filter((m) => !m.bottom).map((m) => {
+        {modules.filter((m) => !m.bottom && !m.hidden).map((m) => {
           const Icon = m.icon;
           const on = active?.key === m.key;
           const first = m.items.find(visible);
@@ -424,7 +445,7 @@ function Rail({
             >
               <Icon size={18} strokeWidth={on ? 2.1 : 1.8} className={on ? "text-brand-400" : undefined} />
               <span className="max-w-full truncate">{tr(m.label)}</span>
-              {m.key === "home" && notifCount > 0 && (
+              {m.key === "inbox" && notifCount > 0 && (
                 <span className="absolute right-1.5 top-1 min-w-[15px] rounded-full bg-rose-500 px-1 text-center text-[9px] font-semibold leading-[15px] text-white">
                   {notifCount > 99 ? "99+" : notifCount}
                 </span>
@@ -457,7 +478,10 @@ function Rail({
         type="button"
         onClick={() => setMeOpen((v) => !v)}
         aria-label={tr("Профиль и выход")}
-        className="mt-2 rounded-full ring-2 ring-rail transition-shadow hover:ring-brand-400/60 focus-visible:outline-none focus-visible:ring-brand-400"
+        className={clsx(
+          "mt-2 rounded-full ring-2 transition-shadow hover:ring-brand-400/60 focus-visible:outline-none focus-visible:ring-brand-400",
+          active?.key === "me" ? "ring-brand-400" : "ring-rail",
+        )}
       >
         <Avatar name={me?.name} url={me?.avatar_url} size={30} />
       </button>
@@ -469,6 +493,9 @@ function Rail({
         <div className="pt-1">
           <PopoverItem onClick={() => { setMeOpen(false); nav("/profile"); }}>
             <UserIcon size={14} className="text-zinc-400" /> {tr("Мой профиль")}
+          </PopoverItem>
+          <PopoverItem onClick={() => { setMeOpen(false); nav("/profile/settings?tab=notifications"); }}>
+            <Settings size={14} className="text-zinc-400" /> {tr("Мои настройки")}
           </PopoverItem>
           <PopoverItem onClick={() => { setMeOpen(false); nav("/users/invitations"); }}>
             <UserPlus size={14} className="text-zinc-400" /> {tr("Пригласить сотрудников")}
@@ -504,6 +531,7 @@ function ModulePanel({
   const { pathname } = useLocation();
   const [sp] = useSearchParams();
   const items = m.items.filter(visible);
+  const moduleSettings = m.settings ? settingsItems(m.settings).filter(visible) : [];
   // Ключи query, которыми отличаются пункты модуля (scope, overdue…) + project для задач.
   const keys = useMemo(() => {
     const s = new Set<string>();
@@ -513,6 +541,7 @@ function ModulePanel({
   }, [m]);
 
   const isActive = (i: PanelItem) => {
+    if (i.alsoActive?.some((p) => pathMatches(pathname, p))) return true;
     const { path, params } = splitTo(i.to);
     if (!pathMatches(pathname, path, i.exact)) return false;
     // На детальных страницах (/tasks/12) подсвечиваем только «корневой» пункт.
@@ -544,8 +573,11 @@ function ModulePanel({
         </button>
       </div>
       <nav className="flex-1 space-y-px overflow-y-auto px-2 pb-3">
-        {items.map((i) => (
-          <PanelLink key={i.to} item={i} active={isActive(i)} />
+        {items.map((i, idx) => (
+          <div key={i.to}>
+            {i.group && i.group !== items[idx - 1]?.group && <SectionTitle>{tr(i.group)}</SectionTitle>}
+            <PanelLink item={i} active={isActive(i)} />
+          </div>
         ))}
         {m.extra === "favorites" && <FavoritesBlock />}
         {m.extra === "task-projects" && can("projects.view") && (
@@ -553,11 +585,19 @@ function ModulePanel({
         )}
         {m.extra === "spaces" && (
           <ProjectsBlock
-            title={tr("Пространства")}
+            title={tr("Избранные проекты")}
             hrefOf={(p) => `/projects/${p.id}`}
             activeId={pathname.startsWith("/projects/") ? Number(pathname.split("/")[2]) || null : null}
             canCreate={can("projects.create")}
           />
+        )}
+        {moduleSettings.length > 0 && (
+          <>
+            <SectionTitle>{tr("Настройки")}</SectionTitle>
+            {moduleSettings.map((i) => (
+              <PanelLink key={i.to} item={i} active={pathname === i.to} />
+            ))}
+          </>
         )}
       </nav>
     </aside>
@@ -913,11 +953,18 @@ function CreateMenu({ can }: { can: Can }) {
   const navigate = useNavigate();
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const offtake = useDealsTitle() !== "Сделки";
   const items = [
     { label: "Задача", hint: "в список задач", icon: CheckSquare, to: "/tasks?new=1", show: can("tasks.create") },
+    { label: "Событие", hint: "в календарь", icon: CalendarIcon, to: "/calendar?new=1", show: can("calendar.use") },
     { label: "Проект", hint: "новое пространство", icon: FolderKanban, to: "/projects?new=1", show: can("projects.create") },
-    { label: "Сделка", hint: "в воронку продаж", icon: Coins, to: "/deals?new=1", show: can("deals.create") },
+    offtake
+      ? { label: "Контракт", hint: "в offtake контракты", icon: Coins, to: "/deals?new=1", show: can("deals.create") }
+      : { label: "Сделка", hint: "в воронку продаж", icon: Coins, to: "/deals?new=1", show: can("deals.create") },
     { label: "Договор", hint: "в реестр договоров", icon: FileSignature, to: "/contracts?new=1", show: can("contracts.create") },
+    { label: "Лид", hint: "заявка от клиента", icon: Zap, to: "/leads?new=1", show: can("leads.create") },
+    { label: "Компания", hint: "контрагент", icon: BookUser, to: "/contacts?new=company", show: can("contacts.create") },
+    { label: "Контакт", hint: "человек", icon: Contact2, to: "/contacts?new=1", show: can("contacts.create") },
   ].filter((i) => i.show);
   if (items.length === 0) return null;
   return (

@@ -18,31 +18,31 @@ type Tab = "notifications" | "language" | "security" | "sessions" | "linked";
 const TABS: { key: Tab; label: string; icon: typeof Bell }[] = [
   { key: "notifications", label: "Уведомления", icon: Bell },
   { key: "language", label: "Язык интерфейса", icon: Globe },
-  { key: "security", label: "Безопасность", icon: Shield },
+  { key: "security", label: "Вход и защита", icon: Shield },
   { key: "sessions", label: "Сессии", icon: Monitor },
   { key: "linked", label: "Привязанные аккаунты", icon: LinkIcon },
 ];
 
 export default function ProfileSettings() {
   const tr = useT();
+  // Раздел выбирается в меню «Мои настройки» (панель модуля): /profile/settings?tab=…
   const [params] = useSearchParams();
-  const initialTab = TABS.some((t) => t.key === params.get("tab")) ? (params.get("tab") as Tab) : "notifications";
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const tab: Tab = TABS.some((t) => t.key === params.get("tab")) ? (params.get("tab") as Tab) : "notifications";
   return (
-    <div className="space-y-5">
-      <Link to="/profile" className="inline-flex items-center gap-1 text-[13px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
-        <ArrowLeft size={14} /> {tr("К профилю")}
-      </Link>
-      <SettingsLayout title="Настройки профиля" items={TABS} value={tab} onChange={setTab}>
-        <section className="card p-5 sm:p-6">
-          <h2 className="mb-4 text-base font-semibold">{tr(TABS.find((t) => t.key === tab)?.label ?? "")}</h2>
-          {tab === "notifications" && <NotificationsTab />}
-          {tab === "language" && <LanguageTab />}
-          {tab === "security" && <SecurityTab />}
-          {tab === "sessions" && <SessionsTab />}
-          {tab === "linked" && <LinkedTab />}
-        </section>
-      </SettingsLayout>
+    <div className="space-y-4">
+      <div className="page-header">
+        <div className="min-w-0">
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">{tr("Мои настройки")}</div>
+          <h1 className="page-title">{tr(TABS.find((t) => t.key === tab)?.label ?? "")}</h1>
+        </div>
+      </div>
+      <section className="card p-5 sm:p-6">
+        {tab === "notifications" && <NotificationsTab />}
+        {tab === "language" && <LanguageTab />}
+        {tab === "security" && <SecurityTab />}
+        {tab === "sessions" && <SessionsTab />}
+        {tab === "linked" && <LinkedTab />}
+      </section>
     </div>
   );
 }

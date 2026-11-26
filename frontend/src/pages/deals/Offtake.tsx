@@ -25,7 +25,7 @@ import { DatePicker } from "@/components/DatePicker";
 import { RecordPicker } from "@/components/RecordPicker";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
-import { FilterSelect, SearchInput, Segmented, Toolbar } from "@/components/page";
+import { FilterSelect, SearchInput, Segmented, Tabs, Toolbar } from "@/components/page";
 import { useAuth } from "@/store/auth";
 import { useAi } from "@/hooks/useAi";
 import { legalEntityOptions, useLegalEntities, type LegalEntityBrief } from "@/hooks/useLegalEntities";
@@ -765,11 +765,20 @@ const num = (s: string) => (s.trim() === "" ? null : Number(s.replace(",", ".").
 export function OfftakeDealModal({
   initial,
   onClose,
+  variant = "modal",
+  onSaved,
 }: {
   initial: OfftakeDeal | null;
   onClose: () => void;
+  /** page — карточка отдельной страницей /deals/:id с вкладками; modal — окно (создание контракта). */
+  variant?: "modal" | "page";
+  /** Для страницы: после сохранения остаёмся на ней. */
+  onSaved?: () => void;
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
+  const ai = useAi();
+  const [tab, setTab] = useState<"terms" | "docs" | "ai">("terms");
   const { can } = useAuth();
   const le = useLegalEntities();
   const { settings } = useOfftakeSettings();
@@ -863,18 +872,19 @@ export function OfftakeDealModal({
       if (initial) await api.patch(`/api/deals/${initial.id}`, body);
       else await api.post("/api/deals", { ...body, pipeline: "offtake" });
       invalidateDeals(qc);
-      onClose();
+      if (variant === "page" && initial) {
+        toast.success("Контракт сохранён");
+        onSaved?.();
+      } else onClose();
     } catch (e) {
       setServerError(extractApiError(e).message);
     }
   });
 
-  return (
-    <Modal open onClose={onClose} title={initial ? "Offtake-контракт" : "Новый контракт"} size="xl">
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+  const fields = (
         <fieldset disabled={!canEdit} className="space-y-4">
           <FormField label="Название" required error={errors.title ? "Название — от 2 до 200 символов" : null}>
-            <input className="input" autoFocus {...register("title", { required: true, minLength: 2, maxLength: 200 })} />
+            <input className="input" autoFocus={variant !== "page"} {...register("title", { required: true, minLength: 2, maxLength: 200 })} />
           </FormField>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -1089,6 +1099,84 @@ export function OfftakeDealModal({
             </FormField>
           </div>
         </fieldset>
+  );
+
+  const stageLabel = settings?.stages.find((x) => x.key === initial?.offtake_stage)?.label;
+  const stageIdx = settings?.stages.findIndex((x) => x.key === initial?.offtake_stage) ?? -1;
+
+  if (variant === "page" && initial) {
+    return (
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <div className="page-header">
+          <div className="min-w-0">
+            <Link to="/deals" className="mb-0.5 inline-flex items-center gap-1 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+              Offtake контракты /
+            </Link>
+            <h1 className="page-title truncate">{initial.title}</h1>
+            <p className="page-subtitle">
+              {[stageLabel, initial.company?.name, initial.owner?.name].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+          {canEdit && (
+            <Button type="submit" variant="primary" isLoading={isSubmitting}>
+              Сохранить
+            </Button>
+          )}
+        </div>
+
+        {settings && initial.offtake_stage !== "refused" && (
+          <div className="flex gap-1" aria-label={`Стадия: ${stageLabel ?? ""}`}>
+            {settings.stages
+              .filter((x) => x.key !== "refused")
+              .map((x, i) => (
+                <div key={x.key} className="min-w-0 flex-1" title={x.label}>
+                  <div className={clsx("h-1.5 rounded-full", i <= stageIdx ? "bg-brand-600" : "bg-zinc-200 dark:bg-zinc-700")} />
+                  <div className={clsx("mt-1 hidden truncate text-[11px] lg:block", i === stageIdx ? "font-semibold text-zinc-800 dark:text-zinc-100" : "text-zinc-400")}>
+                    {x.label}
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {initial.offtake_stage === "signed" && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/20">
+            <span>Контракт подписан — оформите договор в реестре.</span>
+            <Link to={`/contracts?new=1&deal_id=${initial.id}`} className="btn-primary !px-3 !py-1.5 !text-xs">
+              Создать договор
+            </Link>
+          </div>
+        )}
+
+        <Tabs
+          label="Разделы контракта"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { key: "terms", label: "Условия" },
+            { key: "docs", label: "Документы" },
+            { key: "ai", label: "ИИ-помощник", hidden: !ai.available },
+          ]}
+        />
+        {/* Вкладки скрываются, а не размонтируются: несохранённые правки в полях не теряются */}
+        <div hidden={tab !== "terms"} className="card p-5">
+          {fields}
+        </div>
+        <div hidden={tab !== "docs"}>
+          <DealDocuments deal={initial} settings={settings} />
+        </div>
+        <div hidden={tab !== "ai"}>
+          <OfftakeAiPanel deal={initial} />
+        </div>
+        <FormError msg={serverError} />
+      </form>
+    );
+  }
+
+  return (
+    <Modal open onClose={onClose} title={initial ? "Offtake-контракт" : "Новый контракт"} size="xl">
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {fields}
 
         {initial && <DealDocuments deal={initial} settings={settings} />}
 

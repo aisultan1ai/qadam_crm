@@ -138,7 +138,7 @@ def auth_url(
         raise HTTPException(
             503,
             "Подключение к этому хранилищу ещё не настроено в вашей компании. "
-            "Владелец компании может включить его в Настройки → Сервисы и хранилища.",
+            "Владелец компании может включить его в «Мои настройки» → «Сервисы и хранилища».",
         )
     state = google_oauth.issue_state(ctx.tenant.id, ctx.user.id, provider)
     if provider == "google_drive":

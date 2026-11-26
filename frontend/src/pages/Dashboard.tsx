@@ -12,6 +12,7 @@ import { PriorityChip, StatusChip } from "@/components/ui";
 import { useAuth } from "@/store/auth";
 import { BirthdaysWidget, MyGoalsWidget, KudosFeedWidget } from "@/components/HRWidgets";
 import { MyWork } from "./dashboard/MyWork";
+import { MyDayBlocks, useMyDay } from "./dashboard/MyDayBlocks";
 import { FeedRow, useFeedActions, type FeedPage } from "@/components/ActivityFeed";
 
 type DashboardStats = {
@@ -72,6 +73,7 @@ export default function DashboardPage() {
     staleTime: 60_000,
   });
 
+  const myDay = useMyDay();
   const isEmptyTenant = !!stats && stats.total === 0 && (projectsMeta?.total ?? 0) === 0;
   const firstName = (me?.name || "").split(" ")[0];
   const today = new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
@@ -80,7 +82,7 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-6">
       <div className="page-header">
         <div>
-          <p className="section-label first-letter:uppercase">{today}</p>
+          <p className="section-label first-letter:uppercase">Мой день · {today}</p>
           <h1 className="page-title mt-1">
             {greeting()}
             {firstName ? `, ${firstName}` : ""}
@@ -108,16 +110,17 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <StatRow stats={stats} />
 
-          {/* Две независимые колонки: блоки идут друг под другом без пустот между рядами. */}
+          {/* Слева — моя работа и то, что требует внимания (по правам), справа — сводки. */}
           <div className="grid items-start gap-6 xl:grid-cols-3">
             <div className="space-y-6 xl:col-span-2">
               {canTasks ? <MyWork /> : <StatusBreakdown stats={stats} />}
-              <RecentActivity />
+              <MyDayBlocks data={myDay.data} isPending={myDay.isPending} />
             </div>
             <div className="space-y-6">
               {canTasks && <StatusBreakdown stats={stats} />}
-              {canDeals && <DealsSummary />}
+              {canDeals && myDay.data?.pipeline !== "offtake" && <DealsSummary />}
               <MyGoalsWidget />
+              <RecentActivity />
             </div>
           </div>
 

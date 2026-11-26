@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { Modal } from "./ui";
 import { modKey } from "@/lib/platform";
 
-const GOTO: Record<string, string> = { h: "/", i: "/notifications", t: "/tasks", p: "/projects", c: "/calendar" };
+const GOTO: Record<string, string> = { h: "/", i: "/incoming", t: "/tasks", p: "/projects", c: "/calendar" };
 
 function isTyping(el: EventTarget | null) {
   const n = el as HTMLElement | null;

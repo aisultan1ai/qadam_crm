@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useNewParam } from "@/hooks/useNewParam";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Filter, LayoutGrid, List, Search, Trash2, Upload, User as UserIcon, Zap, Plus, Loader2, CheckCircle2, XCircle, FileSpreadsheet } from "lucide-react";
 import clsx from "clsx";
@@ -67,6 +68,7 @@ export default function Leads() {
   const [openLeadId, setOpenLeadId] = useState<number | null>(null);
   const [convertLead, setConvertLead] = useState<TenantLead | null>(null);
   const [openNew, setOpenNew] = useState(false);
+  useNewParam(() => setOpenNew(true), can("leads.create"));
   const [openImport, setOpenImport] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
@@ -102,7 +104,7 @@ export default function Leads() {
     <div className="space-y-5">
       <div className="page-header">
         <div>
-          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">CRM</div>
+          <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Продажи</div>
           <h1 className="page-title">Лиды</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -168,7 +170,7 @@ export default function Leads() {
       ) : (data?.items.length ?? 0) === 0 ? (
         <EmptyState
           title="Пока нет лидов"
-          description="Входящие заявки с сайта и мессенджеров. Настройте форму захвата в Настройки → Формы захвата — заявки будут приходить сюда."
+          description="Входящие заявки с сайта и мессенджеров. Настройте форму в Продажи → Настройки → «Формы захвата лидов» — заявки будут приходить сюда."
           help="leads"
           icon={<Zap size={32} />}
         />

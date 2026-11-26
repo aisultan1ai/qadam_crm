@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DatePicker } from "@/components/DatePicker";
-import { Link, NavLink, Route, Routes, Navigate } from "react-router-dom";
+import { Link, NavLink, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { api, extractApiError } from "@/api/client";
@@ -23,15 +23,28 @@ import TaskStatuses from "./TaskStatuses";
 import LegalEntities from "./LegalEntities";
 import OfftakeSettings from "./OfftakeSettings";
 import AiSettings from "./AiSettings";
-import { SETTINGS_TABS, settingsTabVisible } from "./settings/nav";
+import { SETTINGS_TABS, settingsTabVisible, type SettingsPlace } from "./settings/nav";
 import { fetchAllUsers } from "@/lib/users";
+
+const PLACE_TITLE: Record<SettingsPlace, string> = {
+  company: "Настройки компании",
+  personal: "Мои настройки",
+  crm: "Продажи · настройки",
+  work: "Работа · настройки",
+  inbox: "Входящие · настройки",
+  calendar: "Календарь · настройки",
+};
 
 export default function Settings() {
   const { can, me } = useAuth();
   const isOwner = !!me?.current_tenant?.is_owner || !!me?.is_platform_admin;
+  const { pathname } = useLocation();
+  const currentTab = SETTINGS_TABS.find((t) => pathname.endsWith("/" + t.to));
+  const firstCompany = SETTINGS_TABS.find((t) => t.place === "company" && settingsTabVisible(t, can, isOwner));
 
   return (
     <SettingsRouteLayout
+      title={currentTab ? PLACE_TITLE[currentTab.place] : "Настройки компании"}
       subtitle="Компания, тариф и права доступа"
       items={SETTINGS_TABS.map((t) => ({
         to: t.to,
@@ -44,7 +57,7 @@ export default function Settings() {
       
 
       <Routes>
-        <Route index element={<Navigate to={SETTINGS_TABS.find((t) => settingsTabVisible(t, can, isOwner))?.to ?? "services"} replace />} />
+        <Route index element={<Navigate to={firstCompany ? firstCompany.to : "/profile/settings?tab=notifications"} replace />} />
         <Route path="roles" element={can("roles.manage") ? <RolesSettings /> : <Forbid />} />
         <Route path="team" element={<Navigate to="/users/invitations" replace />} />
         <Route path="forms" element={can("leads.manage_forms") ? <LeadFormsSettings /> : <Forbid />} />

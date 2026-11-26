@@ -105,7 +105,7 @@ export default function GlobalSearch({
 
     const pages: (Item & { show: boolean })[] = [
       { id: "p-home", group: "Перейти", label: "Главная", icon: LayoutDashboard, shortcut: "G H", run: go("/"), show: true },
-      { id: "p-inbox", group: "Перейти", label: "Входящие", icon: Bell, shortcut: "G I", keywords: "уведомления", run: go("/notifications"), show: true },
+      { id: "p-inbox", group: "Перейти", label: "Все входящие", icon: Bell, shortcut: "G I", keywords: "уведомления почта клиенты", run: go("/incoming"), show: true },
       { id: "p-tasks", group: "Перейти", label: "Задачи", icon: CheckSquare, shortcut: "G T", run: go("/tasks"), show: can(["tasks.view_all", "tasks.view_department", "tasks.view_own"]) },
       { id: "p-projects", group: "Перейти", label: "Проекты", icon: FolderKanban, shortcut: "G P", run: go("/projects"), show: can("projects.view") },
       { id: "p-calendar", group: "Перейти", label: "Календарь", icon: Calendar, shortcut: "G C", run: go("/calendar"), show: can("calendar.use") },

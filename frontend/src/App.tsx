@@ -54,8 +54,10 @@ const ContractCard = lazy(() => import("@/pages/ContractCard"));
 const ProfileSettings = lazy(() => import("@/pages/ProfileSettings"));
 const Activity = lazy(() => import("@/pages/Activity"));
 const Notifications = lazy(() => import("@/pages/Notifications"));
+const AllIncoming = lazy(() => import("@/pages/AllIncoming"));
 const TimeOff = lazy(() => import("@/pages/TimeOff"));
 const Deals = lazy(() => import("@/pages/Deals"));
+const DealPage = lazy(() => import("@/pages/deals/DealPage"));
 const Reports = lazy(() => import("@/pages/Reports"));
 const ProjectGantt = lazy(() => import("@/pages/ProjectGantt"));
 const Whiteboard = lazy(() => import("@/pages/Whiteboard"));
@@ -213,8 +215,10 @@ export default function App() {
         <Route path="contracts/:id" element={<ContractCard />} />
         <Route path="activity" element={<Activity />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="incoming" element={<AllIncoming />} />
         <Route path="timeoff" element={<TimeOff />} />
         <Route path="deals" element={<Deals />} />
+        <Route path="deals/:id" element={<DealPage />} />
         <Route path="reports" element={<Reports />} />
         <Route path="projects/:id/gantt" element={<ProjectGantt />} />
         <Route path="whiteboard" element={<Whiteboard />} />

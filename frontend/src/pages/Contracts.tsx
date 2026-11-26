@@ -60,7 +60,8 @@ export default function Contracts() {
   const [status, setStatus] = useState("");
   const [legalEntity, setLegalEntity] = useState("");
   const [responsible, setResponsible] = useState("");
-  const [expiring, setExpiring] = useState("");
+  // ?expiring=30 — ссылка из «Моего дня»
+  const [expiring, setExpiring] = useState(() => (/^\d+$/.test(sp.get("expiring") ?? "") ? sp.get("expiring")! : ""));
   const [creating, setCreating] = useState<ContractDraft | null>(null);
 
   // Открытие формы по ссылке: ?new=1[&deal_id=..|&company_id=..]

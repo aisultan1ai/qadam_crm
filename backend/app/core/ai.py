@@ -121,7 +121,7 @@ def ensure_available(db: Session, tenant: Tenant) -> None:
     if not api_key_configured():
         raise HTTPException(503, "ИИ-помощник не подключён на сервере. Обратитесь к администратору платформы")
     if not tenant.ai_enabled:
-        raise HTTPException(403, "ИИ-помощник выключен. Его можно включить в Настройки → «ИИ-помощник»")
+        raise HTTPException(403, "ИИ-помощник выключен. Его можно включить в «Настройки компании» → «ИИ-помощник»")
     limit = monthly_limit(db, tenant)
     if limit <= 0:
         raise HTTPException(402, "ИИ-помощник недоступен на вашем тарифе: он входит в Plan X")

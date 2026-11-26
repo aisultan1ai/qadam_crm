@@ -85,7 +85,7 @@ export default function WelcomeModal() {
               <div className="font-medium">Что делать дальше</div>
               <ol className="mt-1 list-decimal space-y-1 pl-4 text-neutral-600 dark:text-neutral-400">
                 <li>Создайте проект — контейнер для задач</li>
-                <li>Пригласите команду в Настройках → Команда</li>
+                <li>Пригласите команду: меню профиля → «Пригласить сотрудников»</li>
                 <li>Добавьте задачи и распределите их по статусам</li>
               </ol>
             </div>

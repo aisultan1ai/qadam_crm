@@ -406,7 +406,7 @@ def send_new_message(
         raise HTTPException(400, "Введите текст письма")
     mb = _my_mailbox(db, ctx)
     if not mb:
-        raise HTTPException(400, "Настройте mailbox в Настройки → Почта")
+        raise HTTPException(400, "Подключите почтовый ящик: меню профиля → «Мои настройки» → «Почтовый ящик»")
     m = send_new(
         db=db, mb=mb, subject=payload.subject,
         body_text=payload.body_text, body_html=payload.body_html,
