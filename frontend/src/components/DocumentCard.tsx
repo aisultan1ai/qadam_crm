@@ -5,7 +5,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Loader2, RotateCcw, Upload, X } from "lucide-react";
+import { Download, GitCompare, Loader2, RotateCcw, Sparkles, Upload, X } from "lucide-react";
 import clsx from "clsx";
 
 import { api, extractApiError } from "@/api/client";
@@ -17,6 +17,8 @@ import { RecordPicker, SYSTEM_TARGETS } from "@/components/RecordPicker";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { useAuth } from "@/store/auth";
+import { useAi } from "@/hooks/useAi";
+import { isAiReadable } from "@/pages/contracts/shared";
 
 type LinkOut = { target: string; id: number; kind: string; label: string; url: string | null; accessible: boolean };
 type VersionOut = {
@@ -239,6 +241,18 @@ function Versions({ card, onChanged }: { card: CardOut; onChanged: () => void })
   const [file, setFile] = useState<File | null>(null);
   const [comment, setComment] = useState("");
   const d = card.document;
+  const { available: aiAvailable } = useAi();
+  const readable = (v: VersionOut) => isAiReadable(v.filename || d.name);
+  const canCompare = aiAvailable && card.versions.filter(readable).length >= 2;
+  const [picked, setPicked] = useState<number[]>([]);
+  const [compare, setCompare] = useState<{ from: VersionOut; to: VersionOut } | null>(null);
+  const byId = new Map(card.versions.map((v) => [v.id, v]));
+  const togglePick = (id: number) =>
+    setPicked((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id].slice(-2)));
+  const comparePicked = () => {
+    const [a, b] = picked.map((id) => byId.get(id)!).sort((x, y) => x.version_no - y.version_no);
+    if (a && b) setCompare({ from: a, to: b });
+  };
 
   const upload = useMutation({
     mutationFn: async () => {
@@ -274,7 +288,20 @@ function Versions({ card, onChanged }: { card: CardOut; onChanged: () => void })
 
   return (
     <div>
-      <div className="mb-2 text-sm font-semibold">Версии</div>
+      <div className="mb-2 flex items-center gap-2">
+        <div className="text-sm font-semibold">Версии</div>
+        {canCompare && (
+          <div className="ml-auto flex items-center gap-2 text-xs text-neutral-500">
+            {picked.length < 2 ? (
+              <span>Отметьте две версии, чтобы сравнить их</span>
+            ) : (
+              <Button variant="secondary" size="sm" leftIcon={<Sparkles size={13} />} onClick={comparePicked}>
+                Сравнить выбранные
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
       {card.can_upload_version && (
         <div className="mb-3 rounded-lg border border-dashed border-neutral-300 p-3 dark:border-neutral-700">
           <input
@@ -305,8 +332,21 @@ function Versions({ card, onChanged }: { card: CardOut; onChanged: () => void })
         </div>
       )}
       <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
-        {card.versions.map((v) => (
+        {card.versions.map((v, idx) => {
+          const prev = card.versions[idx + 1];
+          return (
           <li key={v.id} className={clsx("flex items-start gap-3 px-3 py-2.5", v.is_current && "bg-brand-50/50 dark:bg-brand-500/5")}>
+            {canCompare && (
+              <input
+                type="checkbox"
+                className="mt-1 shrink-0"
+                disabled={!readable(v)}
+                checked={picked.includes(v.id)}
+                onChange={() => togglePick(v.id)}
+                aria-label={`Выбрать версию ${v.version_no} для сравнения`}
+                title={readable(v) ? "Выбрать для сравнения" : "ИИ сравнивает только PDF, DOCX и текстовые файлы"}
+              />
+            )}
             <span className="mt-0.5 w-9 shrink-0 text-sm font-semibold tabular-nums">v{v.version_no}</span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 text-sm">
@@ -326,6 +366,17 @@ function Versions({ card, onChanged }: { card: CardOut; onChanged: () => void })
                 </div>
               )}
             </div>
+            {canCompare && prev && readable(v) && readable(prev) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCompare({ from: prev, to: v })}
+                title={`Сравнить с предыдущей (v${prev.version_no})`}
+                aria-label="Сравнить с предыдущей версией"
+              >
+                <GitCompare size={13} />
+              </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={() => download(v)} title="Скачать эту версию" aria-label="Скачать эту версию">
               <Download size={13} />
             </Button>
@@ -349,8 +400,84 @@ function Versions({ card, onChanged }: { card: CardOut; onChanged: () => void })
               </Button>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
+      {compare && <CompareModal docId={d.id} from={compare.from} to={compare.to} onClose={() => setCompare(null)} />}
     </div>
+  );
+}
+
+type CompareOut = {
+  identical: boolean;
+  summary: string;
+  changes: { section: string; before: string | null; after: string | null; significance: "high" | "medium" | "low" }[];
+};
+
+const SIGNIFICANCE: Record<CompareOut["changes"][number]["significance"], { label: string; cls: string }> = {
+  high: { label: "Важно", cls: "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200" },
+  medium: { label: "Заметно", cls: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200" },
+  low: { label: "Мелко", cls: "bg-neutral-100 text-neutral-600 dark:bg-white/5 dark:text-neutral-300" },
+};
+
+function CompareModal({ docId, from, to, onClose }: { docId: number; from: VersionOut; to: VersionOut; onClose: () => void }) {
+  // Один запрос к ИИ на открытие окна
+  const { data, isPending, error } = useQuery({
+    queryKey: ["ai-version-compare", docId, from.id, to.id],
+    queryFn: async () =>
+      (
+        await api.post<CompareOut>(`/api/ai/documents/${docId}/versions/compare`, {
+          from_version_id: from.id,
+          to_version_id: to.id,
+        })
+      ).data,
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  return (
+    <Modal open onClose={onClose} title={`Что изменилось: v${from.version_no} → v${to.version_no}`} size="xl">
+      {isPending ? (
+        <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-neutral-500">
+          <Sparkles size={15} className="animate-pulse text-brand-500" /> ИИ сравнивает версии…
+        </div>
+      ) : error || !data ? (
+        <FormError msg={extractApiError(error).message} />
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-lg bg-neutral-50 px-3 py-2 text-[13.5px] dark:bg-white/5">{data.summary || "—"}</div>
+          {data.changes.length > 0 && (
+            <ul className="max-h-[60vh] space-y-2 overflow-y-auto">
+              {data.changes.map((ch, i) => (
+                <li key={i} className="rounded-lg border border-neutral-200 p-3 text-[13px] dark:border-neutral-800">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className={clsx("rounded px-1.5 py-0.5 text-[10.5px] font-medium", SIGNIFICANCE[ch.significance].cls)}>
+                      {SIGNIFICANCE[ch.significance].label}
+                    </span>
+                    <span className="font-medium">{ch.section}</span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded bg-rose-50/70 px-2 py-1.5 dark:bg-rose-500/10">
+                      <div className="text-[11px] text-neutral-500">Было (v{from.version_no})</div>
+                      <div className="whitespace-pre-line">{ch.before ?? <span className="text-neutral-400">— пункта не было</span>}</div>
+                    </div>
+                    <div className="rounded bg-emerald-50/70 px-2 py-1.5 dark:bg-emerald-500/10">
+                      <div className="text-[11px] text-neutral-500">Стало (v{to.version_no})</div>
+                      <div className="whitespace-pre-line">{ch.after ?? <span className="text-neutral-400">— пункт удалён</span>}</div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-neutral-500">Сравнение составил ИИ — сверьте важные изменения с файлами версий.</p>
+        </div>
+      )}
+      <div className="mt-4 flex justify-end">
+        <Button variant="secondary" onClick={onClose}>
+          Закрыть
+        </Button>
+      </div>
+    </Modal>
   );
 }

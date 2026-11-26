@@ -510,3 +510,50 @@ export function ContractFormModal({
     </Modal>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Обязательства по договору и ИИ
+// ---------------------------------------------------------------------------
+
+export type ObligationParty = "us" | "counterparty" | "both";
+
+export type Obligation = {
+  id: number;
+  contract_id: number;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  party: ObligationParty;
+  status: "open" | "done";
+  source_quote: string | null;
+  created_by: number | null;
+  created_at: string;
+  done_at: string | null;
+};
+
+export const PARTY_LABEL: Record<ObligationParty, string> = {
+  us: "Мы",
+  counterparty: "Контрагент",
+  both: "Обе стороны",
+};
+
+/** Файлы, которые ИИ умеет читать: PDF, DOCX и текстовые (как на сервере, services/ai_text.py). */
+export function isAiReadable(name: string | null | undefined, mime?: string | null): boolean {
+  const n = (name ?? "").toLowerCase();
+  const m = (mime ?? "").toLowerCase();
+  return (
+    /\.(pdf|docx|txt|md|csv)$/.test(n) ||
+    m === "application/pdf" ||
+    m === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    m.startsWith("text/")
+  );
+}
+
+/** Дней до даты (отрицательное — просрочено). */
+export function daysUntil(iso: string): number {
+  const [y, mo, d] = iso.slice(0, 10).split("-").map(Number);
+  const target = new Date(y, mo - 1, d).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((target - today) / 86_400_000);
+}

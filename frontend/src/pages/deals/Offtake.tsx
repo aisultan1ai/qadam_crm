@@ -8,11 +8,13 @@
  * Правила стадий проверяет сервер: в «NDA подписан» и дальше — только с файлом NDA,
  * в «Term Sheet согласован» и дальше — с файлом Term Sheet; «Отказ» — с причиной.
  */
-import { useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
-import { Download, FileSignature, FileText, KanbanSquare, List, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import {
+  Copy, Download, FileSignature, FileText, KanbanSquare, List, Mail, Pencil, Plus, Sparkles, Trash2, Upload,
+} from "lucide-react";
 import clsx from "clsx";
 
 import { api, extractApiError } from "@/api/client";
@@ -25,6 +27,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/Confirm";
 import { FilterSelect, SearchInput, Segmented, Toolbar } from "@/components/page";
 import { useAuth } from "@/store/auth";
+import { useAi } from "@/hooks/useAi";
 import { legalEntityOptions, useLegalEntities, type LegalEntityBrief } from "@/hooks/useLegalEntities";
 import {
   useOfftakeProducts, useOfftakeSettings, type OfftakeProduct, type OfftakeSettings, type OfftakeStage,
@@ -1089,6 +1092,8 @@ export function OfftakeDealModal({
 
         {initial && <DealDocuments deal={initial} settings={settings} />}
 
+        {initial && <OfftakeAiPanel deal={initial} />}
+
         {initial && initial.offtake_stage === "signed" && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/20">
             <span>Сделка подписана — оформите договор в реестре.</span>
@@ -1252,6 +1257,247 @@ function DealDocuments({ deal, settings }: { deal: OfftakeDeal; settings: Offtak
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ИИ: письмо покупателю и сводка по контракту (кнопки видны только при доступном ИИ)
+// ---------------------------------------------------------------------------
+
+type EmailPurpose = "materials" | "nda" | "follow_up" | "term_sheet" | "custom";
+
+const EMAIL_PURPOSES: { key: EmailPurpose; label: string }[] = [
+  { key: "materials", label: "Презентация и материалы" },
+  { key: "nda", label: "Предложение подписать NDA" },
+  { key: "follow_up", label: "Напоминание (follow-up)" },
+  { key: "term_sheet", label: "Term Sheet" },
+  { key: "custom", label: "Своя цель" },
+];
+
+type AiSummary = {
+  status_line: string;
+  stuck_reason: string | null;
+  missing_documents: string[];
+  last_contact: string | null;
+  next_steps: string[];
+};
+
+function OfftakeAiPanel({ deal }: { deal: OfftakeDeal }) {
+  const { available } = useAi();
+  const [mode, setMode] = useState<"none" | "email" | "summary">("none");
+  if (!available) return null;
+  return (
+    <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 dark:border-brand-900/50 dark:bg-brand-950/20">
+      <div className="flex flex-wrap items-center gap-2">
+        <Sparkles size={15} className="text-brand-600 dark:text-brand-300" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">ИИ-помощник</span>
+        <div className="ml-auto flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={mode === "summary" ? "primary" : "secondary"}
+            onClick={() => setMode(mode === "summary" ? "none" : "summary")}
+          >
+            Сводка ИИ
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={mode === "email" ? "primary" : "secondary"}
+            leftIcon={<Mail size={13} />}
+            onClick={() => setMode(mode === "email" ? "none" : "email")}
+          >
+            Письмо с ИИ
+          </Button>
+        </div>
+      </div>
+      {mode === "summary" && <OfftakeAiSummary dealId={deal.id} />}
+      {mode === "email" && <OfftakeAiEmail dealId={deal.id} />}
+    </div>
+  );
+}
+
+function OfftakeAiSummary({ dealId }: { dealId: number }) {
+  const [data, setData] = useState<AiSummary | null>(null);
+  const run = useMutation({
+    mutationFn: async () => (await api.post<AiSummary>(`/api/ai/offtake/${dealId}/summary`)).data,
+    onSuccess: setData,
+  });
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      {!data && !run.isPending && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-zinc-600 dark:text-zinc-300">Короткая сводка: где контракт, что мешает, какие шаги дальше.</span>
+          <Button type="button" size="sm" variant="primary" onClick={() => run.mutate()}>
+            Составить сводку
+          </Button>
+        </div>
+      )}
+      {run.isPending && <div className="h-16 animate-pulse rounded bg-white/60 dark:bg-[#23262D]" />}
+      <FormError msg={run.isError ? extractApiError(run.error).message : null} />
+      {data && !run.isPending && (
+        <div className="space-y-2">
+          <p>{data.status_line}</p>
+          {data.stuck_reason && (
+            <div className="rounded border border-amber-200 bg-amber-50 p-2 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              <span className="font-medium">Что может мешать: </span>
+              {data.stuck_reason}
+            </div>
+          )}
+          <div className="grid gap-2 md:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold text-zinc-500">Последний контакт</div>
+              <div>{data.last_contact ?? "Писем и звонков по контракту не найдено"}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-zinc-500">Недостающие документы</div>
+              {data.missing_documents.length === 0 ? (
+                <div>Нужные на этой стадии документы прикреплены</div>
+              ) : (
+                <ul className="list-disc pl-4">
+                  {data.missing_documents.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          {data.next_steps.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-zinc-500">Следующие шаги</div>
+              <ol className="list-decimal pl-4">
+                {data.next_steps.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+            <span>Выводы и шаги предложил ИИ — проверьте перед тем, как действовать.</span>
+            <Button type="button" size="sm" variant="ghost" onClick={() => run.mutate()}>
+              Обновить
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfftakeAiEmail({ dealId }: { dealId: number }) {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const { can } = useAuth();
+  const [purpose, setPurpose] = useState<EmailPurpose>("follow_up");
+  const [note, setNote] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [to, setTo] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const run = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<{ subject: string; body: string; to: string | null }>(`/api/ai/offtake/${dealId}/email-draft`, {
+          purpose,
+          note: note.trim() || null,
+        })
+      ).data,
+    onSuccess: (d) => {
+      setSubject(d.subject);
+      setBody(d.body);
+      setTo(d.to);
+      setReady(true);
+    },
+  });
+
+  const copy = async () => {
+    const text = (subject ? `Тема: ${subject}\n\n` : "") + body;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Черновик скопирован");
+    } catch {
+      toast.error("Не удалось скопировать", "Выделите текст и скопируйте вручную");
+    }
+  };
+
+  // Черновик передаётся в почту через хранилище вкладки, а не через адрес: текст и email не попадают в URL
+  const openInMail = () => {
+    try {
+      sessionStorage.setItem("qadam.mail_draft", JSON.stringify({ to: to ?? "", subject, body }));
+    } catch {
+      toast.error("Не удалось открыть почту", "Скопируйте черновик вручную");
+      return;
+    }
+    navigate("/mail?compose=1");
+  };
+
+  // Поля стоят внутри формы карточки: Enter не должен сохранять контракт
+  const noEnter = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") e.preventDefault();
+  };
+
+  return (
+    <div className="mt-3 space-y-3 text-sm">
+      <div className="grid gap-3 md:grid-cols-2">
+        <FormField label="Цель письма">
+          <select className="input" value={purpose} onChange={(e) => setPurpose(e.target.value as EmailPurpose)}>
+            {EMAIL_PURPOSES.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        <FormField label={purpose === "custom" ? "О чём письмо" : "Пожелания (необязательно)"} required={purpose === "custom"}>
+          <input
+            className="input"
+            maxLength={2000}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={noEnter}
+            placeholder="Что упомянуть, тон, язык письма"
+          />
+        </FormField>
+      </div>
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="primary"
+          isLoading={run.isPending}
+          disabled={purpose === "custom" && !note.trim()}
+          onClick={() => run.mutate()}
+        >
+          {ready ? "Составить заново" : "Составить черновик"}
+        </Button>
+      </div>
+      <FormError msg={run.isError ? extractApiError(run.error).message : null} />
+      {ready && (
+        <div className="space-y-2">
+          {to && <div className="text-xs text-zinc-500">Кому: {to}</div>}
+          <FormField label="Тема">
+            <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} onKeyDown={noEnter} />
+          </FormField>
+          <FormField label="Текст письма">
+            <textarea className="input min-h-[220px]" value={body} onChange={(e) => setBody(e.target.value)} />
+          </FormField>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-zinc-500">Черновик составил ИИ — проверьте факты перед отправкой. Сам он никуда не отправляется.</span>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" variant="secondary" leftIcon={<Copy size={13} />} onClick={copy}>
+                Копировать
+              </Button>
+              {can("mail.use") && (
+                <Button type="button" size="sm" variant="primary" onClick={openInMail}>
+                  Открыть в почте
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

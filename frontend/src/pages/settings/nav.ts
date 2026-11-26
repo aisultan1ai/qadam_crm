@@ -4,7 +4,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Landmark } from "lucide-react";
-import { Factory } from "lucide-react";
+import { Factory, Sparkles } from "lucide-react";
 
 export type SettingsTab = {
   to: string;
@@ -35,6 +35,8 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { to: "legal-entities", label: "Юрлица", icon: Landmark },
   // Смотреть могут все, включать offtake — «Системные настройки», продукты — «Управление справочниками»
   { to: "offtake", label: "Продажи и offtake", icon: Factory },
+  // Смотреть могут все (видно, включён ли ИИ), включать — «Системные настройки»
+  { to: "ai", label: "ИИ-помощник", icon: Sparkles },
 ];
 
 export function settingsTabVisible(t: SettingsTab, can: (code: string) => boolean, isOwner: boolean): boolean {

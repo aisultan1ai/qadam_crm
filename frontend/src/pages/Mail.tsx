@@ -4,9 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   Mail as MailIcon, Send, Loader2, Archive, ArchiveRestore, ArrowLeft, AlertTriangle,
-  Paperclip, Link2, RefreshCw, Plus, PenSquare, Filter,
+  Paperclip, Link2, RefreshCw, Plus, PenSquare, Filter, Sparkles, ListChecks,
 } from "lucide-react";
 import { MailRulesModal, TemplatePicker } from "./mail/MailRulesModal";
+import { AiTasksModal } from "./mail/AiTasksModal";
+import { AiSummaryPanel, type AiSummary } from "@/components/AiSummaryPanel";
+import { useAi } from "@/hooks/useAi";
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal } from "@/components/ui";
@@ -98,7 +101,28 @@ export default function Mail() {
   const [showArchived, setShowArchived] = useState(false);
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  // /mail?compose=1 — открыть новое письмо с черновиком (например, из ИИ в карточке offtake-контракта)
+  const composeParam = sp.get("compose");
+  useEffect(() => {
+    if (composeParam !== "1") return;
+    try {
+      const raw = sessionStorage.getItem("qadam.mail_draft");
+      sessionStorage.removeItem("qadam.mail_draft");
+      if (raw) {
+        const d = JSON.parse(raw) as Partial<ComposeDraft>;
+        setComposeDraft({ to: String(d.to ?? ""), subject: String(d.subject ?? ""), body: String(d.body ?? "") });
+      }
+    } catch {
+      /* нет хранилища — просто открываем пустое письмо */
+    }
+    setComposeOpen(true);
+    const next = new URLSearchParams(window.location.search);
+    next.delete("compose");
+    setSp(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composeParam]);
 
   const { data: mailbox, isLoading: mbLoading } = useQuery({
     queryKey: ["my-mailbox"],
@@ -295,9 +319,14 @@ export default function Mail() {
       {rulesOpen && <MailRulesModal mailboxId={mailbox.id} onClose={() => setRulesOpen(false)} />}
       {composeOpen && (
         <ComposeModal
-          onClose={() => setComposeOpen(false)}
+          initial={composeDraft}
+          onClose={() => {
+            setComposeOpen(false);
+            setComposeDraft(null);
+          }}
           onSent={() => {
             setComposeOpen(false);
+            setComposeDraft(null);
             qc.invalidateQueries({ queryKey: ["mail-threads"] });
           }}
         />
@@ -311,6 +340,24 @@ function ThreadView({ thread, onBack, onChanged }: { thread: ThreadRow; onBack: 
   const toast = useToast();
   const [replyText, setReplyText] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);
+  const { available: aiOn } = useAi();
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [tasksFor, setTasksFor] = useState<number | null>(null);
+
+  const summaryMut = useMutation({
+    mutationFn: async () => (await api.post<AiSummary>(`/api/ai/mail/threads/${thread.id}/summary`)).data,
+    onError: (e) => {
+      setSummaryOpen(false);
+      toast.error("Не удалось составить сводку", extractApiError(e).message);
+    },
+  });
+  // Другая переписка — сводка от прежней не показывается
+  useEffect(() => {
+    setSummaryOpen(false);
+    summaryMut.reset();
+    setTasksFor(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread.id]);
 
   const { data: messages, isLoading } = useQuery({
     queryKey: ["mail-thread-messages", thread.id],
@@ -353,6 +400,22 @@ function ThreadView({ thread, onBack, onChanged }: { thread: ThreadRow; onBack: 
         back={<span className="md:hidden"><IconAction icon={ArrowLeft} label="Назад" onClick={onBack} /></span>}
         actions={
           <>
+            {aiOn && (
+              <IconAction
+                icon={Sparkles}
+                label="Кратко: сводка переписки от ИИ"
+                active={summaryOpen}
+                disabled={summaryMut.isPending}
+                onClick={() => {
+                  if (summaryOpen) {
+                    setSummaryOpen(false);
+                    return;
+                  }
+                  setSummaryOpen(true);
+                  if (!summaryMut.data) summaryMut.mutate();
+                }}
+              />
+            )}
             <IconAction icon={Link2} label="Связать с лидом или задачей" active={!!(thread.linked_lead_id || thread.linked_task_id)} onClick={() => setLinkOpen(true)} />
             <IconAction
               icon={thread.is_archived ? ArchiveRestore : Archive}
@@ -380,7 +443,16 @@ function ThreadView({ thread, onBack, onChanged }: { thread: ThreadRow; onBack: 
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-3">
-            {(messages ?? []).map((m) => <MessageCard key={m.id} m={m} />)}
+            {summaryOpen && (
+              <AiSummaryPanel
+                summary={summaryMut.data ?? null}
+                loading={summaryMut.isPending}
+                onClose={() => setSummaryOpen(false)}
+              />
+            )}
+            {(messages ?? []).map((m) => (
+              <MessageCard key={m.id} m={m} onTasks={aiOn ? () => setTasksFor(m.id) : undefined} />
+            ))}
           </div>
         )}
       </div>
@@ -396,6 +468,17 @@ function ThreadView({ thread, onBack, onChanged }: { thread: ThreadRow; onBack: 
 ${t.body}` : t.body))} />}
       />
 
+      {tasksFor != null && (
+        <AiTasksModal
+          messageId={tasksFor}
+          onClose={() => setTasksFor(null)}
+          onCreated={() => {
+            setTasksFor(null);
+            onChanged();
+          }}
+        />
+      )}
+
       {linkOpen && (
         <LinkModal thread={thread} onClose={() => setLinkOpen(false)} onDone={() => {
           setLinkOpen(false);
@@ -406,7 +489,7 @@ ${t.body}` : t.body))} />}
   );
 }
 
-function MessageCard({ m }: { m: MailMsg }) {
+function MessageCard({ m, onTasks }: { m: MailMsg; onTasks?: () => void }) {
   const [showHtml, setShowHtml] = useState(!!m.body_html);
   const isOut = m.direction === "outbound";
   return (
@@ -430,12 +513,24 @@ function MessageCard({ m }: { m: MailMsg }) {
             {m.cc_addrs?.length ? ` · CC: ${m.cc_addrs.join(", ")}` : ""}
           </div>
         </div>
-        <div className="shrink-0 text-[11.5px] tabular-nums text-zinc-400">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 text-[11.5px] tabular-nums text-zinc-400">
+          {onTasks && (
+            <button
+              type="button"
+              onClick={onTasks}
+              title="ИИ предложит задачи по этому письму"
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10"
+            >
+              <ListChecks size={13} /> Задачи из письма
+            </button>
+          )}
+          <span>
           {m.sent_at
             ? new Date(m.sent_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
             : formatWhen(m.created_at)}
           {isOut && m.status === "pending" && <span className="ml-2">отправляется…</span>}
           {isOut && m.status === "failed" && <span className="ml-2 font-medium text-rose-600">не отправлено</span>}
+          </span>
         </div>
       </div>
       {m.error && (
@@ -529,12 +624,14 @@ function LinkModal({
   );
 }
 
-function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
+type ComposeDraft = { to: string; subject: string; body: string };
+
+function ComposeModal({ initial, onClose, onSent }: { initial?: ComposeDraft | null; onClose: () => void; onSent: () => void }) {
   const toast = useToast();
-  const [to, setTo] = useState("");
+  const [to, setTo] = useState(initial?.to ?? "");
   const [cc, setCc] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [subject, setSubject] = useState(initial?.subject ?? "");
+  const [body, setBody] = useState(initial?.body ?? "");
 
   const send = useMutation({
     mutationFn: async () =>

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, extractApiError } from "@/api/client";
-import { Plus, Search, Trash2, BookUser, Building2, User as UserIcon, Pencil } from "lucide-react";
+import { Plus, Search, Trash2, BookUser, Building2, User as UserIcon, Pencil, Sparkles, ImageUp } from "lucide-react";
+import { useAi } from "@/hooks/useAi";
 import clsx from "clsx";
 import { useAuth } from "@/store/auth";
 import { useForm } from "react-hook-form";
@@ -494,9 +495,15 @@ function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: 
     queryFn: async () => (await api.get<Page<Company>>("/api/companies")).data.items,
   });
 
+  const { available: aiAvailable } = useAi();
+  const [aiOpen, setAiOpen] = useState(false);
+  // Компания, которую нашли по визитке, но её ещё нет в списке выбора
+  const [extraCompany, setExtraCompany] = useState<CompanyBrief | null>(null);
+
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ContactForm>({
     resolver: zodResolver(contactSchema),
@@ -536,6 +543,32 @@ function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: 
   return (
     <Modal open onClose={onClose} title={initial ? "Редактировать контакт" : "Новый контакт"} size="md">
       <form onSubmit={onSubmit} className="space-y-3" noValidate>
+        {!initial && aiAvailable && (
+          aiOpen ? (
+            <ContactFromSignature
+              onClose={() => setAiOpen(false)}
+              onApply={(r, companyId, companyName) => {
+                const opts = { shouldDirty: true, shouldValidate: true } as const;
+                if (r.person.first_name || r.person.name) setValue("first_name", r.person.first_name || r.person.name || "", opts);
+                if (r.person.last_name) setValue("last_name", r.person.last_name, opts);
+                if (r.person.email) setValue("email", r.person.email, opts);
+                if (r.person.phone) setValue("phone", r.person.phone, opts);
+                if (r.person.position) setValue("position", r.person.position, opts);
+                if (companyId) {
+                  if (!companies?.some((c) => c.id === companyId)) setExtraCompany({ id: companyId, name: companyName || `#${companyId}` });
+                  setValue("company_id", companyId as any, opts);
+                }
+                setAiOpen(false);
+              }}
+            />
+          ) : (
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="secondary" leftIcon={<Sparkles size={13} />} onClick={() => setAiOpen(true)}>
+                Заполнить из подписи/визитки
+              </Button>
+            </div>
+          )
+        )}
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Имя" required error={errors.first_name?.message}>
             <input className="input" autoFocus {...register("first_name")} />
@@ -558,6 +591,9 @@ function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: 
         <FormField label="Компания">
           <select className="input" {...register("company_id")}>
             <option value="">— Без компании —</option>
+            {extraCompany && !companies?.some((c) => c.id === extraCompany.id) && (
+              <option value={extraCompany.id}>{extraCompany.name}</option>
+            )}
             {companies?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -577,5 +613,213 @@ function ContactModal({ initial, onClose }: { initial: Contact | null; onClose: 
         </div>
       </form>
     </Modal>
+  );
+}
+
+// ============================================================================
+// ИИ: контакт из подписи письма или фото визитки
+// ============================================================================
+
+type ExtractResult = {
+  person: {
+    name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    position: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  company: { name: string | null; website: string | null; phone: string | null; address: string | null };
+  existing_company_id: number | null;
+  existing_company_name: string | null;
+};
+
+const MAX_CARD_BYTES = 5 * 1024 * 1024;
+
+function ContactFromSignature({
+  onApply,
+  onClose,
+}: {
+  onApply: (r: ExtractResult, companyId: number | null, companyName: string | null) => void;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [text, setText] = useState("");
+  const [image, setImage] = useState<{ name: string; data: string } | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [result, setResult] = useState<ExtractResult | null>(null);
+  const [createCompany, setCreateCompany] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  const pickFile = (f: File | undefined) => {
+    setFileError(null);
+    if (!f) return;
+    if (!["image/jpeg", "image/png"].includes(f.type)) return setFileError("Подойдёт фото в формате JPEG или PNG");
+    if (f.size > MAX_CARD_BYTES) return setFileError("Фото больше 5 МБ — уменьшите его и попробуйте снова");
+    const reader = new FileReader();
+    reader.onload = () => setImage({ name: f.name, data: String(reader.result) });
+    reader.onerror = () => setFileError("Не удалось прочитать файл");
+    reader.readAsDataURL(f);
+  };
+
+  const run = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<ExtractResult>("/api/ai/contacts/extract", {
+          text: text.trim() || null,
+          image: image?.data ?? null,
+        })
+      ).data,
+    onSuccess: (r) => {
+      setResult(r);
+      setCreateCompany(false);
+    },
+  });
+
+  const apply = async () => {
+    if (!result) return;
+    setApplyError(null);
+    let companyId = result.existing_company_id;
+    let companyName = result.existing_company_name;
+    if (!companyId && createCompany && result.company.name) {
+      setApplying(true);
+      try {
+        const c = (
+          await api.post<{ id: number; name: string }>("/api/companies", {
+            name: result.company.name,
+            website: result.company.website,
+            phone: result.company.phone,
+            address: result.company.address,
+          })
+        ).data;
+        companyId = c.id;
+        companyName = c.name;
+        qc.invalidateQueries({ queryKey: ["companies"] });
+      } catch (e) {
+        setApplying(false);
+        return setApplyError(extractApiError(e).message);
+      }
+      setApplying(false);
+    }
+    onApply(result, companyId, companyName);
+  };
+
+  const p = result?.person;
+  const c = result?.company;
+  const rows: [string, string | null | undefined][] = p
+    ? [
+        ["Имя", p.name],
+        ["Должность", p.position],
+        ["Email", p.email],
+        ["Телефон", p.phone],
+      ]
+    : [];
+  const companyRows: [string, string | null | undefined][] = c
+    ? [
+        ["Компания", c.name],
+        ["Сайт", c.website],
+        ["Телефон компании", c.phone],
+        ["Адрес", c.address],
+      ]
+    : [];
+  const nothing = result && [...rows, ...companyRows].every(([, v]) => !v);
+
+  return (
+    <div className="space-y-3 rounded-lg border border-brand-200 bg-brand-50/40 p-3 text-sm dark:border-brand-900/50 dark:bg-brand-950/20">
+      <div className="flex items-center gap-2">
+        <Sparkles size={15} className="text-brand-600 dark:text-brand-300" />
+        <span className="font-medium">Заполнить из подписи или визитки</span>
+        <button type="button" className="ml-auto text-xs text-zinc-500 hover:underline" onClick={onClose}>
+          Скрыть
+        </button>
+      </div>
+      {!result ? (
+        <>
+          <textarea
+            className="input min-h-[90px]"
+            maxLength={20000}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Вставьте подпись из письма: имя, должность, телефон, компания"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="btn-secondary !cursor-pointer !px-3 !py-1.5 !text-xs">
+              <ImageUp size={13} className="mr-1 inline" />
+              {image ? "Другое фото" : "Фото визитки"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                className="hidden"
+                onChange={(e) => {
+                  pickFile(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {image && (
+              <span className="flex min-w-0 items-center gap-1 text-xs text-zinc-600 dark:text-zinc-300">
+                <span className="truncate">{image.name}</span>
+                <button type="button" className="text-rose-600 hover:underline" onClick={() => setImage(null)}>
+                  убрать
+                </button>
+              </span>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              className="ml-auto"
+              isLoading={run.isPending}
+              disabled={!text.trim() && !image}
+              onClick={() => run.mutate()}
+            >
+              Распознать
+            </Button>
+          </div>
+          <FormError msg={fileError || (run.isError ? extractApiError(run.error).message : null)} />
+        </>
+      ) : nothing ? (
+        <div className="space-y-2">
+          <div className="text-zinc-600 dark:text-zinc-300">Контактных данных в тексте или на фото не нашлось.</div>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setResult(null)}>
+            Попробовать другой текст
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
+            {[...rows, ...companyRows]
+              .filter(([, v]) => v)
+              .map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className="text-zinc-500">{k}</dt>
+                  <dd className="min-w-0 break-words">{v}</dd>
+                </div>
+              ))}
+          </dl>
+          {result.existing_company_id ? (
+            <div className="text-xs text-emerald-700 dark:text-emerald-400">
+              Компания «{result.existing_company_name}» уже есть в базе — контакт будет привязан к ней.
+            </div>
+          ) : c?.name ? (
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={createCompany} onChange={(e) => setCreateCompany(e.target.checked)} />
+              Компании «{c.name}» нет в базе — создать её с этими данными
+            </label>
+          ) : null}
+          <div className="text-xs text-zinc-500">Данные распознал ИИ — проверьте поля формы перед сохранением.</div>
+          <FormError msg={applyError} />
+          <div className="flex justify-end gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={() => setResult(null)}>
+              Назад
+            </Button>
+            <Button type="button" size="sm" variant="primary" isLoading={applying} onClick={apply}>
+              Подставить в форму
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -70,6 +70,7 @@ from .p4 import (
 )
 from .api_token import ApiToken
 from .record_view import RecordView
+from .ai_usage import AiUsage
 from .channel import (
     Channel, ChannelMember, Message, MessageAttachment, MessageReaction,
     Poll, PollOption, PollVote,
@@ -78,6 +79,7 @@ from .legal_entity import LegalEntity
 from .contract import (
     Contract, ContractStage, ContractGuarantee, ContractRetention, ContractPenalty, ContractReminderMark,
 )
+from .obligation import ContractObligation  # noqa: E402
 
 __all__ = [
     "Tenant",

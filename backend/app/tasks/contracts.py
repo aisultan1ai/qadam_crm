@@ -7,6 +7,9 @@
 и письмо, если настроена почта (SMTP). Каждое напоминание отправляется один раз —
 отметка в contract_reminder_marks по (вид, запись, порог, дата окончания). Если задача
 пропустила день, порог всё равно сработает: берём ближайший порог, который ≥ оставшихся дней.
+
+Обязательства по договорам (contracts.obligation_reminders): за 7 дней и накануне срока открытого
+обязательства — ответственному по договору (или автору договора), отметки с kind="obligation".
 """
 from __future__ import annotations
 
@@ -190,3 +193,95 @@ def expiry_reminders() -> dict:
 
     log.info("contracts.expiry_reminders: contracts=%d guarantees=%d", sent_contracts, sent_guarantees)
     return {"contracts": sent_contracts, "guarantees": sent_guarantees}
+
+
+# =============================================================================
+# Обязательства по договорам (contract_obligations)
+# =============================================================================
+
+OBLIGATION_THRESHOLDS = (1, 7)  # по возрастанию: за неделю и накануне
+OBLIGATION_KIND = "contract_obligation"
+_PARTY_TEXT = {"us": "наша сторона", "counterparty": "контрагент", "both": "обе стороны"}
+
+
+def _obligation_recipients(db, c: Contract) -> list[User]:
+    """Ответственный по договору, а если его нет — автор договора (если он ещё в компании)."""
+    for uid in (c.responsible_user_id, c.created_by):
+        if not uid:
+            continue
+        is_member = db.query(TenantMembership.id).filter(
+            TenantMembership.tenant_id == c.tenant_id, TenantMembership.user_id == uid,
+        ).first()
+        u = db.get(User, uid) if is_member else None
+        if u and u.is_active:
+            return [u]
+    return []
+
+
+@shared_task(name="contracts.obligation_reminders")
+def obligation_reminders() -> dict:
+    """Напоминание о сроке открытого обязательства за 7 дней и накануне (каждое — один раз)."""
+    from ..models.obligation import ContractObligation
+
+    today = date.today()
+    sent = 0
+    outbox: list[tuple[int, int, Optional[str], str, str, int]] = []
+    db = SessionLocal()
+    try:
+        horizon = date.fromordinal(today.toordinal() + OBLIGATION_THRESHOLDS[-1])
+        rows = (
+            db.query(ContractObligation, Contract)
+            .join(Contract, Contract.id == ContractObligation.contract_id)
+            .filter(
+                ContractObligation.tenant_id == Contract.tenant_id,
+                ContractObligation.status == "open",
+                ContractObligation.due_date.is_not(None),
+                ContractObligation.due_date >= today,
+                ContractObligation.due_date <= horizon,
+                Contract.status.notin_(["completed", "terminated"]),
+            )
+            .all()
+        )
+        for ob, c in rows:
+            days_left = (ob.due_date - today).days
+            t = next((x for x in OBLIGATION_THRESHOLDS if days_left <= x), None)
+            if t is None or not _mark(db, c.tenant_id, "obligation", ob.id, t, ob.due_date):
+                continue
+            title = f"Срок обязательства по договору {_contract_name(c)} — {_when(days_left)}"
+            body = f"«{ob.title}» — до {ob.due_date.strftime('%d.%m.%Y')}. Исполняет: {_PARTY_TEXT.get(ob.party, 'наша сторона')}."
+            for u in _obligation_recipients(db, c):
+                db.add(Notification(tenant_id=c.tenant_id, user_id=u.id, kind=OBLIGATION_KIND, title=title[:300],
+                                    body=body[:1000], link=f"/contracts/{c.id}"))
+                outbox.append((c.tenant_id, u.id, u.email, title, body, c.id))
+            sent += 1
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception("contracts.obligation_reminders failed")
+        raise
+    finally:
+        db.close()
+
+    try:
+        from ..core.ws_hub import publish_to_user
+        for tid, uid, _email, _t, _b, cid in outbox:
+            publish_to_user(tid, uid, "notification.new", {"kind": "contract", "contract_id": cid})
+    except Exception:
+        log.warning("ws publish failed", exc_info=True)
+
+    if settings.SMTP_HOST:
+        from .email import send_email
+        base = (getattr(settings, "APP_BASE_URL", None) or "").rstrip("/")
+        for _tid, _uid, email, title, body, cid in outbox:
+            if not email:
+                continue
+            html_body = f"<p>{html.escape(title)}</p><p>{html.escape(body)}</p>"
+            if base:
+                html_body += f'<p><a href="{html.escape(base)}/contracts/{cid}">Открыть договор</a></p>'
+            try:
+                send_email.delay(to=email, subject=title, html=html_body)
+            except Exception:
+                log.warning("obligation reminder email failed", exc_info=True)
+
+    log.info("contracts.obligation_reminders: sent=%d", sent)
+    return {"obligations": sent}

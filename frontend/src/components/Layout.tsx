@@ -37,6 +37,7 @@ import { useT } from "@/lib/i18n";
 import { goToCompany, onCompanyHost } from "@/lib/companyAddress";
 import OnboardingWizard from "./OnboardingWizard";
 import { TimerWidget } from "./TimerWidget";
+import { AiAssistantButton } from "./AiAssistant";
 import { LogoMark } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SETTINGS_TABS } from "@/pages/settings/nav";
@@ -793,6 +794,7 @@ function TopBar({
       </button>
 
       <div className="flex items-center gap-1">
+        <AiAssistantButton />
         <TimerWidget />
         <TenantSwitcher />
         <NotificationsButton online={online} />

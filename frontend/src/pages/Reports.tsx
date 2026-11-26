@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { DatePicker } from "@/components/DatePicker";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/api/client";
-import { PieChart, Play, BarChart3, Sparkles } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { api, extractApiError } from "@/api/client";
+import { PieChart, Play, BarChart3, Sparkles, Loader2, Wand2 } from "lucide-react";
+import { useAi } from "@/hooks/useAi";
 import clsx from "clsx";
 import { EmptyState } from "@/components/ui";
 import { useAuth } from "@/store/auth";
@@ -11,12 +12,40 @@ type Standard = { key: string; label: string; metric: string; group_by: string; 
 type MetaOut = { metrics: { key: string; label: string }[]; groups: { key: string; label: string }[] };
 type ReportRow = { group?: string | null; group_id?: number | null; value: number; count: number };
 type ReportOut = { metric: string; group_by: string; rows: ReportRow[]; total: number; meta: { unit?: string } };
+type AiReportSuggest =
+  | { supported: true; metric: string; group_by: string; from_date: string | null; to_date: string | null; explanation: string }
+  | { supported: false; explanation: string };
 
 export default function ReportsPage() {
   const { can } = useAuth();
   const [selected, setSelected] = useState<{ metric: string; group_by: string } | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const { available: aiOn } = useAi();
+  const [aiText, setAiText] = useState("");
+  const [aiNote, setAiNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const aiMut = useMutation({
+    mutationFn: async (description: string) =>
+      (await api.post<AiReportSuggest>("/api/ai/reports/suggest", { description })).data,
+    onSuccess: (r) => {
+      if (!r.supported) {
+        setAiNote({ ok: false, text: r.explanation });
+        return;
+      }
+      // Ответ ИИ только заполняет форму конструктора — как если бы пользователь выбрал поля сам
+      setSelected({ metric: r.metric, group_by: r.group_by });
+      setFrom(r.from_date || "");
+      setTo(r.to_date || "");
+      setAiNote({ ok: true, text: r.explanation });
+    },
+    onError: (e) => setAiNote({ ok: false, text: extractApiError(e).message }),
+  });
+  const submitAi = () => {
+    const t = aiText.trim();
+    if (t.length < 3 || aiMut.isPending) return;
+    setAiNote(null);
+    aiMut.mutate(t);
+  };
 
   const { data: standard } = useQuery({
     queryKey: ["reports-standard"],
@@ -81,6 +110,45 @@ export default function ReportsPage() {
               ))}
             </div>
           </div>
+
+          {aiOn && (
+            <div className="card p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Wand2 size={14} className="text-brand-500" /> Опишите отчёт словами
+              </div>
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitAi();
+                }}
+              >
+                <input
+                  className="input"
+                  value={aiText}
+                  maxLength={500}
+                  onChange={(e) => setAiText(e.target.value)}
+                  placeholder="Какой отчёт нужен и за какой период"
+                  aria-label="Описание отчёта для ИИ"
+                />
+                <button
+                  type="submit"
+                  className="btn-primary shrink-0"
+                  disabled={aiText.trim().length < 3 || aiMut.isPending}
+                  title="ИИ заполнит конструктор"
+                  aria-label="Подобрать отчёт"
+                >
+                  {aiMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                </button>
+              </form>
+              {aiNote && (
+                <div className={clsx("mt-2 text-xs", aiNote.ok ? "text-neutral-600 dark:text-neutral-400" : "text-rose-600 dark:text-rose-400")}>
+                  {aiNote.text}
+                  {aiNote.ok && <span className="block text-neutral-400">Конструктор заполнен — проверьте поля ниже.</span>}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="card p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold">

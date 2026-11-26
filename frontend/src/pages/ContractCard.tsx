@@ -1,5 +1,6 @@
 /**
- * Карточка договора (/contracts/:id): условия, статус, файлы, EPC-разделы,
+ * Карточка договора (/contracts/:id): условия, статус, файлы (с ИИ «Заполнить из файла»), обязательства и сроки,
+ * EPC-разделы,
  * связи со сделкой/проектом/контрагентом, записи Объектов, ссылающиеся на договор,
  * и журнал «Кто открывал» (владельцу и администратору).
  */
@@ -7,9 +8,10 @@ import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Building2, CalendarDays, Coins, Download, FileSignature, FileText, FolderKanban, History, Landmark, Link2, Pencil,
-  Plus, RefreshCw, Scale, Trash2, Upload, User as UserIcon,
+  Building2, CalendarDays, Circle, CircleCheck, ClipboardList, Coins, Download, FileSignature, FileText, FolderKanban,
+  History, Landmark, Link2, Pencil, Plus, RefreshCw, Scale, Sparkles, Trash2, Upload, User as UserIcon,
 } from "lucide-react";
+import clsx from "clsx";
 
 import { api, extractApiError } from "@/api/client";
 import { Avatar, EmptyState, FormError, Loader, Modal } from "@/components/ui";
@@ -21,10 +23,12 @@ import { useConfirm } from "@/components/Confirm";
 import { useToast } from "@/components/Toast";
 import { useLegalEntities } from "@/hooks/useLegalEntities";
 import { useAuth } from "@/store/auth";
+import { useAi } from "@/hooks/useAi";
 import { formatDateTime, fromNow } from "@/lib/date";
 import {
-  CURRENCIES, ContractFormModal, ContractStatusBadge, ExpiryText, STATUS_LABEL, TYPE_LABEL, contractToDraft, fmtDate,
-  fmtMoney, toNum, vatText, type Contract, type ContractStatus,
+  CURRENCIES, ContractFormModal, ContractStatusBadge, ExpiryText, PARTY_LABEL, STATUS_LABEL, TYPE_LABEL, contractToDraft,
+  daysUntil, fmtDate, fmtMoney, isAiReadable, toNum, vatText, type Contract, type ContractStatus, type Obligation,
+  type ObligationParty,
 } from "./contracts/shared";
 
 type FileRow = { id: number; name: string; mime: string | null; size: number; created_by: number | null; created_at: string };
@@ -236,6 +240,8 @@ export default function ContractCard() {
 
             <FilesPanel contract={c} canUpdate={canUpdate} />
 
+            <ObligationsPanel contract={c} canUpdate={canUpdate} />
+
             {c.contract_type === "epc" && <EpcSections contract={c} canUpdate={canUpdate} />}
 
             <BacklinksPanel contractId={c.id} />
@@ -345,6 +351,8 @@ function FilesPanel({ contract, canUpdate }: { contract: Contract; canUpdate: bo
   const confirm = useConfirm();
   const ref = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const { available: aiAvailable } = useAi();
+  const [extractFrom, setExtractFrom] = useState<FileRow | null>(null);
 
   const { data, isPending } = useQuery({
     queryKey: ["contract-files", contract.id],
@@ -447,6 +455,18 @@ function FilesPanel({ contract, canUpdate }: { contract: Contract; canUpdate: bo
                   {fmtSize(f.size)} · {fromNow(f.created_at)}
                 </div>
               </div>
+              {aiAvailable && canUpdate && isAiReadable(f.name, f.mime) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Sparkles size={13} />}
+                  title="ИИ прочитает файл и предложит значения полей договора"
+                  aria-label="Заполнить из файла"
+                  onClick={() => setExtractFrom(f)}
+                >
+                  <span className="hidden sm:inline">Заполнить из файла</span>
+                </Button>
+              )}
               <Button variant="ghost" size="icon" title="Скачать" aria-label="Скачать файл" onClick={() => download(f)}>
                 <Download size={13} />
               </Button>
@@ -474,7 +494,550 @@ function FilesPanel({ contract, canUpdate }: { contract: Contract; canUpdate: bo
           ))}
         </ul>
       )}
+      {extractFrom && <ExtractModal contract={contract} file={extractFrom} onClose={() => setExtractFrom(null)} />}
     </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ИИ: заполнить поля договора из файла
+// ---------------------------------------------------------------------------
+
+type ExtractField = {
+  field: string;
+  label: string;
+  current: unknown;
+  current_display: string;
+  value: unknown;
+  display: string;
+  quote: string | null;
+  same: boolean;
+};
+type ExtractOut = {
+  document: { id: number; name: string };
+  fields: ExtractField[];
+  counterparty: {
+    name: string | null;
+    tax_id: string | null;
+    quote: string | null;
+    match: { id: number; name: string } | null;
+  } | null;
+};
+
+function ExtractModal({ contract, file, onClose }: { contract: Contract; file: FileRow; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Один запрос к ИИ на открытие окна (react-query не дублирует его и не повторяет при фокусе)
+  const { data, isPending, error: loadError } = useQuery({
+    queryKey: ["ai-contract-extract", contract.id, file.id],
+    queryFn: async () =>
+      (await api.post<ExtractOut>(`/api/ai/contracts/${contract.id}/extract`, { document_id: file.id })).data,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  const selected = picked ?? new Set((data?.fields ?? []).filter((f) => !f.same).map((f) => f.field));
+
+  const apply = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = {};
+      for (const f of data?.fields ?? []) if (selected.has(f.field)) body[f.field] = f.value;
+      return (await api.patch<Contract>(`/api/contracts/${contract.id}`, body)).data;
+    },
+    onSuccess: (row) => {
+      qc.setQueryData(["contract", contract.id], row);
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+      toast.success("Поля договора обновлены");
+      onClose();
+    },
+    onError: (e) => setError(extractApiError(e).message),
+  });
+
+  const toggle = (k: string) => {
+    const n = new Set(selected);
+    if (n.has(k)) n.delete(k);
+    else n.add(k);
+    setPicked(n);
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Заполнить из файла" size="xl">
+      <p className="mb-3 text-[13px] text-zinc-500">
+        ИИ читает «{file.name}» и предлагает значения полей. Отметьте, что перенести в карточку, — сохранится только
+        выбранное. Сверьте значения с цитатами: ИИ может ошибаться.
+      </p>
+      {isPending ? (
+        <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-zinc-500">
+          <Sparkles size={15} className="animate-pulse text-brand-500" /> ИИ читает договор…
+        </div>
+      ) : loadError || !data ? (
+        <FormError msg={extractApiError(loadError).message} />
+      ) : data.fields.length === 0 ? (
+        <div className="py-8 text-center text-[13px] text-zinc-500">В файле не нашлось значений для полей договора.</div>
+      ) : (
+        <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 bg-zinc-50 text-left text-xs text-zinc-500 dark:bg-zinc-900">
+              <tr>
+                <th className="w-8 px-3 py-2" />
+                <th className="px-3 py-2 font-medium">Поле</th>
+                <th className="px-3 py-2 font-medium">Было</th>
+                <th className="px-3 py-2 font-medium">Предлагается</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.fields.map((f) => (
+                <tr key={f.field} className="border-t border-zinc-100 align-top dark:border-zinc-800">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={selected.has(f.field)}
+                      onChange={() => toggle(f.field)}
+                      aria-label={`Перенести «${f.label}»`}
+                    />
+                  </td>
+                  <td className="px-3 py-2 font-medium">{f.label}</td>
+                  <td className="px-3 py-2 text-zinc-500">
+                    <span className="line-clamp-3 whitespace-pre-line">{f.current_display}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className={clsx("whitespace-pre-line", !f.same && "font-medium")}>
+                      {f.display}
+                      {f.same && <span className="ml-1 text-xs font-normal text-zinc-400">(совпадает)</span>}
+                    </div>
+                    {f.quote && (
+                      <div className="mt-1 border-l-2 border-zinc-200 pl-2 text-xs italic text-zinc-500 dark:border-zinc-700">
+                        «{f.quote}»
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {data?.counterparty && !data.counterparty.match && (
+        <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+          Контрагент в файле: «{data.counterparty.name ?? "—"}»
+          {data.counterparty.tax_id && <> · БИН/ИИН {data.counterparty.tax_id}</>}. В справочнике компаний такого нет —
+          при необходимости выберите или заведите контрагента через «Изменить».
+        </div>
+      )}
+      <FormError msg={error} />
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          Отмена
+        </Button>
+        {data && data.fields.length > 0 && (
+          <Button variant="primary" disabled={selected.size === 0} isLoading={apply.isPending} onClick={() => apply.mutate()}>
+            Применить{selected.size > 0 ? ` (${selected.size})` : ""}
+          </Button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Обязательства и сроки
+// ---------------------------------------------------------------------------
+
+function DueText({ o }: { o: Obligation }) {
+  if (!o.due_date) return <span className="text-zinc-400">без срока</span>;
+  const left = daysUntil(o.due_date);
+  const open = o.status === "open";
+  return (
+    <span
+      className={clsx(
+        "whitespace-nowrap tabular-nums",
+        open && left < 0 && "font-medium text-rose-600 dark:text-rose-400",
+        open && left >= 0 && left <= 7 && "font-medium text-amber-600 dark:text-amber-400",
+      )}
+    >
+      до {fmtDate(o.due_date)}
+      {open && left < 0 && <span className="ml-1 text-[11.5px]">(просрочено)</span>}
+      {open && left === 0 && <span className="ml-1 text-[11.5px]">(сегодня)</span>}
+    </span>
+  );
+}
+
+function ObligationsPanel({ contract, canUpdate }: { contract: Contract; canUpdate: boolean }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { available: aiAvailable } = useAi();
+  const [editing, setEditing] = useState<Obligation | "new" | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const key = ["contract-obligations", contract.id];
+
+  const { data, isPending } = useQuery({
+    queryKey: key,
+    queryFn: async () => (await api.get<Obligation[]>(`/api/contracts/${contract.id}/obligations`)).data,
+  });
+  const { data: files } = useQuery({
+    queryKey: ["contract-files", contract.id],
+    queryFn: async () => (await api.get<FileRow[]>(`/api/contracts/${contract.id}/files`)).data,
+  });
+  const readable = (files ?? []).filter((f) => isAiReadable(f.name, f.mime));
+
+  const patch = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<Obligation> }) =>
+      api.patch(`/api/contracts/${contract.id}/obligations/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onError: (e) => toast.error("Не удалось сохранить", extractApiError(e).message),
+  });
+  const remove = useMutation({
+    mutationFn: (oid: number) => api.delete(`/api/contracts/${contract.id}/obligations/${oid}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key });
+      toast.success("Обязательство удалено");
+    },
+    onError: (e) => toast.error("Не удалось удалить", extractApiError(e).message),
+  });
+
+  return (
+    <Panel
+      title={
+        <>
+          <ClipboardList size={15} className="text-zinc-400" /> Обязательства
+        </>
+      }
+      actions={
+        canUpdate && (
+          <div className="flex gap-2">
+            {aiAvailable && readable.length > 0 && (
+              <Button variant="secondary" size="sm" leftIcon={<Sparkles size={13} />} onClick={() => setAiOpen(true)}>
+                Найти в файле
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" leftIcon={<Plus size={13} />} onClick={() => setEditing("new")}>
+              Добавить
+            </Button>
+          </div>
+        )
+      }
+      flush
+    >
+      {isPending ? (
+        <div className="p-4">
+          <Loader />
+        </div>
+      ) : !data || data.length === 0 ? (
+        <div className="px-4 py-5 text-[13px] text-zinc-500">
+          Что и к какому сроку должны сделать стороны: оплаты, поставки, документы, уведомления. За 7 дней и накануне
+          срока ответственному по договору придёт напоминание.
+        </div>
+      ) : (
+        <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          {data.map((o) => {
+            const done = o.status === "done";
+            return (
+              <li key={o.id} className="flex items-start gap-3 px-4 py-2.5 text-[13px]">
+                <button
+                  type="button"
+                  className={clsx(
+                    "mt-0.5 shrink-0",
+                    done ? "text-emerald-600" : "text-zinc-400 hover:text-brand-600",
+                    !canUpdate && "cursor-default",
+                  )}
+                  disabled={!canUpdate || patch.isPending}
+                  title={done ? "Вернуть в работу" : "Отметить выполненным"}
+                  aria-label={done ? "Вернуть в работу" : "Отметить выполненным"}
+                  onClick={() => patch.mutate({ id: o.id, body: { status: done ? "open" : "done" } })}
+                >
+                  {done ? <CircleCheck size={16} /> : <Circle size={16} />}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className={clsx("font-medium", done && "text-zinc-400 line-through")}>{o.title}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-zinc-500">
+                    <DueText o={o} />
+                    <span>· {PARTY_LABEL[o.party] ?? o.party}</span>
+                    {done && o.done_at && <span>· выполнено {fmtDate(o.done_at.slice(0, 10))}</span>}
+                  </div>
+                  {o.description && (
+                    <div className="mt-0.5 whitespace-pre-line text-zinc-600 dark:text-zinc-400">{o.description}</div>
+                  )}
+                  {o.source_quote && (
+                    <div
+                      className="mt-1 line-clamp-2 border-l-2 border-zinc-200 pl-2 text-xs italic text-zinc-500 dark:border-zinc-700"
+                      title={o.source_quote}
+                    >
+                      «{o.source_quote}»
+                    </div>
+                  )}
+                </div>
+                {canUpdate && (
+                  <div className="flex shrink-0 gap-1">
+                    <Button variant="ghost" size="icon" title="Изменить" aria-label="Изменить" onClick={() => setEditing(o)}>
+                      <Pencil size={13} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-rose-500"
+                      title="Удалить"
+                      aria-label="Удалить"
+                      onClick={() =>
+                        confirm({
+                          title: "Удалить обязательство?",
+                          message: `«${o.title}» будет удалено из договора.`,
+                          danger: true,
+                          confirmLabel: "Удалить",
+                          onConfirm: () => remove.mutateAsync(o.id),
+                        })
+                      }
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {editing && (
+        <ObligationFormModal contract={contract} row={editing === "new" ? null : editing} onClose={() => setEditing(null)} />
+      )}
+      {aiOpen && <ObligationsAiModal contract={contract} files={readable} onClose={() => setAiOpen(false)} />}
+    </Panel>
+  );
+}
+
+function ObligationFormModal({ contract, row, onClose }: { contract: Contract; row: Obligation | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState(row?.title ?? "");
+  const [description, setDescription] = useState(row?.description ?? "");
+  const [due, setDue] = useState(row?.due_date ?? "");
+  const [party, setParty] = useState<ObligationParty>(row?.party ?? "us");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return setError("Укажите, что нужно сделать");
+    const body = { title: title.trim(), description: description.trim() || null, due_date: due || null, party };
+    setBusy(true);
+    setError(null);
+    try {
+      if (row) await api.patch(`/api/contracts/${contract.id}/obligations/${row.id}`, body);
+      else await api.post(`/api/contracts/${contract.id}/obligations`, body);
+      qc.invalidateQueries({ queryKey: ["contract-obligations", contract.id] });
+      onClose();
+    } catch (err) {
+      setError(extractApiError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={row ? "Изменить обязательство" : "Новое обязательство"} size="md">
+      <form onSubmit={submit} className="space-y-3">
+        <FormField label="Что нужно сделать" required htmlFor="ob-title">
+          <input id="ob-title" className="input" value={title} maxLength={500} onChange={(e) => setTitle(e.target.value)} />
+        </FormField>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FormField label="Срок" htmlFor="ob-due">
+            <DatePicker id="ob-due" value={due} onChange={(v) => setDue(v || "")} />
+          </FormField>
+          <FormField label="Кто исполняет" htmlFor="ob-party">
+            <select id="ob-party" className="input" value={party} onChange={(e) => setParty(e.target.value as ObligationParty)}>
+              {Object.entries(PARTY_LABEL).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Подробности" htmlFor="ob-desc">
+          <textarea
+            id="ob-desc"
+            className="input min-h-[64px]"
+            value={description}
+            maxLength={5000}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </FormField>
+        <FormError msg={error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Отмена
+          </Button>
+          <Button variant="primary" type="submit" isLoading={busy}>
+            Сохранить
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+type ObligationSuggestion = {
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  party: ObligationParty;
+  source_quote: string | null;
+  exists: boolean;
+};
+type SuggestionRow = ObligationSuggestion & { picked: boolean };
+
+function ObligationsAiModal({ contract, files, onClose }: { contract: Contract; files: FileRow[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [fileId, setFileId] = useState<number>(files[0]?.id ?? 0);
+  const [items, setItems] = useState<SuggestionRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const find = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<{ items: ObligationSuggestion[] }>(`/api/ai/contracts/${contract.id}/obligations/extract`, {
+          document_id: fileId,
+        })
+      ).data,
+    onSuccess: (d) => {
+      setError(null);
+      setItems(d.items.map((it) => ({ ...it, picked: !it.exists })));
+    },
+    onError: (e) => setError(extractApiError(e).message),
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      api.post(`/api/contracts/${contract.id}/obligations/bulk`, {
+        items: (items ?? [])
+          .filter((i) => i.picked)
+          .map((i) => ({
+            title: i.title,
+            description: i.description,
+            due_date: i.due_date,
+            party: i.party,
+            source_quote: i.source_quote,
+          })),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contract-obligations", contract.id] });
+      toast.success("Обязательства добавлены");
+      onClose();
+    },
+    onError: (e) => setError(extractApiError(e).message),
+  });
+
+  const update = (idx: number, patch: Partial<SuggestionRow>) =>
+    setItems((s) => (s ? s.map((it, i) => (i === idx ? { ...it, ...patch } : it)) : s));
+  const pickedCount = (items ?? []).filter((i) => i.picked).length;
+
+  return (
+    <Modal open onClose={onClose} title="Найти обязательства в файле" size="xl">
+      {items === null ? (
+        <div className="space-y-3">
+          <p className="text-[13px] text-zinc-500">
+            ИИ прочитает файл договора и предложит обязательства сторон со сроками. Сохранятся только те, что вы отметите.
+          </p>
+          {files.length > 1 ? (
+            <FormField label="Файл" htmlFor="ob-ai-file">
+              <select id="ob-ai-file" className="input" value={fileId} onChange={(e) => setFileId(Number(e.target.value))}>
+                {files.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          ) : (
+            files[0] && <div className="text-[13px]">Файл: «{files[0].name}»</div>
+          )}
+          <FormError msg={error} />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>
+              Отмена
+            </Button>
+            <Button
+              variant="primary"
+              leftIcon={<Sparkles size={14} />}
+              isLoading={find.isPending}
+              disabled={!fileId}
+              onClick={() => find.mutate()}
+            >
+              {find.isPending ? "ИИ читает договор…" : "Найти"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.length === 0 ? (
+            <div className="py-8 text-center text-[13px] text-zinc-500">В файле не нашлось обязательств со сроками.</div>
+          ) : (
+            <>
+              <p className="text-[13px] text-zinc-500">
+                Сверьте предложения с цитатами — ИИ может ошибаться. Срок и сторону можно поправить до сохранения.
+              </p>
+              <ul className="max-h-[60vh] divide-y divide-zinc-100 overflow-y-auto rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                {items.map((it, idx) => (
+                  <li key={idx} className="flex items-start gap-3 px-3 py-2.5 text-[13px]">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={it.picked}
+                      onChange={(e) => update(idx, { picked: e.target.checked })}
+                      aria-label={`Добавить «${it.title}»`}
+                    />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="font-medium">
+                        {it.title}
+                        {it.exists && <span className="ml-1 text-xs font-normal text-zinc-400">(уже есть в договоре)</span>}
+                      </div>
+                      {it.description && <div className="whitespace-pre-line text-zinc-600 dark:text-zinc-400">{it.description}</div>}
+                      <div className="flex flex-wrap gap-2">
+                        <div className="w-44">
+                          <DatePicker value={it.due_date ?? ""} onChange={(v) => update(idx, { due_date: v || null })} aria-label="Срок" />
+                        </div>
+                        <select
+                          className="input !w-auto"
+                          value={it.party}
+                          onChange={(e) => update(idx, { party: e.target.value as ObligationParty })}
+                          aria-label="Кто исполняет"
+                        >
+                          {Object.entries(PARTY_LABEL).map(([k, l]) => (
+                            <option key={k} value={k}>
+                              {l}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {it.source_quote && (
+                        <div className="border-l-2 border-zinc-200 pl-2 text-xs italic text-zinc-500 dark:border-zinc-700">
+                          «{it.source_quote}»
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <FormError msg={error} />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>
+              {items.length === 0 ? "Закрыть" : "Отмена"}
+            </Button>
+            {items.length > 0 && (
+              <Button variant="primary" disabled={pickedCount === 0} isLoading={save.isPending} onClick={() => save.mutate()}>
+                Добавить{pickedCount > 0 ? ` (${pickedCount})` : ""}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 

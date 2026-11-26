@@ -34,6 +34,8 @@ class Tenant(Base):
     industry: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     # Offtake-воронка сделок включена (настройка «Продажи и offtake», миграция 0055)
     offtake_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # ИИ-помощник: включает владелец (тексты компании уходят в Claude API)
+    ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

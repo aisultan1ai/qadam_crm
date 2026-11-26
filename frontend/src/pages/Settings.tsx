@@ -22,6 +22,7 @@ import Directories from "./Directories";
 import TaskStatuses from "./TaskStatuses";
 import LegalEntities from "./LegalEntities";
 import OfftakeSettings from "./OfftakeSettings";
+import AiSettings from "./AiSettings";
 import { SETTINGS_TABS, settingsTabVisible } from "./settings/nav";
 import { fetchAllUsers } from "@/lib/users";
 
@@ -76,6 +77,7 @@ export default function Settings() {
         <Route path="directories" element={<Directories />} />
         <Route path="legal-entities" element={<LegalEntities />} />
         <Route path="offtake" element={<OfftakeSettings />} />
+        <Route path="ai" element={<AiSettings />} />
       </Routes>
     </SettingsRouteLayout>
   );

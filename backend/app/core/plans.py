@@ -107,6 +107,7 @@ def plan_to_dict(plan: Plan) -> dict:
             "max_projects": plan.max_projects,
             "max_storage_bytes": plan.max_storage_bytes,
             "api_rate_per_min": plan.api_rate_per_min,
+            "ai_requests_per_month": plan.ai_requests_per_month,
         },
         "feature_flags": {
             "export": plan.feature_export,

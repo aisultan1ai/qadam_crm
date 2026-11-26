@@ -384,6 +384,7 @@ class PlanBody(BaseModel):
     max_projects: Optional[int] = Field(default=None, ge=0)
     max_storage_bytes: Optional[int] = Field(default=None, ge=0)
     api_rate_per_min: Optional[int] = Field(default=None, ge=1)
+    ai_requests_per_month: Optional[int] = Field(default=None, ge=0, le=1000000)
 
     feature_export: Optional[bool] = None
     feature_import: Optional[bool] = None
@@ -457,6 +458,7 @@ def admin_create_plan(
         max_projects=payload.max_projects,
         max_storage_bytes=payload.max_storage_bytes,
         api_rate_per_min=payload.api_rate_per_min or 60,
+        ai_requests_per_month=payload.ai_requests_per_month or 0,
         feature_export=bool(payload.feature_export),
         feature_import=bool(payload.feature_import),
         feature_invitations=bool(payload.feature_invitations) if payload.feature_invitations is not None else True,
@@ -480,7 +482,7 @@ def admin_create_plan(
 
 _PLAN_SCALAR_FIELDS = (
     "title", "tagline", "price_month", "currency",
-    "max_users", "max_projects", "max_storage_bytes", "api_rate_per_min",
+    "max_users", "max_projects", "max_storage_bytes", "api_rate_per_min", "ai_requests_per_month",
     "feature_export", "feature_import", "feature_invitations", "feature_lead_forms",
     "feature_analytics_cache", "feature_branding", "feature_custom_subdomain", "feature_priority_support",
     "marketing_features", "is_active", "is_public", "sort_order",

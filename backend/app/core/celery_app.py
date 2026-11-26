@@ -115,6 +115,11 @@ celery_app.conf.beat_schedule = {
         "task": "contracts.expiry_reminders",
         "schedule": crontab(hour=4, minute=0),
     },
+    # Договоры: напоминания о сроках обязательств (за 7 дней и накануне)
+    "contracts-obligation-reminders-daily": {
+        "task": "contracts.obligation_reminders",
+        "schedule": crontab(hour=4, minute=5),
+    },
 }
 
 # Делаем этот app дефолтным, чтобы shared_task резолвился на него

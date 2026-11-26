@@ -1,320 +1,82 @@
-"""AI-помощник: генерация задач из писем, summary тредов, подсказки для отчётов.
+"""ИИ-помощник: состояние, включение в компании и расходы.
 
-Использует Anthropic Claude API (SDK 0.72+). Ключ — ANTHROPIC_API_KEY из env.
-Модель по умолчанию — claude-opus-5-5 (меняется переменной AI_MODEL). Prompt caching для
-frozen system-промптов.
+Сами функции ИИ живут в отдельных модулях (ai_work, ai_documents, ai_crm, ai_assistant) и вызывают
+Claude только через core.ai.run() — там лимиты, журнал и защитные правила.
 """
 from __future__ import annotations
 
-import json
-import os
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from datetime import datetime, timezone
 
-from .deps import TenantContext, get_current_context
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from ..core import ai as core_ai
+from ..database import get_db
+from ..models import AiUsage
+from .deps import TenantContext, get_current_context, log_action, require
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
+FEATURE_LABELS = {
+    "summarize_mail": "Сводка переписки",
+    "summarize_chat": "Сводка чата",
+    "tasks_from_text": "Задачи из письма",
+    "report_suggest": "Отчёт по описанию",
+    "contract_extract": "Разбор договора",
+    "obligations": "Обязательства и сроки",
+    "version_diff": "Сравнение версий",
+    "offtake_email": "Черновик письма",
+    "offtake_summary": "Сводка по контракту",
+    "contact_extract": "Контакт из подписи",
+    "assistant": "Спроси CRM",
+}
 
-DEFAULT_MODEL = os.getenv("AI_MODEL", "claude-opus-5-5")
-# У claude-opus-5-5 размышление всегда включено и тратит тот же лимит, поэтому запас побольше.
-MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "16000"))
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
-
-
-def _create(client, **kwargs):
-    """Запрос к Claude с серверным резервом: если модель откажет по правилам безопасности,
-    API сам повторит запрос на подходящей модели. Отказ всей цепочки — понятная ошибка."""
-    try:
-        response = client.beta.messages.create(betas=[FALLBACK_BETA], extra_body={"fallbacks": "default"}, **kwargs)
-    except Exception as e:  # резерв недоступен для ключа/платформы — обычный запрос
-        if "fallback" not in str(e).lower():
-            raise
-        response = client.messages.create(**kwargs)
-    if getattr(response, "stop_reason", None) == "refusal":
-        raise HTTPException(422, "AI-ассистент не может обработать этот текст. Переформулируйте запрос")
-    return response
-
-
-def _client():
-    """Ленивая инициализация — при отсутствии SDK или ключа возвращает 501/503."""
-    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        raise HTTPException(503, "AI-ассистент не подключён. Обратитесь к администратору")
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        raise HTTPException(501, "AI-ассистент не подключён. Обратитесь к администратору")
-    return Anthropic(api_key=api_key)
-
-
-# =============================================================================
-# 1. Generate tasks from email/text
-# =============================================================================
-
-GENERATE_TASKS_SYSTEM = """Ты — ассистент CRM-системы Qadam. Твоя задача — разобрать письмо или заметку и вернуть JSON-массив задач.
-
-Каждая задача — объект с полями:
-- title: короткое действие (не более 100 символов, инфинитив на русском: "Подготовить...", "Ответить...", "Связаться...")
-- description: пояснение (можно пусто)
-- priority: "low" | "medium" | "high" | "critical" (по важности из контекста)
-- deadline_hint: подсказка о сроке из текста или null
-
-Верни ТОЛЬКО валидный JSON-массив, без комментариев. Если задач нет — верни [].
-Пример: [{"title": "Ответить клиенту про интеграцию", "description": "Клиент спрашивал сроки", "priority": "high", "deadline_hint": "завтра"}]"""
-
-
-class GenerateTasksIn(BaseModel):
-    text: str
-    context: Optional[str] = None
-
-
-class GeneratedTask(BaseModel):
-    title: str
-    description: Optional[str] = ""
-    priority: str = "medium"
-    deadline_hint: Optional[str] = None
-
-
-class GenerateTasksOut(BaseModel):
-    tasks: list[GeneratedTask]
-    model: str
-    input_tokens: int
-    output_tokens: int
-
-
-@router.post("/generate-tasks", response_model=GenerateTasksOut)
-def generate_tasks(
-    payload: GenerateTasksIn,
-    ctx: TenantContext = Depends(get_current_context),
-):
-    if len(payload.text.strip()) < 5:
-        raise HTTPException(400, "Слишком короткий текст")
-    if len(payload.text) > 20000:
-        raise HTTPException(400, "Текст слишком длинный (>20000 символов)")
-
-    client = _client()
-    user_message = payload.text
-    if payload.context:
-        user_message = f"Контекст: {payload.context}\n\nПисьмо:\n{payload.text}"
-
-    try:
-        response = _create(
-            client,
-            model=DEFAULT_MODEL,
-            max_tokens=MAX_TOKENS,
-            system=[
-                {
-                    "type": "text",
-                    "text": GENERATE_TASKS_SYSTEM,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_message}],
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
-
-    text_blocks = [b.text for b in response.content if b.type == "text"]
-    raw = (text_blocks[0] if text_blocks else "").strip()
-
-    # Пытаемся вытащить JSON, даже если модель обернула его в ```json ... ```
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
-    try:
-        parsed = json.loads(raw)
-        if not isinstance(parsed, list):
-            parsed = []
-    except json.JSONDecodeError:
-        parsed = []
-
-    tasks: list[GeneratedTask] = []
-    for item in parsed[:20]:  # безопасность: не более 20 задач за раз
-        if isinstance(item, dict) and item.get("title"):
-            tasks.append(GeneratedTask(
-                title=str(item.get("title", "")).strip()[:200],
-                description=str(item.get("description") or "")[:2000],
-                priority=str(item.get("priority", "medium")).lower(),
-                deadline_hint=item.get("deadline_hint"),
-            ))
-
-    return GenerateTasksOut(
-        tasks=tasks,
-        model=response.model,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
-    )
-
-
-# =============================================================================
-# 2. Summarize thread / comments
-# =============================================================================
-
-SUMMARIZE_SYSTEM = """Ты — ассистент CRM. Тебе присылают тред сообщений/комментариев. Верни краткое резюме на русском:
-- 1-2 предложения о главной теме
-- 3-5 маркеров с ключевыми решениями/фактами (если есть)
-- Список открытых вопросов или action items (если есть)
-
-Резюме — только текст в Markdown. Не пиши "Резюме:" или "Ответ:" — сразу по делу."""
-
-
-class SummarizeIn(BaseModel):
-    text: str
-
-
-class SummarizeOut(BaseModel):
-    summary: str
-    model: str
-    input_tokens: int
-    output_tokens: int
-
-
-@router.post("/summarize", response_model=SummarizeOut)
-def summarize(
-    payload: SummarizeIn,
-    ctx: TenantContext = Depends(get_current_context),
-):
-    if len(payload.text.strip()) < 20:
-        raise HTTPException(400, "Слишком коротко — нечего резюмировать")
-    if len(payload.text) > 100000:
-        raise HTTPException(400, "Тред слишком большой (>100000 символов)")
-
-    client = _client()
-    try:
-        response = _create(
-            client,
-            model=DEFAULT_MODEL,
-            max_tokens=MAX_TOKENS,
-            system=[
-                {
-                    "type": "text",
-                    "text": SUMMARIZE_SYSTEM,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": payload.text}],
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
-
-    text_blocks = [b.text for b in response.content if b.type == "text"]
-    return SummarizeOut(
-        summary=(text_blocks[0] if text_blocks else "").strip(),
-        model=response.model,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
-    )
-
-
-# =============================================================================
-# 3. Suggest a report configuration from natural-language description
-# =============================================================================
-
-REPORT_SUGGEST_SYSTEM = """Ты — помощник по построению отчётов. Пользователь пишет что хочет увидеть, ты выбираешь метрику и группировку из списка.
-
-Метрики:
-- tasks_count — количество задач
-- tasks_completed — завершённые задачи
-- tasks_overdue — просроченные задачи
-- hours_logged — учтённые часы
-- deals_amount — сумма сделок
-- deals_weighted — взвешенный прогноз сделок
-- deals_count — количество сделок
-
-Группировки:
-- assignee — по исполнителю
-- project — по проекту
-- status — по статусу
-- priority — по приоритету
-- stage — по стадии (сделки)
-- owner — по владельцу (сделки)
-- day, week, month — временные
-
-Верни ТОЛЬКО JSON-объект {"metric": "...", "group_by": "...", "explanation": "..."} без комментариев."""
-
-
-class ReportSuggestIn(BaseModel):
-    description: str
-
-
-class ReportSuggestOut(BaseModel):
-    metric: str
-    group_by: str
-    explanation: str
-    model: str
-
-
-@router.post("/report-suggest", response_model=ReportSuggestOut)
-def report_suggest(
-    payload: ReportSuggestIn,
-    ctx: TenantContext = Depends(get_current_context),
-):
-    if len(payload.description.strip()) < 3:
-        raise HTTPException(400, "Слишком короткое описание")
-
-    client = _client()
-    try:
-        response = _create(
-            client,
-            model=DEFAULT_MODEL,
-            max_tokens=4000,
-            system=[
-                {
-                    "type": "text",
-                    "text": REPORT_SUGGEST_SYSTEM,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": payload.description}],
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, "AI-ассистент не смог обработать запрос. Попробуйте ещё раз")
-
-    text_blocks = [b.text for b in response.content if b.type == "text"]
-    raw = (text_blocks[0] if text_blocks else "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(502, "AI-ассистент вернул непонятный ответ. Попробуйте ещё раз")
-
-    metric = str(parsed.get("metric", "tasks_count"))
-    group_by = str(parsed.get("group_by", "assignee"))
-    explanation = str(parsed.get("explanation", ""))[:500]
-
-    return ReportSuggestOut(
-        metric=metric,
-        group_by=group_by,
-        explanation=explanation,
-        model=response.model,
-    )
-
-
-# =============================================================================
-# 4. Health-check — есть ли ключ
-# =============================================================================
 
 @router.get("/status")
-def ai_status(ctx: TenantContext = Depends(get_current_context)):
-    key_set = bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
-    return {
-        "configured": key_set,
-        "model": DEFAULT_MODEL if key_set else None,
-        "features": ["generate_tasks", "summarize", "report_suggest"] if key_set else [],
-    }
+def ai_status(ctx: TenantContext = Depends(get_current_context), db: Session = Depends(get_db)):
+    return core_ai.status(db, ctx.tenant)
+
+
+class AiSettingsIn(BaseModel):
+    enabled: bool
+
+
+@router.put("/settings")
+def set_ai_settings(
+    payload: AiSettingsIn,
+    ctx: TenantContext = Depends(require("settings.system")),
+    db: Session = Depends(get_db),
+):
+    ctx.tenant.ai_enabled = payload.enabled
+    log_action(db, tenant_id=ctx.tenant.id, user_id=ctx.user.id, action="update", entity="tenant", entity_id=ctx.tenant.id,
+               detail="ИИ-помощник " + ("включён" if payload.enabled else "выключен"))
+    db.commit()
+    return core_ai.status(db, ctx.tenant)
+
+
+@router.get("/usage")
+def ai_usage(ctx: TenantContext = Depends(require("settings.system")), db: Session = Depends(get_db)):
+    """Расход за текущий месяц по функциям — только своей компании."""
+    start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    rows = (
+        db.query(AiUsage.feature, AiUsage.status, func.count(AiUsage.id),
+                 func.coalesce(func.sum(AiUsage.input_tokens), 0), func.coalesce(func.sum(AiUsage.output_tokens), 0))
+        .filter(AiUsage.tenant_id == ctx.tenant.id, AiUsage.created_at >= start)
+        .group_by(AiUsage.feature, AiUsage.status)
+        .all()
+    )
+    by_feature: dict[str, dict] = {}
+    for feature, st, cnt, tin, tout in rows:
+        f = by_feature.setdefault(feature, {"feature": feature, "label": FEATURE_LABELS.get(feature, feature),
+                                            "requests": 0, "off_topic": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0})
+        if st == "off_topic":
+            f["off_topic"] += cnt
+        if st == "error":
+            f["errors"] += cnt
+        else:
+            f["requests"] += cnt
+        f["input_tokens"] += int(tin)
+        f["output_tokens"] += int(tout)
+    return {**core_ai.status(db, ctx.tenant), "features": sorted(by_feature.values(), key=lambda x: -x["requests"])}

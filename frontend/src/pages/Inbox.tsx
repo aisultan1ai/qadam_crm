@@ -3,7 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   Archive, ArchiveRestore, ArrowLeft, Check, CheckCheck, Clock3, FileText, Link2, Loader2, MessageCircle, PanelRight, Paperclip,
+  Sparkles,
 } from "lucide-react";
+import { AiSummaryPanel, type AiSummary } from "@/components/AiSummaryPanel";
+import { useAi } from "@/hooks/useAi";
 import { api, extractApiError } from "@/api/client";
 import { useToast } from "@/components/Toast";
 import { Modal, Avatar } from "@/components/ui";
@@ -305,6 +308,22 @@ function Chat({
   const [text, setText] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
+  const { available: aiOn } = useAi();
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const summaryMut = useMutation({
+    mutationFn: async () =>
+      (await api.post<AiSummary>(`/api/ai/inbox/conversations/${conversation.id}/summary`)).data,
+    onError: (e) => {
+      setSummaryOpen(false);
+      toast.error("Не удалось составить сводку", extractApiError(e).message);
+    },
+  });
+  // Другой диалог — сводка от прежнего не показывается
+  useEffect(() => {
+    setSummaryOpen(false);
+    summaryMut.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id]);
 
   const { data: messages, isPending } = useQuery({
     queryKey: ["messenger-messages", conversation.id],
@@ -378,6 +397,22 @@ function Chat({
         back={<span className="md:hidden"><IconAction icon={ArrowLeft} label="Назад" onClick={onBack} /></span>}
         actions={
           <>
+            {aiOn && (
+              <IconAction
+                icon={Sparkles}
+                label="Кратко: сводка диалога от ИИ"
+                active={summaryOpen}
+                disabled={summaryMut.isPending}
+                onClick={() => {
+                  if (summaryOpen) {
+                    setSummaryOpen(false);
+                    return;
+                  }
+                  setSummaryOpen(true);
+                  if (!summaryMut.data) summaryMut.mutate();
+                }}
+              />
+            )}
             <IconAction
               icon={Link2}
               label={contact?.linked_lead_id ? `Связан с лидом #${contact.linked_lead_id}` : "Связать с лидом"}
@@ -408,6 +443,11 @@ function Chat({
         </div>
       </PaneHeader>
 
+      {summaryOpen && (
+        <div className="max-h-[45%] shrink-0 overflow-y-auto border-b border-zinc-200 px-4 pt-3 dark:border-zinc-800">
+          <AiSummaryPanel summary={summaryMut.data ?? null} loading={summaryMut.isPending} onClose={() => setSummaryOpen(false)} />
+        </div>
+      )}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {isPending ? (
           <div className="flex items-center justify-center py-8 text-zinc-400">

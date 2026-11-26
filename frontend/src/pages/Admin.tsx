@@ -66,6 +66,7 @@ type PlanRow = {
     max_projects: number | null;
     max_storage_bytes: number | null;
     api_rate_per_min: number;
+    ai_requests_per_month?: number;
   };
   feature_flags: PlanFeatureFlags;
   is_active: boolean;
@@ -952,6 +953,7 @@ function PlanCard({
         <PlanLimitRow label="Проекты" v={plan.limits.max_projects} />
         <PlanLimitRow label="Хранилище" v={plan.limits.max_storage_bytes} format={formatBytes} />
         <PlanLimitRow label="API rate/мин" v={plan.limits.api_rate_per_min} />
+        <PlanLimitRow label="ИИ, запросов/мес" v={plan.limits.ai_requests_per_month ?? 0} />
       </div>
 
       <div className="space-y-1">
@@ -1030,6 +1032,7 @@ function PlanFormModal({
       : "",
   );
   const [apiRate, setApiRate] = useState<string>(plan?.limits.api_rate_per_min?.toString() ?? "60");
+  const [aiRequests, setAiRequests] = useState<string>((plan?.limits.ai_requests_per_month ?? 0).toString());
   const [flags, setFlags] = useState<PlanFeatureFlags>(plan?.feature_flags ?? EMPTY_FLAGS);
   const [marketingFeatures, setMarketingFeatures] = useState<string>(plan?.features.join("\n") ?? "");
   const [isActive, setIsActive] = useState(plan?.is_active ?? true);
@@ -1060,6 +1063,7 @@ function PlanFormModal({
         max_projects: nullableInt(maxProjects),
         max_storage_bytes: storageBytes,
         api_rate_per_min: nullableInt(apiRate) ?? 60,
+        ai_requests_per_month: nullableInt(aiRequests) ?? 0,
         feature_export: flags.export,
         feature_import: flags.import,
         feature_invitations: flags.invitations,
@@ -1148,6 +1152,10 @@ function PlanFormModal({
             <label className="block">
               <span className="mb-1 block text-xs text-neutral-500">API rate/мин</span>
               <input className="input" type="number" min="1" value={apiRate} onChange={(e) => setApiRate(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">ИИ, запросов в месяц (0 — выключен)</span>
+              <input className="input" type="number" min="0" value={aiRequests} onChange={(e) => setAiRequests(e.target.value)} />
             </label>
           </div>
         </div>

@@ -475,8 +475,10 @@ def seed_plans(db) -> None:
             "feature_export": True, "feature_import": True, "feature_invitations": True,
             "feature_lead_forms": True, "feature_analytics_cache": True,
             "feature_branding": True, "feature_custom_subdomain": True, "feature_priority_support": True,
+            "ai_requests_per_month": 300,
             "marketing_features": "\n".join([
                 "Всё из Plan B",
+                "ИИ-помощник: письма, договоры, вопросы по данным",
                 "Ограничение входа по IP",
                 "Парольные политики",
                 "Политики хранения данных",

@@ -22,6 +22,8 @@ class Plan(Base):
     max_projects: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     max_storage_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     api_rate_per_min: Mapped[int] = mapped_column(Integer, default=60)
+    # Запросов к ИИ в месяц на компанию; 0 — ИИ на тарифе недоступен
+    ai_requests_per_month: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     feature_export: Mapped[bool] = mapped_column(Boolean, default=True)
     feature_import: Mapped[bool] = mapped_column(Boolean, default=True)
