@@ -12,7 +12,7 @@ const TITLES: Record<string, string> = {
   projects: "Проекты",
   deals: "Сделки",
   leads: "Лиды",
-  contacts: "Контакты",
+  contacts: "Компании и контакты",
   planner: "Планировщик",
   calendar: "Календарь",
   notifications: "Уведомления",

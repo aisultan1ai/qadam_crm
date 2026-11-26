@@ -3,7 +3,7 @@
  * Одинаков на всех экранах: модуль выбирается слева, навигация раздела — в панели, действия страницы — в её шапке.
  */
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity as ActivityIcon, AlarmClock, ArrowUpCircle, BarChart3, Bell, BookOpen, BookUser, Bot, Boxes, Briefcase, Calendar as CalendarIcon,
   CalendarClock, CheckSquare, ChevronDown, Coins, Contact2, Eye, FileSignature, FileText, FolderKanban, Home, Inbox as InboxIcon,
@@ -430,7 +430,7 @@ function Rail({
           const on = active?.key === m.key;
           const first = m.items.find(visible);
           return (
-            <NavLink
+            <Link
               key={m.key}
               to={first?.to ?? "/"}
               title={tr(m.label)}
@@ -450,7 +450,7 @@ function Rail({
                   {notifCount > 99 ? "99+" : notifCount}
                 </span>
               )}
-            </NavLink>
+            </Link>
           );
         })}
       </div>
@@ -458,7 +458,7 @@ function Rail({
         const Icon = m.icon;
         const on = active?.key === m.key;
         return (
-          <NavLink
+          <Link
             key={m.key}
             to={m.items.find(visible)?.to ?? "/"}
             title={tr(m.label)}
@@ -470,7 +470,7 @@ function Rail({
             )}
           >
             <Icon size={18} strokeWidth={on ? 2.1 : 1.8} />
-          </NavLink>
+          </Link>
         );
       })}
       <button
@@ -530,8 +530,11 @@ function ModulePanel({
   const tr = useT();
   const { pathname } = useLocation();
   const [sp] = useSearchParams();
-  const items = m.items.filter(visible);
-  const moduleSettings = m.settings ? settingsItems(m.settings).filter(visible) : [];
+  // Пункт текущей страницы виден всегда: страницы вроде «Юрлиц» открыты всем, а в меню — только с правом,
+  // и без этого панель была бы пустой
+  const here = (i: PanelItem) => visible(i) || splitTo(i.to).path === pathname;
+  const items = m.items.filter(here);
+  const moduleSettings = m.settings ? settingsItems(m.settings).filter(here) : [];
   // Ключи query, которыми отличаются пункты модуля (scope, overdue…) + project для задач.
   const keys = useMemo(() => {
     const s = new Set<string>();
@@ -610,9 +613,8 @@ function PanelLink({ item: i, active }: { item: PanelItem; active: boolean }) {
   const Icon = i.icon;
   const label = i.to === "/deals" ? dealsTitle : i.label;
   return (
-    <NavLink
+    <Link
       to={i.to}
-      end={i.exact}
       aria-current={active ? "page" : undefined}
       className={clsx(
         "group flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
@@ -624,7 +626,7 @@ function PanelLink({ item: i, active }: { item: PanelItem; active: boolean }) {
       <Icon size={15} className={active ? "text-brand-600 dark:text-brand-300" : "text-zinc-400 group-hover:text-zinc-600 dark:text-zinc-500 dark:group-hover:text-zinc-300"} />
       <span className="min-w-0 flex-1 truncate">{tr(label)}</span>
       {i.badge && <PanelBadge kind={i.badge} active={active} />}
-    </NavLink>
+    </Link>
   );
 }
 

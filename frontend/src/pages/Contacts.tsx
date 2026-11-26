@@ -97,7 +97,7 @@ export default function Contacts() {
       <div className="page-header">
         <div>
           <div className="mb-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">Продажи</div>
-          <h1 className="page-title">Контакты</h1>
+          <h1 className="page-title">Компании и контакты</h1>
         </div>
         {canCreate && (
           <div className="flex items-center gap-2">

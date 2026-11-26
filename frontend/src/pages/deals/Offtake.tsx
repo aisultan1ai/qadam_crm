@@ -8,7 +8,7 @@
  * Правила стадий проверяет сервер: в «NDA подписан» и дальше — только с файлом NDA,
  * в «Term Sheet согласован» и дальше — с файлом Term Sheet; «Отказ» — с причиной.
  */
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
@@ -767,6 +767,7 @@ export function OfftakeDealModal({
   onClose,
   variant = "modal",
   onSaved,
+  onDirtyChange,
 }: {
   initial: OfftakeDeal | null;
   onClose: () => void;
@@ -774,6 +775,8 @@ export function OfftakeDealModal({
   variant?: "modal" | "page";
   /** Для страницы: после сохранения остаёмся на ней. */
   onSaved?: () => void;
+  /** Есть ли несохранённые правки (для страницы: можно ли тихо подставить новую версию с сервера). */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -791,7 +794,7 @@ export function OfftakeDealModal({
   const [probReset, setProbReset] = useState(false);
   const canEdit = initial ? can("deals.update") : can("deals.create");
 
-  const { register, handleSubmit, watch, control, formState: { isSubmitting, errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, control, formState: { isSubmitting, errors, isDirty } } = useForm<FormValues>({
     defaultValues: {
       title: initial?.title ?? "",
       offtake_stage: initial?.offtake_stage ?? "initial_contact",
@@ -814,6 +817,17 @@ export function OfftakeDealModal({
       loss_comment: initial?.loss_comment ?? "",
     },
   });
+
+  const dirty =
+    isDirty ||
+    legalId !== (initial?.legal_entity_id ?? null) ||
+    companyId !== (initial?.company_id ?? null) ||
+    manualProb !== (initial?.probability_manual ? initial.probability : null) ||
+    probReset;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
 
   const stage = watch("offtake_stage");
   const priceType = watch("price_type");
